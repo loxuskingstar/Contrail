@@ -1,0 +1,20 @@
+services:
+  contrail:
+    build:
+      context: .
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    image: contrail:latest
+    container_name: contrail
+    restart: unless-stopped
+    ports:
+      - "${CONTRAIL_PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: ${TZ:-Europe/Paris}
+    volumes:
+      # Tout l'état de l'application (BDD, photos, audio, sauvegardes, config) vit ici.
+      - ./data:/app/data

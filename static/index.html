@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#edf0f5">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Contrail — journal de plane spotting et de vols, auto-hébergé.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Contrail">
+  <title>Contrail</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script>
+    // Applique le thème avant le premier rendu pour éviter un flash
+    try {
+      const s = JSON.parse(localStorage.getItem('contrail.settings') || '{}');
+      const dark = s.theme === 'dark' || (s.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <div id="app"><div style="min-height:100dvh;display:grid;place-items:center;color:#8a94a6;font-family:system-ui">✈</div></div>
+  <noscript>Contrail nécessite JavaScript.</noscript>
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
