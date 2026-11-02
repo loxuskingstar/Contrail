@@ -240,20 +240,27 @@ export function tagChips(tags = []) {
 }
 
 export function spotTile(s, { href = `#/spots/${s.id_spotting}` } = {}) {
-  const img = s.thumb ? `<img loading="lazy" src="${mediaUrl('thumbs', s.thumb)}" alt="${esc(s.registration)}">` : `<div class="tile noimg">${icon('plane', '', 36)}</div>`;
   const corner = [s.favorite ? `<span class="badge">${icon('star', '', 11)}</span>` : '', s.atc_audio ? `<span class="badge">${icon('radio', '', 11)}</span>` : '',
     s.livery_category ? `<span class="badge">${icon('palette', '', 11)}</span>` : ''].join('');
-  return `<a class="tile ${s.thumb ? '' : 'noimg'}" href="${href}">${img}<div class="corner">${corner}</div>
-    <div class="cap"><b class="mono">${esc(s.registration)}</b> ${regFlag(s.country)}<small class="ellipsis">${esc(s.aircraft_icao || s.aircraft || '')}${s.owner ? ' · ' + esc(s.owner) : ''}</small></div></a>`;
+  const sub = `${esc(s.aircraft_icao || s.aircraft || '')}${s.owner ? ' · ' + esc(s.owner) : ''}`;
+  if (s.thumb) {
+    return `<a class="tile" href="${href}"><img loading="lazy" src="${mediaUrl('thumbs', s.thumb)}" alt="${esc(s.registration)}"><div class="corner">${corner}</div>
+      <div class="cap"><b class="mono">${esc(s.registration)}</b> ${regFlag(s.country)}<small class="ellipsis">${sub}</small></div></a>`;
+  }
+  // Spot sans photo : vignette typographique
+  return `<a class="tile noimg" href="${href}">${icon('plane', '', 20)}<div class="corner">${corner}</div>
+    <div class="cap"><b class="mono" style="font-size:17px">${esc(s.registration)}</b> ${regFlag(s.country)}<small class="ellipsis">${sub}</small>
+    <small class="ellipsis">${esc(s.airport || '')}${s.date ? ' · ' + fmtDate(s.date, { time: false, short: true }) : ''}</small></div></a>`;
 }
 
 export function spotRow(s, { selectable = false, selected = false } = {}) {
-  const thumb = s.thumb ? `<img class="thumb" loading="lazy" src="${mediaUrl('thumbs', s.thumb)}" alt="">` : `<div class="thumb" style="display:grid;place-items:center;color:var(--muted)">${icon('plane')}</div>`;
+  const thumb = s.thumb ? `<img class="thumb" loading="lazy" src="${mediaUrl('thumbs', s.thumb)}" alt="">`
+    : `<div class="thumb" style="display:grid;place-items:center;font-family:var(--mono);font-weight:650;font-size:12.5px">${esc(s.aircraft_icao || '') || icon('plane')}</div>`;
   return `<a class="list-row ${selected ? 'selected' : ''}" href="#/spots/${s.id_spotting}" data-id="${s.id_spotting}">
     ${selectable ? `<span class="check">${selected ? icon('check', '', 14) : ''}</span>` : ''}
     ${thumb}
     <div class="grow">
-      <div class="ttl"><span class="mono">${esc(s.registration)}</span>${regFlag(s.country)}${s.favorite ? `<span style="color:#f59e0b">${icon('star', '', 14)}</span>` : ''}</div>
+      <div class="ttl"><span class="mono">${esc(s.registration)}</span>${regFlag(s.country)}${s.favorite ? `<span style="color:#d97706">${icon('star', '', 14)}</span>` : ''}</div>
       <div class="meta ellipsis">${esc(s.aircraft || s.aircraft_icao || '—')}${s.owner ? ' · ' + esc(s.owner) : ''}</div>
       <div class="meta ellipsis">${esc(s.airport || '')}${s.airport ? ' · ' : ''}${fmtDate(s.date)}</div>
     </div>

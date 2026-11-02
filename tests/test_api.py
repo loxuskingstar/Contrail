@@ -194,3 +194,33 @@ def test_settings_and_achievements(client):
     ach = client.get("/api/achievements").json()
     assert ach["unlocked"] >= 2
     assert client.get("/api/search", params={"q": "HBXA"}).json()["airframes"]
+
+
+def test_test_session_is_isolated(client):
+    before = client.get("/api/stats").json()["totals"]["spots"]
+    r = client.post("/api/session", json={"profile": "test"})
+    assert r.status_code == 200 and client.cookies.get("contrail_profile") == "test"
+    assert client.get("/api/session").json()["profile"] == "test"
+    st = client.get("/api/stats").json()
+    assert st["totals"]["spots"] == 62 and st["totals"]["photos"] == 0
+    assert client.get("/api/stats/flights").json()["count"] == 14
+    assert len(client.get("/api/locations").json()) == 3
+    sp = client.get("/api/spots", params={"limit": 200}).json()["items"]
+    with_wx = [s for s in sp if True]
+    detail = client.get(f"/api/spots/{with_wx[0]['id_spotting']}").json()
+    assert detail["image"] is None
+    assert any(f["fleet_size"] for f in client.get("/api/fleets").json())
+    assert client.get("/api/achievements").json()["unlocked"] > 3
+    gear = st["gear"]
+    assert gear and gear[0]["camera"]
+    # une écriture en session de test ne touche pas les données réelles
+    client.post("/api/spots", params={"force": True}, data={"data": json.dumps({"registration": "F-TEST", "airport": "LFBO"})})
+    tok = client.post("/api/shares", json={"kind": "gallery", "target": "all"}).json()["token"]
+    assert tok.startswith("t-")
+    assert client.post("/api/session/reset").status_code == 200
+    assert client.get("/api/stats").json()["totals"]["spots"] == 62
+    client.post("/api/session", json={"profile": "main"})
+    client.cookies.delete("contrail_profile")
+    assert client.get("/api/session").json()["profile"] == "main"
+    assert client.get("/api/stats").json()["totals"]["spots"] == before
+    assert client.get("/api/spots", params={"registration": "F-TEST"}).json()["total"] == 0

@@ -14,7 +14,7 @@
 3. [Installation sans Docker](#installation-sans-docker)
 4. [Configuration des API](#configuration-des-api)
 5. [Accès mobile, HTTPS et PWA](#accès-mobile-https-et-pwa)
-6. [Données, migration et sauvegardes](#données-migration-et-sauvegardes)
+6. [Données, migration et sauvegardes](#données-migration-et-sauvegardes) — dont la [session de test](#session-de-test)
 7. [Import et export](#import-et-export)
 8. [Architecture technique](#architecture-technique)
 9. [Limites connues et choix de conception](#limites-connues-et-choix-de-conception)
@@ -73,7 +73,7 @@
 - **Import de masse CSV** (JetPhotos, Planespotters, myFlightradar24, OpenFlights, tableur) avec reconnaissance automatique des colonnes, et **export** CSV / JSON complet.
 
 ### Interface
-- Inspiration **One UI** (grand titre dans la zone de lecture, actions dans la zone du pouce) et **Liquid Glass** (surfaces translucides, flou d'arrière-plan, reflets doux, coins arrondis).
+- Interface **sobre** : surfaces pleines, filets fins, une seule couleur d'accent, ombres discrètes ; grand titre en tête de page et actions à portée de pouce sur mobile.
 - Mode clair / sombre / automatique, **couleur d'accent** au choix, mobile-first, navigation inférieure sur mobile et barre latérale sur ordinateur.
 - **Quatre langues** : français, anglais, espagnol, japonais.
 - Fonctions avancées repliées par défaut (volets, menus contextuels), **modules désactivables** (vols, flottes, radar, météo, OCR, points de vue, watchlist, gamification) pour garder une interface épurée.
@@ -128,7 +128,7 @@ Toutes les intégrations sont **facultatives** et **gratuites**. Les clés se sa
 | OpenSky Network | `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET` | non (recommandée) | Radar en direct et watchlist ; un client API OAuth2 augmente fortement le quota anonyme |
 | aviationweather.gov | — | non | METAR / TAF des ~15 derniers jours |
 | Iowa Environmental Mesonet | — | non | Archive METAR au-delà |
-| OpenStreetMap | — | non | Fonds de carte (Leaflet) |
+| CARTO (par défaut) / OpenStreetMap | — | non | Fonds de carte (Leaflet), choix dans Réglages › Apparence |
 | ntfy | `NTFY_URL` | non | Notifications push sur téléphone (ex. `https://ntfy.sh/un-sujet-secret`) |
 | Webhook | `WEBHOOK_URL` | — | POST JSON `{kind, title, body, link}` vers votre domotique, Gotify, etc. |
 
@@ -145,6 +145,16 @@ Si l'instance est exposée sur Internet, **définissez `CONTRAIL_PASSWORD`**. Le
 
 Une fois servie en HTTPS, utilisez « Ajouter à l'écran d'accueil » : Contrail s'ouvre en plein écran, propose les raccourcis « Nouveau spot » et « Radar », et apparaît dans le menu de partage d'Android pour les photos.
 
+## Session de test
+
+Pour découvrir l'application ou essayer une manipulation sans risque, ouvrez **Réglages › Données › Ouvrir la session de test** (ou le bouton « Essayer avec le jeu de test » sur un accueil vide).
+
+- La session de test utilise une **base totalement séparée**, stockée dans `data/sandbox/`. Vos données réelles ne sont ni lues ni modifiées tant qu'elle est active ; un bandeau le rappelle en haut de chaque page.
+- Elle est préremplie avec un **jeu de données fictif sans aucune image** (`app/fixtures/jeu_de_test.json`) : 62 spots répartis sur deux ans et une douzaine d'aéroports, avec étiquettes, livrées spéciales, appareils militaires, données EXIF et METAR décodés ; 14 vols ; 3 points de vue orientés ; deux flottes partielles (Air France, easyJet) ; une watchlist. Les dates sont relatives au jour du chargement, si bien que « Ce jour-là », l'activité du mois et les statistiques restent parlantes.
+- **Réinitialiser** efface tout ce qui a été créé dans la session et recharge le jeu d'origine ; **Quitter** vous ramène à vos données.
+- La session est mémorisée par navigateur (cookie) : vous pouvez garder vos vraies données sur le téléphone et la session de test sur l'ordinateur. Les brouillons hors-ligne restent attachés à la session dans laquelle ils ont été créés, et les liens de partage créés en session de test (préfixe `t-`) affichent les données de test.
+- Le fichier JSON est lisible et modifiable : ajoutez-y vos propres cas puis cliquez sur « Réinitialiser » pour les charger.
+
 ## Données, migration et sauvegardes
 
 Tout l'état vit dans **un seul dossier** :
@@ -160,6 +170,7 @@ data/
 ├── audio/             enregistrements joints
 ├── backups/           archives .zip
 ├── exports/  tmp/
+└── sandbox/           session de test (même structure, supprimable sans risque)
 ```
 
 - **Migration** : arrêtez le conteneur, copiez `data/` sur la nouvelle machine, relancez. C'est tout.
@@ -210,7 +221,7 @@ Quelques points du cahier des charges ont été interprétés, ou sont bornés p
 - **Couverture des données appareil** : hexdb.io et les plans gratuits d'AirLabs / Aviationstack ne connaissent pas tous les appareils (notamment l'aviation générale et militaire) ; le formulaire reste entièrement modifiable à la main et l'historique local prime toujours.
 - **Météo** : le METAR retenu est le plus proche de l'heure du spot dans une fenêtre de ± 2 h ; certaines stations ne sont pas archivées.
 - **OCR** : efficace sur une immatriculation bien visible et contrastée (fuselage, dérive) ; la lecture est proposée, jamais imposée.
-- **Fond de carte** : les tuiles OpenStreetMap ne sont pas toutes disponibles hors-ligne (seules les tuiles déjà consultées sont mises en cache, dans la limite de 1 500).
+- **Fond de carte** : par défaut, les fonds CARTO (clair ou sombre selon le thème, basés sur OpenStreetMap) ; OpenStreetMap standard ou un serveur de tuiles personnalisé sont sélectionnables dans Réglages › Apparence. Les serveurs publics imposent des politiques d'usage (en-tête Referer, pas de téléchargement massif) : Contrail les respecte et ne met plus les tuiles en cache lui-même, si bien que les cartes ne sont pas disponibles hors-ligne. Pour un usage intensif, utilisez votre propre serveur de tuiles.
 - **Mono-utilisateur** : une instance correspond à un carnet.
 
 ## Développement

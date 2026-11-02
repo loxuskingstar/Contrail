@@ -1,9 +1,8 @@
 /* Contrail — service worker : coquille hors-ligne, cache API/médias, cible de partage */
-const VERSION = 'contrail-v1.0.0';
+const VERSION = 'contrail-v1.1.0';
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 const MEDIA = 'contrail-media';
-const TILES = 'contrail-tiles';
 const SHARE = 'contrail-share';
 
 const VIEWS = ['dashboard', 'spots', 'spot-form', 'spot-detail', 'airframe', 'flights', 'flight-form', 'fleets', 'fleet-detail',
@@ -23,7 +22,9 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
-    for (const k of await caches.keys()) if (k.startsWith('contrail-v') && !k.startsWith(VERSION)) await caches.delete(k);
+    for (const k of await caches.keys()) {
+      if ((k.startsWith('contrail-v') && !k.startsWith(VERSION)) || k === 'contrail-tiles') await caches.delete(k);
+    }
     await self.clients.claim();
   })());
 });
@@ -83,7 +84,8 @@ self.addEventListener('fetch', (e) => {
   if (req.method === 'POST' && url.pathname === '/share-target') { e.respondWith(handleShareTarget(req)); return; }
   if (req.method !== 'GET') return;
 
-  if (url.hostname.endsWith('tile.openstreetmap.org')) { e.respondWith(cacheFirst(req, TILES, 1500).catch(() => new Response('', { status: 504 }))); return; }
+  // Les tuiles de carte ne sont jamais interceptées : le cache HTTP du navigateur suffit
+  // et les politiques d'usage des serveurs de tuiles interdisent le stockage massif.
   if (url.origin !== location.origin) return;
 
   if (req.mode === 'navigate') {

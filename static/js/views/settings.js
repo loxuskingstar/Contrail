@@ -1,6 +1,6 @@
 // Réglages : apparence, modules, spotting, intégrations, données (sauvegardes, import/export), étiquettes, à propos
 import { api } from '../api.js';
-import { store, rerenderShell, applyAppearance } from '../app.js';
+import { store, rerenderShell, applyAppearance, switchSession, resetTestSession } from '../app.js';
 import { t, LANGS, setLang, fmtDate, fmtNum } from '../i18n.js';
 import { icon } from '../lib/icons.js';
 import { airportInput } from '../lib/fields.js';
@@ -36,6 +36,14 @@ export async function render(root, params) {
         <label class="field"><span>${esc(t('settings.language'))}</span><select data-lang>${Object.entries(LANGS).map(([k, v]) => `<option value="${k}" ${S.language === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         <label class="field"><span>${esc(t('settings.units'))}</span><select data-units><option value="metric" ${S.units === 'metric' ? 'selected' : ''}>${esc(t('settings.metric'))}</option><option value="imperial" ${S.units === 'imperial' ? 'selected' : ''}>${esc(t('settings.imperial'))}</option></select></label>
       </div>
+      <div class="card stack"><div class="card-title" style="margin-bottom:0">${esc(t('settings.map'))}</div>
+        <label class="field"><span>${esc(t('settings.map_tiles'))}</span><select data-tiles>${['auto', 'carto_light', 'carto_dark', 'osm', 'custom'].map((v) => `<option value="${v}" ${(S.map_tiles || 'auto') === v ? 'selected' : ''}>${esc(t(`settings.tiles_${v}`))}</option>`).join('')}</select></label>
+        <div class="stack" data-custom-tiles ${(S.map_tiles || 'auto') === 'custom' ? '' : 'hidden'}>
+          <label class="field"><span>${esc(t('settings.tiles_url'))}</span><input data-tiles-url value="${esc(S.map_tiles_url || '')}" placeholder="https://tiles.example.org/{z}/{x}/{y}.png" spellcheck="false"></label>
+          <label class="field"><span>${esc(t('settings.tiles_attr'))}</span><input data-tiles-attr value="${esc(S.map_tiles_attribution || '')}" placeholder="© OpenStreetMap"></label>
+        </div>
+        <p class="tiny muted">${esc(t('settings.map_hint'))}</p>
+      </div>
       <div class="card"><div class="card-title">${esc(t('settings.dashboard'))}</div>
         <p class="small muted" style="margin-bottom:10px">${esc(t('settings.dashboard_hint'))}</p>
         <div class="chips">${WIDGETS.map((w) => `<span class="chip ${(S.dashboard_widgets || []).includes(w) ? 'on' : ''}">${esc(t(`widget.${w}`))}</span>`).join('')}</div>
@@ -54,6 +62,12 @@ export async function render(root, params) {
       rerenderShell();
     };
     body.querySelector('[data-units]').onchange = (e) => save({ units: e.target.value });
+    body.querySelector('[data-tiles]').onchange = (e) => {
+      body.querySelector('[data-custom-tiles]').hidden = e.target.value !== 'custom';
+      save({ map_tiles: e.target.value });
+    };
+    body.querySelector('[data-tiles-url]').onchange = (e) => save({ map_tiles_url: e.target.value.trim() });
+    body.querySelector('[data-tiles-attr]').onchange = (e) => save({ map_tiles_attribution: e.target.value.trim() });
   }
 
   if (section === 'modules') {
@@ -125,7 +139,13 @@ export async function render(root, params) {
   if (section === 'data') {
     const draw = async () => {
       const b = await api('/api/backups');
+      const inTest = store.session.profile === 'test';
       body.innerHTML = `<div class="stack">
+        <div class="card stack test-card"><div class="card-title" style="margin-bottom:0;justify-content:flex-start">${icon('triangle-alert', '', 15)} ${esc(t('test.title'))}</div>
+          <p class="small muted">${esc(t(inTest ? 'test.desc_in' : 'test.desc'))}</p>
+          <div class="row wrap">${inTest
+            ? `<button class="btn primary" data-tquit>${icon('log-out', '', 18)} ${esc(t('test.quit'))}</button><button class="btn" data-treset>${icon('rotate-ccw', '', 18)} ${esc(t('test.reset'))}</button>`
+            : `<button class="btn" data-tenter>${icon('wand-sparkles', '', 18)} ${esc(t('test.enter'))}</button>`}</div></div>
         <div class="card stack"><div class="card-title">${esc(t('settings.backups'))}</div>
           <p class="small muted">${esc(t('settings.backups_d'))}</p>
           <div class="field-row">
@@ -152,6 +172,9 @@ export async function render(root, params) {
           <p class="tiny muted">${esc(t('settings.export_d'))}</p></div>
         <div class="card"><a class="row" href="#/drafts">${icon('cloud-upload', '', 20)}<span class="grow">${esc(t('nav.drafts'))}</span>${icon('chevron-right')}</a></div>
       </div>`;
+      body.querySelector('[data-tenter]')?.addEventListener('click', (e) => { e.currentTarget.disabled = true; switchSession('test'); });
+      body.querySelector('[data-tquit]')?.addEventListener('click', () => switchSession('main'));
+      body.querySelector('[data-treset]')?.addEventListener('click', resetTestSession);
       body.querySelector('[data-int]').onchange = (e) => save({ backup_interval_hours: Number(e.target.value) });
       body.querySelector('[data-keep]').onchange = (e) => save({ backup_keep: Number(e.target.value) });
       body.querySelectorAll('[data-k]').forEach((c) => (c.onchange = () => save({ [c.dataset.k]: c.checked })));

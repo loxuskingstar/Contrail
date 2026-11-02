@@ -233,7 +233,7 @@ export async function render(root, params, query) {
     if (!reg || !ap || !date || !navigator.onLine) { box.innerHTML = ''; return; }
     try {
       const r = await api('/api/spots/check-duplicate', { method: 'POST', body: { registration: reg, airport: ap, date, exclude_id: s.id_spotting || null } });
-      box.innerHTML = r.duplicates.length ? `<div class="ocr-strip" style="background:#f59e0b1a;border-color:#f59e0b55">${icon('triangle-alert', '', 18)}
+      box.innerHTML = r.duplicates.length ? `<div class="ocr-strip warn">${icon('triangle-alert', '', 18)}
         <span class="small grow">${esc(t('spot.dup_warning', { n: r.duplicates.length }))}</span>
         ${r.duplicates.map((d) => `<a class="chip" href="#/spots/${d.id_spotting}" target="_blank">#${d.id_spotting}</a>`).join('')}</div>` : '';
     } catch { box.innerHTML = ''; }

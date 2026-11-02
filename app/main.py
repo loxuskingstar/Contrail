@@ -11,10 +11,12 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from . import auth
-from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs
+import asyncio
+
+from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs, set_profile, _profile
 from .db import init_db
 from .routers import field, flights, io, misc, share, spots, stats
-from .services import gamification, scheduler
+from .services import gamification, sandbox, scheduler
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -44,9 +46,20 @@ async def guard(request: Request, call_next):
     path = request.url.path
     if auth.needs_auth(path) and not auth.is_authenticated(request):
         return JSONResponse({"detail": "auth_required"}, status_code=401)
-    response = await call_next(request)
+    # Profil de données : session de test (cookie) ou lien public créé en session de test (jeton « t-… »)
+    test = request.cookies.get("contrail_profile") == "test" or path.startswith("/api/public/t-")
+    token = set_profile("test" if test else "main")
+    try:
+        if test and (path.startswith("/api/") or path.startswith("/media/")):
+            await asyncio.to_thread(sandbox.ensure_sandbox)
+        response = await call_next(request)
+    finally:
+        _profile.reset(token)
+    if test:
+        response.headers["X-Contrail-Profile"] = "test"
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("Referrer-Policy", "same-origin")
+    # Les serveurs de tuiles (OSM, CARTO) exigent un en-tête Referer : ne pas utiliser « same-origin ».
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     if path.startswith("/api/") and request.method == "GET" and "cache-control" not in response.headers:
         response.headers["Cache-Control"] = "no-store" if not path.startswith("/api/public/") else "public, max-age=60"
     return response

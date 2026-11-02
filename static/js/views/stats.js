@@ -79,7 +79,7 @@ export async function render(root, _p, query) {
     if (!s.gear.length) { body.innerHTML = `<div class="card">${emptyState('camera', t('stats.no_gear'), t('stats.no_gear_text'))}</div>`; return; }
     const best = s.gear[0];
     body.innerHTML = `
-      <div class="card" style="margin-bottom:14px;display:flex;gap:16px;align-items:center;background:linear-gradient(135deg,rgb(var(--accent-rgb)/.16),transparent)">
+      <div class="card" style="margin-bottom:14px;display:flex;gap:16px;align-items:center">
         ${icon('trophy', '', 40)}<div><div class="card-title" style="margin-bottom:4px">${esc(t('stats.best_combo'))}</div>
         <div style="font-size:19px;font-weight:720">${esc(best.camera)}${best.lens ? ` + ${esc(best.lens)}` : ''}</div>
         <div class="muted small">${esc(t('stats.combo_detail', { n: best.n, r: best.regs }))}</div></div></div>

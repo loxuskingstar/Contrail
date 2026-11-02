@@ -1,7 +1,7 @@
 """Étiquettes, recherche d'appareil / d'aéroport, analyse de photo, réglages, notifications, succès."""
 from __future__ import annotations
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -16,6 +16,40 @@ router = APIRouter(tags=["misc"])
 @router.get("/api/health")
 def health():
     return {"ok": True, "version": APP_VERSION}
+
+
+# --------------------------------------------------------------------------- #
+# Session de test (base isolée, jeu de données fictif sans images)
+# --------------------------------------------------------------------------- #
+class SessionIn(BaseModel):
+    profile: str
+
+
+@router.get("/api/session")
+def session_info():
+    from ..core import PROFILES, current_profile
+    return {"profile": current_profile(), "sandbox_exists": (PROFILES["test"] / "contrail.db").exists()}
+
+
+@router.post("/api/session")
+def session_switch(body: SessionIn, response: Response):
+    from ..services import sandbox
+    if body.profile == "test":
+        sandbox.ensure_sandbox()
+        response.set_cookie("contrail_profile", "test", max_age=60 * 60 * 24 * 365, samesite="lax", httponly=True)
+    else:
+        response.delete_cookie("contrail_profile")
+    return {"profile": "test" if body.profile == "test" else "main"}
+
+
+@router.post("/api/session/reset")
+def session_reset():
+    from ..core import current_profile
+    from ..services import sandbox
+    if current_profile() != "test":
+        raise HTTPException(400, "not_in_test_session")
+    sandbox.reset_sandbox()
+    return {"ok": True}
 
 
 # --------------------------------------------------------------------------- #

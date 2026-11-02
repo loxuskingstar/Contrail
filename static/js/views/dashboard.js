@@ -34,7 +34,9 @@ export async function render(root) {
   if (!d.totals.spots) {
     box.insertAdjacentHTML('afterbegin', `<div class="card">${emptyState('camera', t('dash.empty_title'), t('dash.empty_text'),
       `<div class="row wrap" style="justify-content:center"><a class="btn primary" href="#/spots/new">${icon('plus', '', 18)} ${esc(t('spot.new'))}</a>
-       <a class="btn" href="#/settings/data">${icon('upload', '', 18)} ${esc(t('dash.import'))}</a></div>`)}</div>`);
+       <a class="btn" href="#/settings/data">${icon('upload', '', 18)} ${esc(t('dash.import'))}</a>
+       ${store.session.profile !== 'test' ? `<button class="btn ghost" data-try-test>${icon('wand-sparkles', '', 18)} ${esc(t('dash.try_test'))}</button>` : ''}</div>`)}</div>`);
+    box.querySelector('[data-try-test]')?.addEventListener('click', async () => (await import('../app.js')).switchSession('test'));
   }
   root.querySelector('[data-custom]').onclick = () => customize(widgets);
   return () => cleanups.forEach((c) => c?.());
@@ -51,7 +53,11 @@ function renderWidget(w, d) {
         <div><b>${fmtNum(T.types)}</b><small>${esc(t('stat.types'))}</small></div>
         <div><b>${fmtNum(T.airlines)}</b><small>${esc(t('stat.airlines'))}</small></div>
         <div><b>${fmtNum(T.countries)}</b><small>${esc(t('stat.countries'))}</small></div></div>`;
-      if (!h) return `<div class="hero empty"><div class="in"><h2>Contrail</h2><p style="opacity:.85">${esc(t('dash.hero_empty'))}</p>${strip}</div></div>`;
+      if (!h) {
+        // Pas encore de photo : les chiffres clés suffisent, sans en-tête décoratif
+        const k = [['camera', T.spots, 'stat.spots'], ['scan-line', T.regs, 'stat.regs'], ['plane', T.types, 'stat.types'], ['building-2', T.airlines, 'stat.airlines'], ['flag', T.countries, 'stat.countries']];
+        return `<div class="grid kpis">${k.map(([ic, v, l]) => `<div class="card kpi">${icon(ic)}<div class="v">${fmtNum(v)}</div><div class="l">${esc(t(l))}</div></div>`).join('')}</div>`;
+      }
       return `<a class="hero" href="#/spots/${h.id_spotting}"><img src="${mediaUrl('images', h.image)}" alt="">
         <div class="in"><div class="small" style="opacity:.85">${esc(h.airport || '')} · ${fmtDate(h.date, { time: false })}</div>
         <h2 class="mono">${esc(h.registration)}</h2><div style="opacity:.9">${esc(h.aircraft || '')}${h.owner ? ' · ' + esc(h.owner) : ''}</div>${strip}</div></a>`;

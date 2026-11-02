@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from ..core import execute, get_setting, now_iso, q, q1, safe_media_path
+from ..core import current_profile, execute, get_setting, now_iso, q, q1, safe_media_path
 from ..services import geo
 from ..services import registration as regs
 from .spots import attach_tags, build_filters
@@ -37,7 +37,8 @@ def list_shares():
 def create_share(body: ShareIn):
     if body.kind not in KINDS:
         raise HTTPException(422, "bad_kind")
-    token = secrets.token_urlsafe(18)
+    # Les liens créés en session de test portent le préfixe « t- » pour être résolus dans la bonne base
+    token = ("t-" if current_profile() == "test" else "") + secrets.token_urlsafe(18)
     expires = None
     if body.expires_days:
         expires = (datetime.now(timezone.utc) + timedelta(days=body.expires_days)).strftime("%Y-%m-%dT%H:%M:%SZ")

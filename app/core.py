@@ -10,35 +10,81 @@ import os
 import secrets
 import sqlite3
 import threading
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
 DATA_DIR = Path(os.environ.get("CONTRAIL_DATA_DIR", BASE_DIR / "data")).resolve()
 
-DB_PATH = DATA_DIR / "contrail.db"
+# Configuration (clés API) et secret de session sont communs aux deux profils.
 CONFIG_PATH = DATA_DIR / "config.json"
 SECRET_PATH = DATA_DIR / "secret.key"
 
-DIRS = {
-    "images": DATA_DIR / "images",
-    "thumbs": DATA_DIR / "thumbs",
-    "originals": DATA_DIR / "originals",
-    "audio": DATA_DIR / "audio",
-    "exports": DATA_DIR / "exports",
-    "backups": DATA_DIR / "backups",
-    "tmp": DATA_DIR / "tmp",
-}
+# --------------------------------------------------------------------------- #
+# Profils de données : « main » (vos données) et « test » (session de test isolée,
+# stockée dans data/sandbox/). Le profil actif est porté par une ContextVar,
+# positionnée à chaque requête par le middleware à partir d'un cookie.
+# --------------------------------------------------------------------------- #
+PROFILES = {"main": DATA_DIR, "test": DATA_DIR / "sandbox"}
+_profile: ContextVar[str] = ContextVar("contrail_profile", default="main")
+
+
+def current_profile() -> str:
+    return _profile.get()
+
+
+def data_root() -> Path:
+    return PROFILES[_profile.get()]
+
+
+@contextmanager
+def use_profile(name: str) -> Iterator[None]:
+    token = _profile.set(name if name in PROFILES else "main")
+    try:
+        yield
+    finally:
+        _profile.reset(token)
+
+
+def set_profile(name: str):
+    return _profile.set(name if name in PROFILES else "main")
+
+
+def db_path() -> Path:
+    return data_root() / "contrail.db"
+
+
+class _Dirs(Mapping):
+    """Sous-dossiers de données du profil actif (images, miniatures, audio…)."""
+    NAMES = ("images", "thumbs", "originals", "audio", "exports", "backups", "tmp")
+
+    def __getitem__(self, key: str) -> Path:
+        if key not in self.NAMES:
+            raise KeyError(key)
+        return data_root() / key
+
+    def __iter__(self):
+        return iter(self.NAMES)
+
+    def __len__(self) -> int:
+        return len(self.NAMES)
+
+
+DIRS = _Dirs()
 
 
 def ensure_dirs() -> None:
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+        data_root().mkdir(parents=True, exist_ok=True)
         for d in DIRS.values():
             d.mkdir(parents=True, exist_ok=True)
     except PermissionError as e:
@@ -122,7 +168,7 @@ def _dict_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
 
 
 def connect(path: Path | None = None) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(path or DB_PATH), timeout=30, check_same_thread=False)
+    conn = sqlite3.connect(str(path or db_path()), timeout=30, check_same_thread=False)
     conn.row_factory = _dict_factory
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
@@ -131,17 +177,22 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
 
 
 def db() -> sqlite3.Connection:
-    conn = getattr(_local, "conn", None)
-    gen = getattr(_local, "gen", -1)
-    if conn is None or gen != _db_generation[0]:
-        if conn is not None:
+    """Connexion du thread courant vers la base du profil actif."""
+    conns: dict = getattr(_local, "conns", None) or {}
+    _local.conns = conns
+    if getattr(_local, "gen", -1) != _db_generation[0]:
+        for c in conns.values():
             try:
-                conn.close()
+                c.close()
             except sqlite3.Error:
                 pass
-        conn = connect()
-        _local.conn = conn
+        conns.clear()
         _local.gen = _db_generation[0]
+    path = str(db_path())
+    conn = conns.get(path)
+    if conn is None:
+        conn = connect(Path(path))
+        conns[path] = conn
     return conn
 
 
@@ -195,6 +246,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "watch_interval_min": 5,
     "share_include_notes": False,
     "radar_center": None,          # [lat, lng] ou None -> géolocalisation
+    "map_tiles": "auto",           # auto (CARTO clair/sombre) | carto_light | carto_dark | osm | custom
+    "map_tiles_url": "",
+    "map_tiles_attribution": "",
 }
 
 
@@ -242,8 +296,8 @@ def now_iso() -> str:
 
 
 def safe_media_path(kind: str, rel: str) -> Path | None:
-    """Résout un chemin média en garantissant qu'il reste dans DATA_DIR/kind."""
-    base = DIRS.get(kind)
+    """Résout un chemin média en garantissant qu'il reste dans <profil>/kind."""
+    base = DIRS.get(kind) if kind in _Dirs.NAMES else None
     if base is None or not rel:
         return None
     p = (base / rel).resolve()

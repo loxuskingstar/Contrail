@@ -29,7 +29,8 @@ async function tx(mode, fn) {
 export const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'd-' + Date.now().toString(36) + Math.random().toString(36).slice(2));
 
 export async function saveDraft({ data, image, audio }) {
-  const draft = { uuid: data.draft_uuid || uuid(), data, image: image || null, audio: audio || null, created: new Date().toISOString(), error: null };
+  const profile = window.__store?.session?.profile || 'main';
+  const draft = { uuid: data.draft_uuid || uuid(), data, image: image || null, audio: audio || null, created: new Date().toISOString(), error: null, profile };
   draft.data.draft_uuid = draft.uuid;
   await tx('readwrite', (s) => s.put(draft));
   notify();
@@ -55,7 +56,9 @@ export async function syncDrafts({ force = true } = {}) {
   syncing = true;
   let synced = 0, failed = 0;
   try {
-    for (const d of await listDrafts()) {
+    const current = window.__store?.session?.profile || 'main';
+    // Un brouillon créé en session de test n'est jamais envoyé vers vos données réelles (et inversement)
+    for (const d of (await listDrafts()).filter((x) => (x.profile || 'main') === current)) {
       const fd = new FormData();
       fd.append('data', JSON.stringify(d.data));
       if (d.image) fd.append('image', d.image, d.image.name || 'photo.jpg');

@@ -8,6 +8,7 @@ import { syncDrafts, countDrafts } from './offline.js';
 // ---------------------------------------------------------------- état partagé
 export const store = {
   settings: null,
+  session: { profile: 'main' },
   config: null,
   tags: null,
   facets: null,
@@ -35,7 +36,7 @@ export function applyAppearance() {
   root.setProperty('--accent-rgb', `${r} ${g} ${b}`);
   const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   root.setProperty('--accent-ink', lum > 0.68 ? '#111' : '#fff');
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#06080c' : '#edf0f5');
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#0e1013' : '#f5f6f8');
 }
 mq.addEventListener?.('change', applyAppearance);
 
@@ -167,7 +168,7 @@ function renderShell() {
   const app = $('#app');
   app.innerHTML = `
     <aside class="sidebar" aria-label="Navigation">
-      <div class="side-brand"><span class="logo">${icon('plane', '', 20)}</span>Contrail</div>
+      <div class="side-brand"><span class="logo">${icon('plane', '', 18)}</span>Contrail${store.session.profile === 'test' ? `<span class="env-tag">TEST</span>` : ''}</div>
       <a class="btn primary side-new" href="#/spots/new">${icon('plus', '', 18)} ${esc(t('spot.new'))}</a>
       ${side}
       <div style="margin-top:auto;padding:14px 12px 0" class="tiny muted"><span id="draft-count"></span></div>
@@ -190,6 +191,52 @@ function renderShell() {
     </nav>`;
   $('[data-search]').onclick = openPalette;
   $('[data-notifs]').onclick = openNotifications;
+  renderTestBanner();
+}
+
+// ---------------------------------------------------------------- session de test
+function renderTestBanner() {
+  document.querySelector('.test-banner')?.remove();
+  const inTest = store.session.profile === 'test';
+  document.body.classList.toggle('in-test', inTest);
+  if (!inTest) return;
+  const bar = el(`<div class="test-banner" role="status">${icon('triangle-alert', '', 16)}
+    <span class="grow"><b>${esc(t('test.banner_title'))}</b><span class="t-text"> — ${esc(t('test.banner_text'))}</span></span>
+    <button class="btn" data-treset title="${esc(t('test.reset'))}">${icon('rotate-ccw', '', 14)}<span>${esc(t('test.reset'))}</span></button>
+    <button class="btn" data-tquit title="${esc(t('test.quit'))}">${icon('log-out', '', 14)}<span>${esc(t('test.quit'))}</span></button></div>`);
+  document.querySelector('.shell')?.prepend(bar);
+  const setH = () => document.body.style.setProperty('--test-h', `${bar.offsetHeight}px`);
+  setH();
+  new ResizeObserver(setH).observe(bar);
+  bar.querySelector('[data-tquit]').onclick = () => switchSession('main');
+  bar.querySelector('[data-treset]').onclick = resetTestSession;
+}
+
+async function clearDataCaches() {
+  if (!('caches' in window)) return;
+  for (const k of await caches.keys()) if (k.endsWith('-data') || k === 'contrail-media') await caches.delete(k);
+}
+
+export async function switchSession(profile) {
+  try {
+    await api('/api/session', { method: 'POST', body: { profile } });
+    await clearDataCaches();
+    localStorage.removeItem('contrail.settings');
+    location.hash = '#/';
+    location.reload();
+  } catch (e) {
+    const { errorToast } = await import('./ui.js');
+    errorToast(e);
+  }
+}
+
+export async function resetTestSession() {
+  const { confirmDialog } = await import('./ui.js');
+  if (!(await confirmDialog(esc(t('test.reset_confirm')), { ok: t('test.reset') }))) return;
+  await api('/api/session/reset', { method: 'POST' });
+  await clearDataCaches();
+  location.hash = '#/';
+  location.reload();
 }
 
 export function rerenderShell() {
@@ -357,6 +404,7 @@ async function boot() {
       applyAppearance();
       return renderLogin();
     }
+    store.session = await api('/api/session').catch(() => ({ profile: 'main' }));
     store.settings = await api('/api/settings');
     localStorage.setItem('contrail.settings', JSON.stringify(store.settings));
   } catch (e) {

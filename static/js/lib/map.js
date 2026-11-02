@@ -1,11 +1,27 @@
 // Cartographie (Leaflet + OpenStreetMap) : cartes, grand cercle, icônes
 const L = () => window.L;
 
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const CARTO_ATTR = `${OSM_ATTR} &copy; <a href="https://carto.com/attributions">CARTO</a>`;
+
+/** Fond de carte selon les réglages : CARTO (clair/sombre suivant le thème), OSM standard ou URL personnalisée. */
+export function tileConfig() {
+  const s = window.__store?.settings || {};
+  const dark = document.documentElement.dataset.theme === 'dark';
+  const mode = s.map_tiles || 'auto';
+  if (mode === 'osm') return { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: OSM_ATTR, maxZoom: 19 };
+  if (mode === 'custom' && s.map_tiles_url) return { url: s.map_tiles_url, attribution: s.map_tiles_attribution || OSM_ATTR, maxZoom: 19 };
+  const style = mode === 'carto_light' ? 'light_all' : mode === 'carto_dark' ? 'dark_all' : dark ? 'dark_all' : 'light_all';
+  return { url: `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png`, attribution: CARTO_ATTR, subdomains: 'abcd', maxZoom: 20 };
+}
+
 export function createMap(el, { center = [46.6, 2.4], zoom = 5, zoomControl = true, scrollWheelZoom = true } = {}) {
   const map = L().map(el, { center, zoom, zoomControl, scrollWheelZoom, worldCopyJump: true, attributionControl: true });
-  L().tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19, subdomains: 'abc',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  const cfg = tileConfig();
+  L().tileLayer(cfg.url, {
+    maxZoom: cfg.maxZoom, subdomains: cfg.subdomains || 'abc', attribution: cfg.attribution,
+    // Exigé par la politique d'usage des serveurs de tuiles bénévoles
+    referrerPolicy: 'strict-origin-when-cross-origin', crossOrigin: false,
   }).addTo(map);
   // La carte peut être créée dans un conteneur encore invisible
   setTimeout(() => map.invalidateSize(), 60);

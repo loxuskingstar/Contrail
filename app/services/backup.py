@@ -8,7 +8,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from ..core import (APP_VERSION, CONFIG_PATH, DB_PATH, DIRS, connect, get_settings, reset_connections)
+from ..core import (APP_VERSION, CONFIG_PATH, DIRS, connect, db_path, get_settings, reset_connections)
 
 PREFIX = "contrail-backup-"
 
@@ -125,4 +125,4 @@ def restore(zip_path: Path) -> dict:
                 with z.open(n) as s, open(target, "wb") as d:
                     shutil.copyfileobj(s, d)
                 media += 1
-    return {"restored": True, "media_files": media, "safety_backup": safety["name"], "db": str(DB_PATH.name)}
+    return {"restored": True, "media_files": media, "safety_backup": safety["name"], "db": str(db_path().name)}
