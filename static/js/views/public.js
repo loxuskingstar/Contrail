@@ -44,17 +44,19 @@ export async function render(app, { token }) {
     lightbox(withImg.map((x) => ({ src: img(x.id_spotting, 'image'), caption: caption(x) })), withImg.indexOf(s));
   }));
   if (d.flights.length) {
-    const { createMap, greatCircle, fitTo, dotIcon } = await import('../lib/map.js');
-    const map = createMap(app.querySelector('[data-map]'), { center: [30, 10], zoom: 2, scrollWheelZoom: false });
-    const pts = [];
+    const { createMap, greatCircle } = await import('../lib/map.js');
+    const m = await createMap(app.querySelector('[data-map]'), { center: [30, 10], zoom: 1.3, scrollZoom: false }).catch(() => null);
+    if (!m) return;
+    const pts = [], lines = [];
     for (const f of d.flights) {
       if (!f.dep_info || !f.arr_info) continue;
       const a = [f.dep_info.lat, f.dep_info.lng], b = [f.arr_info.lat, f.arr_info.lng];
-      window.L.polyline(greatCircle(a, b), { color: '#3b82f6', weight: 2.4, opacity: 0.8 }).addTo(map);
-      window.L.marker(a, { icon: dotIcon('#fff', 10) }).addTo(map);
-      window.L.marker(b, { icon: dotIcon('#fff', 10) }).addTo(map);
+      lines.push({ coords: greatCircle(a, b) });
+      m.marker(a, { kind: 'dot', size: 10 });
+      m.marker(b, { kind: 'dot', size: 10 });
       pts.push(a, b);
     }
-    fitTo(map, pts, { maxZoom: 6 });
+    m.lines('routes', lines, { width: 2.4 });
+    m.fit(pts, { maxZoom: 6 });
   }
 }

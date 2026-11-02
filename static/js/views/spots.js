@@ -185,20 +185,20 @@ export async function render(root, _p, query) {
 
   async function drawMap() {
     results.innerHTML = '<div class="map tall" data-map></div>';
-    const { createMap, pinIcon, fitTo } = await import('../lib/map.js');
-    map = createMap(results.querySelector('[data-map]'));
-    const res = await api('/api/spots/map', { query: filters });
+    const { createMap } = await import('../lib/map.js');
+    const [m, res] = await Promise.all([createMap(results.querySelector('[data-map]')), api('/api/spots/map', { query: filters })]);
+    map = m;
     root.querySelector('[data-count]').textContent = t('spots.count', { n: res.total, nf: fmtNum(res.total) });
     const pts = [];
     for (const c of res.clusters) {
       pts.push([c.lat, c.lng]);
       const thumbs = c.spots.filter((s) => s.thumb).slice(0, 6).map((s) => `<a href="#/spots/${s.id_spotting}"><img src="${mediaUrl('thumbs', s.thumb)}" alt="${esc(s.registration)}"></a>`).join('');
       const regs = c.spots.slice(0, 6).map((s) => `<a href="#/spots/${s.id_spotting}" class="mono">${esc(s.registration)}</a>`).join(', ');
-      window.L.marker([c.lat, c.lng], { icon: pinIcon(c.count > 99 ? '99+' : c.count) }).addTo(map).bindPopup(
+      map.marker([c.lat, c.lng], { label: c.count > 99 ? '99+' : c.count, popup:
         `<b>${esc(c.label || c.airport || t('spots.custom_location'))}</b> <span class="muted">· ${c.count}</span><div class="small" style="margin-top:4px">${regs}</div>
-         ${thumbs ? `<div class="pop-thumbs">${thumbs}</div>` : ''}${c.airport ? `<div style="margin-top:8px"><a href="#/spots?airport=${esc(c.airport)}">${esc(t('common.see_all'))} →</a></div>` : ''}`);
+         ${thumbs ? `<div class="pop-thumbs">${thumbs}</div>` : ''}${c.airport ? `<div style="margin-top:8px"><a href="#/spots?airport=${esc(c.airport)}">${esc(t('common.see_all'))} →</a></div>` : ''}` });
     }
-    fitTo(map, pts, { maxZoom: 10 });
+    map.fit(pts, { maxZoom: 10 });
   }
 
   function reload(keepScroll = false) {

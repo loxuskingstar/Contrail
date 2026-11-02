@@ -6,25 +6,24 @@ import { airportInput } from '../lib/fields.js';
 import { esc, sheet, toast, errorToast, confirmDialog, emptyState, pageHead } from '../ui.js';
 
 export async function render(root) {
-  const { createMap, pinIcon, viewCone, fitTo } = await import('../lib/map.js');
+  const { createMap, conePolygon } = await import('../lib/map.js');
   let locs = await api('/api/locations');
   root.innerHTML = `
     ${pageHead(esc(t('nav.locations')), { sub: esc(t('loc.sub')), actions: `<button class="btn primary" data-new>${icon('plus', '', 18)} ${esc(t('loc.new'))}</button>` })}
     <div class="card flush" style="margin-bottom:14px"><div class="map" style="height:380px;border-radius:0" data-map></div></div>
     <div data-list></div>`;
-  const map = createMap(root.querySelector('[data-map]'));
-  const layer = window.L.layerGroup().addTo(map);
+  const mapReady = createMap(root.querySelector('[data-map]')).catch(() => null);
+  let lastCenter = null;
+  mapReady.then((m) => m?.onMoveEnd(() => (lastCenter = m.center())));
 
   const draw = () => {
-    layer.clearLayers();
-    const pts = [];
-    for (const l of locs) {
-      pts.push([l.lat, l.lng]);
-      window.L.marker([l.lat, l.lng], { icon: pinIcon('') }).addTo(layer).bindPopup(`<b>${esc(l.name)}</b><br>${esc(l.airport || '')}`).on('click', () => detail(l));
-      const cone = viewCone(map, l.lat, l.lng, l.view_bearing);
-      if (cone) layer.addLayer(cone);
-    }
-    fitTo(map, pts, { maxZoom: 13 });
+    mapReady.then((m) => {
+      if (!m) return;
+      m.clear();
+      m.polygons('cones', locs.filter((l) => l.view_bearing != null).map((l) => conePolygon(l.lat, l.lng, l.view_bearing)));
+      for (const l of locs) m.marker([l.lat, l.lng], { label: '', title: l.name, onClick: () => detail(l) });
+      m.fit(locs.map((l) => [l.lat, l.lng]), { maxZoom: 13 });
+    });
     root.querySelector('[data-list]').innerHTML = locs.length ? `<div class="grid two">${locs.map((l) => {
       const w = l.today?.windows || [];
       return `<div class="card" data-id="${l.id_location}" style="cursor:pointer">
@@ -41,7 +40,7 @@ export async function render(root) {
   };
 
   const reload = async () => { locs = await api('/api/locations'); draw(); };
-  root.querySelector('[data-new]').onclick = () => editLocation(null, map.getCenter(), reload);
+  root.querySelector('[data-new]').onclick = () => editLocation(null, lastCenter, reload);
 
   async function detail(l) {
     const s = sheet({ title: esc(l.name), wide: true, body: `<div class="row wrap" style="margin-bottom:12px">
@@ -69,7 +68,7 @@ export async function render(root) {
   }
 
   draw();
-  return () => map.remove();
+  return () => mapReady.then((m) => m?.remove());
 }
 
 /** Courbe d'élévation du soleil sur la journée, créneaux favorables surlignés. */
@@ -108,7 +107,8 @@ export function sunChart(d, bearing) {
 
 export function editLocation(l, center, onSaved) {
   const v = l || { name: '', lat: center?.lat ?? 46.6, lng: center?.lng ?? 2.4, view_bearing: null };
-  const s = sheet({ title: esc(l ? t('loc.edit') : t('loc.new')), wide: true, body: `
+  let pick = null;
+  const s = sheet({ onClose: () => pick?.then((m) => m?.remove()), title: esc(l ? t('loc.edit') : t('loc.new')), wide: true, body: `
     <form class="stack">
       <div class="map" style="height:280px" data-pick></div>
       <p class="tiny muted">${esc(t('loc.pick_hint'))}</p>
@@ -137,10 +137,10 @@ export function editLocation(l, center, onSaved) {
   const F = (n) => form.elements[n];
   s.body.querySelector('[data-close]').onclick = s.close;
   airportInput(F('airport'));
-  import('../lib/map.js').then(({ createMap, viewCone }) => {
-    const map = createMap(s.body.querySelector('[data-pick]'), { center: [v.lat, v.lng], zoom: l ? 15 : 6 });
-    const marker = window.L.marker([v.lat, v.lng], { draggable: true }).addTo(map);
-    let cone = null;
+  pick = import('../lib/map.js').then(async ({ createMap, conePolygon }) => {
+    const map = await createMap(s.body.querySelector('[data-pick]'), { center: [v.lat, v.lng], zoom: l ? 15 : 5 });
+    const setPos = ({ lat, lng }) => { F('lat').value = lat.toFixed(6); F('lng').value = lng.toFixed(6); refresh(); };
+    const marker = map.marker([v.lat, v.lng], { label: '', draggable: true, onDragEnd: setPos });
     const refresh = () => {
       const lat = Number(F('lat').value), lng = Number(F('lng').value);
       const has = s.body.querySelector('[data-hasb]').checked;
@@ -148,18 +148,19 @@ export function editLocation(l, center, onSaved) {
       F('view_bearing').disabled = !has;
       s.body.querySelector('[data-bval]').textContent = has ? t('loc.bearing_val', { b, sun: (b + 180) % 360 }) : t('loc.no_bearing');
       s.body.querySelector('.compass .cone').style.background = has ? `conic-gradient(from ${b - 35}deg, rgb(var(--accent-rgb)/.45) 0 70deg, transparent 70deg)` : 'none';
-      cone?.remove();
-      cone = has ? viewCone(map, lat, lng, b, { radius: 400 }) : null;
+      marker.setLatLng([lat, lng]);
+      map.polygons('cone', has && !Number.isNaN(lat) ? [conePolygon(lat, lng, b, { radius: 400 })] : []);
     };
-    marker.on('dragend', () => { const p = marker.getLatLng(); F('lat').value = p.lat.toFixed(6); F('lng').value = p.lng.toFixed(6); refresh(); });
-    map.on('click', (e) => { marker.setLatLng(e.latlng); F('lat').value = e.latlng.lat.toFixed(6); F('lng').value = e.latlng.lng.toFixed(6); refresh(); });
+    map.onClick(setPos);
+    ['change'].forEach((ev) => { F('lat').addEventListener(ev, refresh); F('lng').addEventListener(ev, refresh); });
     ['input', 'change'].forEach((ev) => { F('view_bearing').addEventListener(ev, refresh); s.body.querySelector('[data-hasb]').addEventListener(ev, refresh); });
     if (!l && navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => {
-      map.setView([p.coords.latitude, p.coords.longitude], 15); marker.setLatLng([p.coords.latitude, p.coords.longitude]);
-      F('lat').value = p.coords.latitude.toFixed(6); F('lng').value = p.coords.longitude.toFixed(6); refresh();
+      map.setView([p.coords.latitude, p.coords.longitude], 15);
+      setPos({ lat: p.coords.latitude, lng: p.coords.longitude });
     }, () => {}, { timeout: 6000 });
     refresh();
-  });
+    return map;
+  }).catch(() => null);
   form.onsubmit = async (e) => {
     e.preventDefault();
     const body = { name: F('name').value.trim(), lat: Number(F('lat').value), lng: Number(F('lng').value), airport: F('airport').value.trim() || null,

@@ -37,10 +37,9 @@ export async function render(root, params) {
         <label class="field"><span>${esc(t('settings.units'))}</span><select data-units><option value="metric" ${S.units === 'metric' ? 'selected' : ''}>${esc(t('settings.metric'))}</option><option value="imperial" ${S.units === 'imperial' ? 'selected' : ''}>${esc(t('settings.imperial'))}</option></select></label>
       </div>
       <div class="card stack"><div class="card-title" style="margin-bottom:0">${esc(t('settings.map'))}</div>
-        <label class="field"><span>${esc(t('settings.map_tiles'))}</span><select data-tiles>${['auto', 'carto_light', 'carto_dark', 'osm', 'custom'].map((v) => `<option value="${v}" ${(S.map_tiles || 'auto') === v ? 'selected' : ''}>${esc(t(`settings.tiles_${v}`))}</option>`).join('')}</select></label>
+        <label class="field"><span>${esc(t('settings.map_tiles'))}</span><select data-tiles>${['auto', 'positron', 'liberty', 'bright', 'dark', 'fiord', 'osm', 'custom'].map((v) => `<option value="${v}" ${(S.map_tiles || 'auto') === v ? 'selected' : ''}>${esc(t(`settings.tiles_${v}`))}</option>`).join('')}</select></label>
         <div class="stack" data-custom-tiles ${(S.map_tiles || 'auto') === 'custom' ? '' : 'hidden'}>
-          <label class="field"><span>${esc(t('settings.tiles_url'))}</span><input data-tiles-url value="${esc(S.map_tiles_url || '')}" placeholder="https://tiles.example.org/{z}/{x}/{y}.png" spellcheck="false"></label>
-          <label class="field"><span>${esc(t('settings.tiles_attr'))}</span><input data-tiles-attr value="${esc(S.map_tiles_attribution || '')}" placeholder="© OpenStreetMap"></label>
+          <label class="field"><span>${esc(t('settings.tiles_url'))}</span><input data-tiles-url value="${esc(S.map_tiles_url || '')}" placeholder="https://tiles.openfreemap.org/styles/liberty" spellcheck="false"></label>
         </div>
         <p class="tiny muted">${esc(t('settings.map_hint'))}</p>
       </div>
@@ -67,7 +66,6 @@ export async function render(root, params) {
       save({ map_tiles: e.target.value });
     };
     body.querySelector('[data-tiles-url]').onchange = (e) => save({ map_tiles_url: e.target.value.trim() });
-    body.querySelector('[data-tiles-attr]').onchange = (e) => save({ map_tiles_attribution: e.target.value.trim() });
   }
 
   if (section === 'modules') {
@@ -222,7 +220,7 @@ export async function render(root, params) {
       <div class="card" style="border-color:#f59e0b66"><div class="card-title">${icon('triangle-alert', '', 16)} ${esc(t('about.maintenance_title'))}</div><p class="small">${esc(t('about.maintenance'))}</p></div>
       <div class="card small"><div class="card-title">${esc(t('about.credits'))}</div>
         <p>${esc(t('about.credits_text'))}</p>
-        <p class="muted" style="margin-top:8px">OpenStreetMap · Leaflet · Lucide · hexdb.io · AirLabs · Aviationstack · OpenSky Network · aviationweather.gov · Iowa Environmental Mesonet · airportsdata · Tesseract OCR</p></div>
+        <p class="muted" style="margin-top:8px">OpenStreetMap · OpenFreeMap · OpenMapTiles · MapLibre GL JS · Lucide · hexdb.io · AirLabs · Aviationstack · OpenSky Network · aviationweather.gov · Iowa Environmental Mesonet · airportsdata · Tesseract OCR</p></div>
       <div class="card"><a class="row" href="/api/docs" target="_blank" rel="noopener">${icon('file-text', '', 20)}<span class="grow">${esc(t('about.api_docs'))}</span>${icon('external-link', '', 18)}</a></div>
       <div class="card"><button class="btn danger" data-logout>${icon('log-out', '', 18)} ${esc(t('auth.logout'))}</button></div>
     </div>`;

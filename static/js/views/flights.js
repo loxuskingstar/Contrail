@@ -19,9 +19,8 @@ export async function render(root, _p, query) {
       <div class="chips scroll" data-years></div>
     </div>
     <div data-list></div>`;
-  const { createMap, greatCircle, dotIcon, fitTo } = await import('../lib/map.js');
-  const map = createMap(root.querySelector('[data-map]'), { center: [30, 10], zoom: 2, scrollWheelZoom: false });
-  let layer = window.L.layerGroup().addTo(map);
+  const { createMap, greatCircle } = await import('../lib/map.js');
+  const mapReady = createMap(root.querySelector('[data-map]'), { center: [30, 10], zoom: 1.3, scrollZoom: false }).catch(() => null);
 
   async function load() {
     const res = await api('/api/flights', { query: { year, search } });
@@ -40,20 +39,22 @@ export async function render(root, _p, query) {
       yrs.innerHTML = [`<button class="chip ${!year ? 'on' : ''}" data-y="">${esc(t('common.all'))}</button>`, ...S.years.map((y) => `<button class="chip ${year === y ? 'on' : ''}" data-y="${y}">${y}</button>`)].join('');
       yrs.querySelectorAll('[data-y]').forEach((b) => (b.onclick = () => { year = b.dataset.y; yrs.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b)); load(); }));
     }
-    // Carte
-    layer.clearLayers();
-    const pts = [];
-    const airports = {};
-    for (const f of res.items) {
-      if (!f.dep_info || !f.arr_info) continue;
-      const a = [f.dep_info.lat, f.dep_info.lng], b = [f.arr_info.lat, f.arr_info.lng];
-      window.L.polyline(greatCircle(a, b), { color: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#3b82f6', weight: 2.2, opacity: 0.75 })
-        .bindPopup(`<b>${esc(f.dep_icao)} → ${esc(f.arr_icao)}</b><br>${fmtDate(f.date, { time: false })} · ${fmtNum(f.distance_km)} km`).addTo(layer);
-      airports[f.dep_icao] = f.dep_info; airports[f.arr_icao] = f.arr_info;
-      pts.push(a, b);
-    }
-    for (const [code, info] of Object.entries(airports)) window.L.marker([info.lat, info.lng], { icon: dotIcon('#fff', 10) }).bindTooltip(`${code} · ${info.city || info.name}`).addTo(layer);
-    fitTo(map, pts, { maxZoom: 6 });
+    // Carte : orthodromies + aéroports
+    mapReady.then((m) => {
+      if (!m) return;
+      m.clear();
+      const pts = [], lines = [], airports = {};
+      for (const f of res.items) {
+        if (!f.dep_info || !f.arr_info) continue;
+        const a = [f.dep_info.lat, f.dep_info.lng], b = [f.arr_info.lat, f.arr_info.lng];
+        lines.push({ coords: greatCircle(a, b), props: { id: f.id_flight, label: `${f.dep_icao} → ${f.arr_icao}`, date: f.date, km: f.distance_km } });
+        airports[f.dep_icao] = f.dep_info; airports[f.arr_icao] = f.arr_info;
+        pts.push(a, b);
+      }
+      m.lines('routes', lines, { width: 2.2, opacity: 0.8, onClick: (p, at) => m.popup([at.lat, at.lng], `<b>${esc(p.label)}</b><br>${fmtDate(p.date, { time: false })} · ${fmtNum(p.km)} km<br><a href="#/flights/${p.id}/edit">${esc(t('common.open'))} →</a>`) });
+      for (const [code, info] of Object.entries(airports)) m.marker([info.lat, info.lng], { kind: 'dot', size: 10, title: `${code} · ${info.city || info.name}`, popup: `<b class="mono">${esc(code)}</b> · ${esc(info.name)}` });
+      m.fit(pts, { maxZoom: 6 });
+    });
     // Liste
     const list = root.querySelector('[data-list]');
     if (!res.items.length) {
@@ -80,5 +81,5 @@ export async function render(root, _p, query) {
     { icon: 'download', label: t('settings.export_csv'), onClick: () => (location.href = '/api/export/flights.csv') },
   ]);
   await load();
-  return () => map.remove();
+  return () => mapReady.then((m) => m?.remove());
 }

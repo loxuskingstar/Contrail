@@ -8,7 +8,7 @@ import { esc, sheet, toast, errorToast } from '../ui.js';
 const REFRESH_MS = 12000;
 
 export async function render(root) {
-  const { createMap, planeIcon, dotIcon } = await import('../lib/map.js');
+  const { createMap, planeImage } = await import('../lib/map.js');
   root.innerHTML = `
     <h1 class="sr">${esc(t('nav.radar'))}</h1>
     <div class="map full" data-map></div>
@@ -21,50 +21,61 @@ export async function render(root) {
   document.body.classList.add('radar-mode');
   const home = store.settings.radar_center;
   const homeAp = (store.settings.home_airports || [])[0];
-  const map = createMap(root.querySelector('[data-map]'), { center: home || [43.63, 1.37], zoom: 9 });
-  map.zoomControl.setPosition('bottomright');
-  const layer = window.L.layerGroup().addTo(map);
-  const markers = new Map();
+  const cm = await createMap(root.querySelector('[data-map]'), { center: home || [43.63, 1.37], zoom: 8.5, controls: 'bottom-right' });
+  const map = cm.map;
+  const states = new Map();
   let timer = null, aborter = null, me = null, stopped = false;
 
-  if (!home && homeAp) api(`/api/airports/${homeAp}`).then((a) => map.setView([a.lat, a.lng], 9)).catch(() => {});
+  // Avions : une couche symbole GeoJSON, icônes pivotées selon le cap (rendu GPU, fluide même avec des centaines d'appareils)
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2563eb';
+  const ICONS = { 'plane-watch': '#dc2626', 'plane-spotted': '#16a34a', 'plane-ground': '#94a3b8', 'plane-air': accent };
+  for (const [name, col] of Object.entries(ICONS)) if (!map.hasImage(name)) map.addImage(name, planeImage(col), { pixelRatio: 2 });
+  map.addSource('planes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({
+    id: 'planes', type: 'symbol', source: 'planes',
+    layout: {
+      'icon-image': ['get', 'icon'], 'icon-rotate': ['get', 'track'], 'icon-rotation-alignment': 'map',
+      'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-size': ['case', ['get', 'watch'], 1.3, 1],
+      'symbol-sort-key': ['case', ['get', 'watch'], 2, ['get', 'spotted'], 1, 0],
+    },
+  });
+  map.on('click', 'planes', (e) => { const s = states.get(e.features[0].properties.icao24); if (s) detail(s); });
+  map.on('mouseenter', 'planes', () => (map.getCanvas().style.cursor = 'pointer'));
+  map.on('mouseleave', 'planes', () => (map.getCanvas().style.cursor = ''));
+
+  if (!home && homeAp) api(`/api/airports/${homeAp}`).then((a) => cm.setView([a.lat, a.lng], 8.5)).catch(() => {});
   const locate = (fly = true) => navigator.geolocation?.getCurrentPosition((p) => {
     const ll = [p.coords.latitude, p.coords.longitude];
     me?.remove();
-    me = window.L.marker(ll, { icon: dotIcon('#0ea5e9', 16), zIndexOffset: 1000 }).addTo(map);
-    if (fly) map.setView(ll, 10);
+    me = cm.marker(ll, { kind: 'dot', size: 16, color: '#0ea5e9', group: 'me' });
+    if (fly) cm.setView(ll, 9.5);
   }, () => fly && toast(esc(t('radar.no_geo')), { type: 'warn' }), { enableHighAccuracy: true, timeout: 8000 });
   if (!home && !homeAp) locate(true);
 
-  const color = (s) => (s.watch ? '#ef4444' : s.spotted ? '#16a34a' : s.on_ground ? '#94a3b8' : getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#3b82f6');
+  const iconFor = (s) => (s.watch ? 'plane-watch' : s.spotted ? 'plane-spotted' : s.on_ground ? 'plane-ground' : 'plane-air');
 
   async function refresh() {
     if (stopped || document.hidden) return;
-    const b = map.getBounds();
+    const b = cm.bounds();
     const status = root.querySelector('[data-status]');
-    const area = (b.getNorth() - b.getSouth()) * (b.getEast() - b.getWest());
-    if (area > 100) { status.innerHTML = `${icon('search', '', 16)} ${esc(t('radar.zoom_in'))}`; layer.clearLayers(); markers.clear(); return; }
+    const area = (b.north - b.south) * (b.east - b.west);
+    if (area > 100) {
+      status.innerHTML = `${icon('search', '', 16)} ${esc(t('radar.zoom_in'))}`;
+      map.getSource('planes')?.setData({ type: 'FeatureCollection', features: [] });
+      states.clear();
+      return;
+    }
     aborter?.abort();
     aborter = new AbortController();
     try {
-      const res = await api('/api/radar', { query: { lamin: b.getSouth().toFixed(3), lomin: b.getWest().toFixed(3), lamax: b.getNorth().toFixed(3), lomax: b.getEast().toFixed(3) }, signal: aborter.signal });
-      const seen = new Set();
-      for (const s of res.states) {
-        seen.add(s.icao24);
-        let m = markers.get(s.icao24);
-        const ic = planeIcon(s.track, color(s), s.watch ? 34 : 26);
-        if (!m) {
-          m = window.L.marker([s.lat, s.lng], { icon: ic, zIndexOffset: s.watch ? 800 : 0 }).addTo(layer);
-          m.on('click', () => detail(m.state));
-          markers.set(s.icao24, m);
-        } else {
-          m.setLatLng([s.lat, s.lng]);
-          m.setIcon(ic);
-        }
-        m.state = s;
-        m.bindTooltip(`${s.callsign || s.icao24}${s.registration ? ' · ' + s.registration : ''}`, { direction: 'top', offset: [0, -12] });
-      }
-      for (const [k, m] of markers) if (!seen.has(k)) { layer.removeLayer(m); markers.delete(k); }
+      const res = await api('/api/radar', { query: { lamin: b.south.toFixed(3), lomin: b.west.toFixed(3), lamax: b.north.toFixed(3), lomax: b.east.toFixed(3) }, signal: aborter.signal });
+      states.clear();
+      const features = res.states.map((s) => {
+        states.set(s.icao24, s);
+        return { type: 'Feature', geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
+          properties: { icao24: s.icao24, track: s.track || 0, icon: iconFor(s), watch: !!s.watch, spotted: !!s.spotted } };
+      });
+      map.getSource('planes')?.setData({ type: 'FeatureCollection', features });
       if (res.error === 'rate_limited') status.innerHTML = `${icon('triangle-alert', '', 16)} ${esc(t('radar.rate_limited'))}`;
       else status.innerHTML = `${icon('radar', '', 16)} ${esc(t('radar.count', { n: res.states.length }))} · <span class="muted">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>`;
     } catch (e) {
@@ -107,7 +118,7 @@ export async function render(root) {
   }
 
   const schedule = () => { clearInterval(timer); timer = setInterval(refresh, REFRESH_MS); };
-  map.on('moveend', () => { refresh(); schedule(); });
+  cm.onMoveEnd(() => { refresh(); schedule(); });
   root.querySelector('[data-locate]').onclick = () => locate(true);
   root.querySelector('[data-legend]').onclick = () => sheet({ title: esc(t('radar.legend')), body: `<div class="stack">
     ${[['#ef4444', t('radar.l_watch')], ['#16a34a', t('radar.l_spotted')], ['var(--accent)', t('radar.l_air')], ['#94a3b8', t('radar.l_ground')]]
@@ -117,5 +128,5 @@ export async function render(root) {
   document.addEventListener('visibilitychange', vis);
   refresh();
   schedule();
-  return () => { stopped = true; clearInterval(timer); aborter?.abort(); map.remove(); document.body.classList.remove('radar-mode'); document.removeEventListener('visibilitychange', vis); };
+  return () => { stopped = true; clearInterval(timer); aborter?.abort(); cm.remove(); document.body.classList.remove('radar-mode'); document.removeEventListener('visibilitychange', vis); };
 }

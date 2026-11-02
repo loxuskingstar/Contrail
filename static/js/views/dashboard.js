@@ -128,17 +128,17 @@ function renderWidget(w, d) {
 }
 
 async function mountMap(node) {
-  const { createMap, pinIcon, fitTo } = await import('../lib/map.js');
+  const { createMap } = await import('../lib/map.js');
   const res = await api('/api/spots/map');
-  const map = createMap(node.querySelector('[data-map]'), { scrollWheelZoom: false });
-  const pts = [];
-  for (const c of res.clusters) {
-    pts.push([c.lat, c.lng]);
-    window.L.marker([c.lat, c.lng], { icon: pinIcon(c.count > 99 ? '99+' : c.count) }).addTo(map)
-      .bindPopup(`<b>${esc(c.label || c.airport || '')}</b><br><a href="#/spots?airport=${esc(c.airport || '')}">${esc(t('dash.n_spots', { n: c.count }))}</a>`);
-  }
-  fitTo(map, pts, { maxZoom: 9 });
-  return () => map.remove();
+  const mp = createMap(node.querySelector('[data-map]'), { scrollZoom: false }).then((m) => {
+    for (const c of res.clusters) {
+      m.marker([c.lat, c.lng], { label: c.count > 99 ? '99+' : c.count,
+        popup: `<b>${esc(c.label || c.airport || '')}</b><br><a href="#/spots?airport=${esc(c.airport || '')}">${esc(t('dash.n_spots', { n: c.count }))}</a>` });
+    }
+    m.fit(res.clusters.map((c) => [c.lat, c.lng]), { maxZoom: 8 });
+    return m;
+  }).catch(() => null);
+  return () => mp.then((m) => m?.remove());
 }
 
 async function mountSun(node) {

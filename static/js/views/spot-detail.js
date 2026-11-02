@@ -137,17 +137,19 @@ export async function render(root, params) {
   ]);
 
   // Carte
-  let map;
+  let mp = Promise.resolve(null);
   const lat = s.lat ?? ap?.lat, lng = s.lng ?? ap?.lng;
   const mapEl = root.querySelector('[data-map]');
   if (lat != null) {
-    const { createMap, pinIcon, viewCone } = await import('../lib/map.js');
-    map = createMap(mapEl, { center: [lat, lng], zoom: s.lat != null ? 14 : 12, scrollWheelZoom: false });
-    window.L.marker([lat, lng], { icon: pinIcon('') }).addTo(map);
-    if (s.location?.view_bearing != null) viewCone(map, s.location.lat, s.location.lng, s.location.view_bearing);
+    mp = import('../lib/map.js').then(async ({ createMap, conePolygon }) => {
+      const m = await createMap(mapEl, { center: [lat, lng], zoom: s.lat != null ? 14 : 11.5, scrollZoom: false });
+      if (s.location?.view_bearing != null) m.polygons('cone', [conePolygon(s.location.lat, s.location.lng, s.location.view_bearing)]);
+      m.marker([lat, lng], { label: '' });
+      return m;
+    }).catch(() => null);
   } else mapEl.outerHTML = `<div class="empty small">${icon('map-pin', '', 30)}${esc(t('spot.no_location'))}</div>`;
 
-  return () => { map?.remove(); document.removeEventListener('keydown', keys); };
+  return () => { mp.then((m) => m?.remove()); document.removeEventListener('keydown', keys); };
 }
 
 function kv(k, v) {

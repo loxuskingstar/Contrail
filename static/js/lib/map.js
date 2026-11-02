@@ -1,33 +1,199 @@
-// Cartographie (Leaflet + OpenStreetMap) : cartes, grand cercle, icônes
-const L = () => window.L;
+// Cartographie vectorielle : MapLibre GL JS + fonds OpenFreeMap (gratuits, sans clé)
+// Un petit enrobage expose une API simple aux vues (marqueurs, lignes, polygones, cadrage).
 
-const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-const CARTO_ATTR = `${OSM_ATTR} &copy; <a href="https://carto.com/attributions">CARTO</a>`;
+const ML_JS = '/static/vendor/maplibre/maplibre-gl.js';
+const ML_CSS = '/static/vendor/maplibre/maplibre-gl.css';
+let loading = null;
 
-/** Fond de carte selon les réglages : CARTO (clair/sombre suivant le thème), OSM standard ou URL personnalisée. */
-export function tileConfig() {
+/** Charge MapLibre à la demande (≈ 1 Mo, mis en cache ensuite par le service worker). */
+export function ensureMapLibre() {
+  if (window.maplibregl) return Promise.resolve(window.maplibregl);
+  if (loading) return loading;
+  loading = new Promise((resolve, reject) => {
+    if (!document.querySelector(`link[href="${ML_CSS}"]`)) {
+      const css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = ML_CSS;
+      document.head.append(css);
+    }
+    const s = document.createElement('script');
+    s.src = ML_JS;
+    s.onload = () => resolve(window.maplibregl);
+    s.onerror = () => { loading = null; reject(new Error('maplibre_unavailable')); };
+    document.head.append(s);
+  });
+  return loading;
+}
+
+const OFM = 'https://tiles.openfreemap.org/styles/';
+export const MAP_STYLES = ['auto', 'positron', 'liberty', 'bright', 'dark', 'fiord', 'osm', 'custom'];
+
+/** Style de carte selon les réglages : OpenFreeMap (clair / sombre suivant le thème), OSM raster ou URL perso. */
+export function styleFor() {
   const s = window.__store?.settings || {};
   const dark = document.documentElement.dataset.theme === 'dark';
-  const mode = s.map_tiles || 'auto';
-  if (mode === 'osm') return { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: OSM_ATTR, maxZoom: 19 };
-  if (mode === 'custom' && s.map_tiles_url) return { url: s.map_tiles_url, attribution: s.map_tiles_attribution || OSM_ATTR, maxZoom: 19 };
-  const style = mode === 'carto_light' ? 'light_all' : mode === 'carto_dark' ? 'dark_all' : dark ? 'dark_all' : 'light_all';
-  return { url: `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png`, attribution: CARTO_ATTR, subdomains: 'abcd', maxZoom: 20 };
+  let mode = s.map_tiles || 'auto';
+  if (!MAP_STYLES.includes(mode)) mode = 'auto';   // anciennes valeurs (carto_*) → auto
+  if (mode === 'custom' && s.map_tiles_url) return s.map_tiles_url;
+  if (mode === 'osm') {
+    return {
+      version: 8,
+      sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 19,
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' } },
+      layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+    };
+  }
+  if (mode === 'auto') mode = dark ? 'dark' : 'positron';
+  return OFM + mode;
 }
 
-export function createMap(el, { center = [46.6, 2.4], zoom = 5, zoomControl = true, scrollWheelZoom = true } = {}) {
-  const map = L().map(el, { center, zoom, zoomControl, scrollWheelZoom, worldCopyJump: true, attributionControl: true });
-  const cfg = tileConfig();
-  L().tileLayer(cfg.url, {
-    maxZoom: cfg.maxZoom, subdomains: cfg.subdomains || 'abc', attribution: cfg.attribution,
-    // Exigé par la politique d'usage des serveurs de tuiles bénévoles
-    referrerPolicy: 'strict-origin-when-cross-origin', crossOrigin: false,
-  }).addTo(map);
-  // La carte peut être créée dans un conteneur encore invisible
-  setTimeout(() => map.invalidateSize(), 60);
-  return map;
+function fallbackStyle() {
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--surface-2').trim() || '#e5e7eb';
+  return { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': bg } }] };
 }
 
+const ll = ([lat, lng]) => [lng, lat];
+
+/**
+ * Crée une carte et attend que le style soit prêt.
+ * @returns {Promise<ContrailMap>}
+ */
+export async function createMap(el, { center = [46.6, 2.4], zoom = 4.5, scrollZoom = true, controls = 'top-left', interactive = true } = {}) {
+  const maplibregl = await ensureMapLibre();
+  const map = new maplibregl.Map({
+    container: el, style: styleFor(), center: ll(center), zoom, attributionControl: false,
+    cooperativeGestures: false, scrollZoom, interactive, dragRotate: false, pitchWithRotate: false, maxPitch: 0,
+  });
+  map.touchZoomRotate.disableRotation();
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), controls);
+  map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+  // Hors-ligne ou style injoignable : fond uni, les données restent affichées
+  await new Promise((resolve) => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    map.once('load', finish);
+    map.once('error', (e) => {
+      if (done || map.loaded()) return;
+      console.warn('Style de carte indisponible, fond uni utilisé', e?.error?.message || e);
+      map.setStyle(fallbackStyle());
+      map.once('styledata', finish);
+    });
+    setTimeout(() => {
+      if (!done) { map.setStyle(fallbackStyle()); map.once('styledata', finish); setTimeout(finish, 1500); }
+    }, 9000);
+  });
+  return new ContrailMap(map, maplibregl);
+}
+
+class ContrailMap {
+  constructor(map, ml) {
+    this.map = map;
+    this.ml = ml;
+    this.groups = new Map();
+    this.ro = new ResizeObserver(() => map.resize());
+    this.ro.observe(map.getContainer());
+  }
+
+  /** Marqueur HTML : kind = pin (pastille avec libellé) | dot | element */
+  marker(latlng, { kind = 'pin', label = '', color, size, html, popup, title, draggable = false, onClick, onDragEnd, group = 'default', z } = {}) {
+    let el;
+    if (kind === 'element' && html) {
+      el = document.createElement('div');
+      el.innerHTML = html;
+      el = el.firstElementChild || el;
+    } else if (kind === 'dot') {
+      el = document.createElement('div');
+      el.className = 'mdot';
+      const sz = size || 12;
+      el.style.cssText = `width:${sz}px;height:${sz}px;${color ? `background:${color};` : ''}`;
+    } else {
+      el = document.createElement('div');
+      el.className = `mpin${label === '' || label === null ? ' empty' : ''}`;
+      if (color) el.style.background = color;
+      el.textContent = label ?? '';
+    }
+    if (title) el.title = title;
+    if (z) el.style.zIndex = z;
+    const m = new this.ml.Marker({ element: el, draggable, anchor: 'center' }).setLngLat(ll(latlng)).addTo(this.map);
+    if (popup) m.setPopup(new this.ml.Popup({ offset: 14, maxWidth: '300px' }).setHTML(popup));
+    if (onClick) el.addEventListener('click', (e) => { e.stopPropagation(); onClick(e); });
+    if (onDragEnd) m.on('dragend', () => { const p = m.getLngLat(); onDragEnd({ lat: p.lat, lng: p.lng }); });
+    const api = {
+      marker: m, el,
+      remove: () => m.remove(),
+      setLatLng: (p) => m.setLngLat(ll(p)),
+      getLatLng: () => { const p = m.getLngLat(); return { lat: p.lat, lng: p.lng }; },
+    };
+    if (!this.groups.has(group)) this.groups.set(group, []);
+    this.groups.get(group).push(api);
+    return api;
+  }
+
+  clear(group = 'default') {
+    for (const m of this.groups.get(group) || []) m.remove();
+    this.groups.set(group, []);
+  }
+
+  _setSource(id, data) {
+    const src = this.map.getSource(id);
+    if (src) { src.setData(data); return false; }
+    this.map.addSource(id, { type: 'geojson', data });
+    return true;
+  }
+
+  /** Lignes (ex. orthodromies) : lines = [{ coords: [[lat,lng]...], props }] */
+  lines(id, lines, { color = accent(), width = 2.2, opacity = 0.85, dash = null, onClick } = {}) {
+    const data = { type: 'FeatureCollection', features: lines.map((l, i) => ({ type: 'Feature', id: i, properties: { ...(l.props || {}), _i: i }, geometry: { type: 'LineString', coordinates: l.coords.map(ll) } })) };
+    try {
+      if (this._setSource(id, data)) {
+        const paint = { 'line-color': color, 'line-width': width, 'line-opacity': opacity };
+        if (dash) paint['line-dasharray'] = dash;
+        this.map.addLayer({ id, type: 'line', source: id, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint });
+        if (onClick) {
+          this.map.on('click', id, (e) => onClick(e.features[0].properties, e.lngLat));
+          this.map.on('mouseenter', id, () => (this.map.getCanvas().style.cursor = 'pointer'));
+          this.map.on('mouseleave', id, () => (this.map.getCanvas().style.cursor = ''));
+        }
+      }
+    } catch (e) { console.warn(e); }
+  }
+
+  /** Polygones remplis (ex. cônes de visée) : polys = [[[lat,lng]...], ...] */
+  polygons(id, polys, { color = accent(), opacity = 0.18 } = {}) {
+    const data = { type: 'FeatureCollection', features: polys.map((p) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [p.map(ll)] } })) };
+    try {
+      if (this._setSource(id, data)) {
+        this.map.addLayer({ id, type: 'fill', source: id, paint: { 'fill-color': color, 'fill-opacity': opacity } });
+        this.map.addLayer({ id: `${id}-line`, type: 'line', source: id, paint: { 'line-color': color, 'line-width': 1, 'line-opacity': 0.7 } });
+      }
+    } catch (e) { console.warn(e); }
+  }
+
+  popup(latlng, html) {
+    return new this.ml.Popup({ offset: 10, maxWidth: '300px' }).setLngLat(ll(latlng)).setHTML(html).addTo(this.map);
+  }
+
+  fit(points, { maxZoom = 11, padding = 40 } = {}) {
+    if (!points.length) return;
+    if (points.length === 1) { this.map.jumpTo({ center: ll(points[0]), zoom: Math.min(maxZoom, 11) }); return; }
+    const b = new this.ml.LngLatBounds();
+    for (const p of points) b.extend(ll(p));
+    this.map.fitBounds(b, { padding, maxZoom, duration: 0 });
+  }
+
+  setView(latlng, zoom) { this.map.flyTo({ center: ll(latlng), zoom: zoom ?? this.map.getZoom(), duration: 600 }); }
+  bounds() { const b = this.map.getBounds(); return { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() }; }
+  center() { const c = this.map.getCenter(); return { lat: c.lat, lng: c.lng }; }
+  onClick(fn) { this.map.on('click', (e) => fn({ lat: e.lngLat.lat, lng: e.lngLat.lng })); }
+  onMoveEnd(fn) { this.map.on('moveend', fn); }
+  remove() { this.ro.disconnect(); this.map.remove(); }
+}
+
+function accent() {
+  return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2563eb';
+}
+
+// ------------------------------------------------------------------ géométrie
 const toRad = (d) => (d * Math.PI) / 180;
 const toDeg = (r) => (r * 180) / Math.PI;
 
@@ -45,44 +211,12 @@ export function greatCircle([lat1, lon1], [lat2, lon2], n = 64) {
     const z = A * Math.sin(p1) + B * Math.sin(p2);
     pts.push([toDeg(Math.atan2(z, Math.sqrt(x * x + y * y))), toDeg(Math.atan2(y, x))]);
   }
-  // Évite les traits horizontaux à travers la carte au passage de l'antiméridien
+  // Longitudes continues : la ligne franchit l'antiméridien sans traverser toute la carte
   for (let i = 1; i < pts.length; i++) {
     while (pts[i][1] - pts[i - 1][1] > 180) pts[i][1] -= 360;
     while (pts[i][1] - pts[i - 1][1] < -180) pts[i][1] += 360;
   }
   return pts;
-}
-
-export function pinIcon(label = '', color = 'var(--accent)') {
-  return L().divIcon({
-    className: '', iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -30],
-    html: `<div class="pin" style="background:${color}"><span>${label}</span></div>`,
-  });
-}
-
-export function dotIcon(color = 'var(--accent)', size = 14) {
-  return L().divIcon({
-    className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2],
-    html: `<div style="width:${size}px;height:${size}px;border-radius:99px;background:${color};border:2px solid #fff;box-shadow:0 2px 6px rgb(0 0 0/.4)"></div>`,
-  });
-}
-
-const PLANE_PATH = 'M12 2c.7 0 1.2.9 1.2 2v5.2l7.3 4.3c.3.2.5.5.5.9v1.3l-7.8-2.4v4.3l2 1.5v1.4l-3.2-.9-3.2.9v-1.4l2-1.5v-4.3L3 15.7v-1.3c0-.4.2-.7.5-.9l7.3-4.3V4c0-1.1.5-2 1.2-2z';
-
-export function planeIcon(track = 0, color = '#3b82f6', size = 28) {
-  return L().divIcon({
-    className: 'plane-marker', iconSize: [size, size], iconAnchor: [size / 2, size / 2],
-    html: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="transform:rotate(${track || 0}deg)"><path d="${PLANE_PATH}" fill="${color}" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/></svg>`,
-  });
-}
-
-/** Cône indiquant la direction de visée d'un point de vue. */
-export function viewCone(map, lat, lng, bearing, { radius = 600, spread = 35, color = '#3b82f6' } = {}) {
-  if (bearing === null || bearing === undefined) return null;
-  const pts = [[lat, lng]];
-  for (let a = bearing - spread; a <= bearing + spread; a += 5) pts.push(destination(lat, lng, a, radius));
-  pts.push([lat, lng]);
-  return L().polygon(pts, { color, weight: 1, fillOpacity: 0.18 }).addTo(map);
 }
 
 export function destination(lat, lng, bearing, meters) {
@@ -92,14 +226,34 @@ export function destination(lat, lng, bearing, meters) {
   return [toDeg(p2), toDeg(l2)];
 }
 
-export function fitTo(map, latlngs, { maxZoom = 11, padding = [30, 30] } = {}) {
-  if (!latlngs.length) return;
-  if (latlngs.length === 1) { map.setView(latlngs[0], Math.min(maxZoom, 11)); return; }
-  map.fitBounds(L().latLngBounds(latlngs), { padding, maxZoom });
+/** Cône indiquant la direction de visée d'un point de vue. */
+export function conePolygon(lat, lng, bearing, { radius = 600, spread = 35 } = {}) {
+  const pts = [[lat, lng]];
+  for (let a = bearing - spread; a <= bearing + spread; a += 5) pts.push(destination(lat, lng, a, radius));
+  pts.push([lat, lng]);
+  return pts;
 }
 
 export function haversineKm(a, b) {
   const R = 6371.0088, dp = toRad(b[0] - a[0]), dl = toRad(b[1] - a[1]);
   const x = Math.sin(dp / 2) ** 2 + Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dl / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+export const PLANE_PATH = 'M12 2c.7 0 1.2.9 1.2 2v5.2l7.3 4.3c.3.2.5.5.5.9v1.3l-7.8-2.4v4.3l2 1.5v1.4l-3.2-.9-3.2.9v-1.4l2-1.5v-4.3L3 15.7v-1.3c0-.4.2-.7.5-.9l7.3-4.3V4c0-1.1.5-2 1.2-2z';
+
+/** Icône d'avion rendue en ImageData pour une couche symbole (rotation gérée par le GPU). */
+export function planeImage(color, px = 56) {
+  const c = document.createElement('canvas');
+  c.width = c.height = px;
+  const g = c.getContext('2d');
+  g.scale(px / 24, px / 24);
+  const p = new Path2D(PLANE_PATH);
+  g.lineJoin = 'round';
+  g.lineWidth = 1.4;
+  g.strokeStyle = '#ffffff';
+  g.stroke(p);
+  g.fillStyle = color;
+  g.fill(p);
+  return g.getImageData(0, 0, px, px);
 }

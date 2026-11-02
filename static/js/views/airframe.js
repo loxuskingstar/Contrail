@@ -35,25 +35,29 @@ export async function render(root, params) {
         ${a.changes.length ? `<div class="card"><div class="card-title">${esc(t('airframe.changes'))}</div>${a.changes.map((c) => `<div class="small" style="padding:6px 0;border-bottom:1px solid var(--hair)"><b>${fmtDate(c.date, { time: false })}</b> — ${esc(c.owner || '?')}${c.livery ? ` · ${esc(c.livery)}` : ''}</div>`).join('')}</div>` : ''}
       </div></div>` : `<div class="card">${emptyState('plane', t('airframe.empty'), t('airframe.empty_text'))}</div>`}`;
 
-  let map;
+  let mp = Promise.resolve(null);
   if (a.events.length) {
-    const { createMap, pinIcon, greatCircle, fitTo } = await import('../lib/map.js');
-    map = createMap(root.querySelector('[data-map]'), { scrollWheelZoom: false });
-    const pts = [];
-    let n = 0;
-    for (const e of a.events) {
-      if (e.kind === 'spot' && e.lat != null) {
-        n++;
-        pts.push([e.lat, e.lng]);
-        window.L.marker([e.lat, e.lng], { icon: pinIcon(n) }).addTo(map).bindPopup(`<b>${esc(e.airport_name || e.airport)}</b><br>${fmtDate(e.date)}<br><a href="#/spots/${e.id}">${esc(t('common.open'))} →</a>`);
+    mp = import('../lib/map.js').then(async ({ createMap, greatCircle }) => {
+      const m = await createMap(root.querySelector('[data-map]'), { scrollZoom: false });
+      const pts = [], lines = [];
+      let n = 0;
+      for (const e of a.events) {
+        if (e.kind === 'flight' && e.dep_ll && e.arr_ll) {
+          lines.push({ coords: greatCircle(e.dep_ll, e.arr_ll), props: { label: `${e.dep} → ${e.arr}`, date: e.date } });
+          pts.push(e.dep_ll, e.arr_ll);
+        }
       }
-      if (e.kind === 'flight' && e.dep_ll && e.arr_ll) {
-        const line = greatCircle(e.dep_ll, e.arr_ll);
-        window.L.polyline(line, { color: '#8b5cf6', weight: 3, opacity: 0.85, dashArray: '6 6' }).addTo(map).bindPopup(`${esc(e.dep)} → ${esc(e.arr)}<br>${fmtDate(e.date)}`);
-        pts.push(e.dep_ll, e.arr_ll);
+      m.lines('flights', lines, { color: '#7c3aed', width: 2.5, dash: [2, 2], onClick: (p, at) => m.popup([at.lat, at.lng], `${esc(p.label)}<br>${fmtDate(p.date)}`) });
+      for (const e of a.events) {
+        if (e.kind === 'spot' && e.lat != null) {
+          n++;
+          pts.push([e.lat, e.lng]);
+          m.marker([e.lat, e.lng], { label: n, popup: `<b>${esc(e.airport_name || e.airport)}</b><br>${fmtDate(e.date)}<br><a href="#/spots/${e.id}">${esc(t('common.open'))} →</a>` });
+        }
       }
-    }
-    fitTo(map, pts, { maxZoom: 9 });
+      m.fit(pts, { maxZoom: 9 });
+      return m;
+    }).catch(() => null);
   }
 
   root.querySelector('[data-watch]')?.addEventListener('click', async () => {
@@ -65,7 +69,7 @@ export async function render(root, params) {
     } catch (e) { errorToast(e); }
   });
   root.querySelector('[data-share]').onclick = async () => (await import('./shares.js')).createShareFlow({ kind: 'airframe', target: i.registration });
-  return () => map?.remove();
+  return () => mp.then((m) => m?.remove());
 }
 
 function evHtml(e) {

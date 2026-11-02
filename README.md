@@ -128,7 +128,7 @@ Toutes les intégrations sont **facultatives** et **gratuites**. Les clés se sa
 | OpenSky Network | `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET` | non (recommandée) | Radar en direct et watchlist ; un client API OAuth2 augmente fortement le quota anonyme |
 | aviationweather.gov | — | non | METAR / TAF des ~15 derniers jours |
 | Iowa Environmental Mesonet | — | non | Archive METAR au-delà |
-| CARTO (par défaut) / OpenStreetMap | — | non | Fonds de carte (Leaflet), choix dans Réglages › Apparence |
+| OpenFreeMap | — | non | Fonds de carte vectoriels (MapLibre GL), gratuits et sans limite d'usage annoncée ; choix du style dans Réglages › Apparence |
 | ntfy | `NTFY_URL` | non | Notifications push sur téléphone (ex. `https://ntfy.sh/un-sujet-secret`) |
 | Webhook | `WEBHOOK_URL` | — | POST JSON `{kind, title, body, link}` vers votre domotique, Gotify, etc. |
 
@@ -189,7 +189,7 @@ data/
 ## Architecture technique
 
 - **Backend** : Python 3.12, FastAPI, SQLite (sans ORM, migrations versionnées par `PRAGMA user_version`), Pillow (EXIF, WebP), pytesseract, httpx, `airportsdata` (≈ 28 000 aéroports hors-ligne avec fuseaux horaires). Planificateur interne asyncio (sauvegardes, watchlist, rattrapage météo).
-- **Frontend** : PWA en JavaScript natif (modules ES), **sans étape de build** ; Leaflet et un sous-ensemble d'icônes Lucide embarqués localement pour le hors-ligne. Graphiques et carte du soleil en SVG, story en Canvas.
+- **Frontend** : PWA en JavaScript natif (modules ES), **sans étape de build** ; MapLibre GL JS et un sous-ensemble d'icônes Lucide embarqués localement. Graphiques et carte du soleil en SVG, story en Canvas.
 - **API** documentée : `/api/docs` (OpenAPI).
 
 ```
@@ -221,7 +221,7 @@ Quelques points du cahier des charges ont été interprétés, ou sont bornés p
 - **Couverture des données appareil** : hexdb.io et les plans gratuits d'AirLabs / Aviationstack ne connaissent pas tous les appareils (notamment l'aviation générale et militaire) ; le formulaire reste entièrement modifiable à la main et l'historique local prime toujours.
 - **Météo** : le METAR retenu est le plus proche de l'heure du spot dans une fenêtre de ± 2 h ; certaines stations ne sont pas archivées.
 - **OCR** : efficace sur une immatriculation bien visible et contrastée (fuselage, dérive) ; la lecture est proposée, jamais imposée.
-- **Fond de carte** : par défaut, les fonds CARTO (clair ou sombre selon le thème, basés sur OpenStreetMap) ; OpenStreetMap standard ou un serveur de tuiles personnalisé sont sélectionnables dans Réglages › Apparence. Les serveurs publics imposent des politiques d'usage (en-tête Referer, pas de téléchargement massif) : Contrail les respecte et ne met plus les tuiles en cache lui-même, si bien que les cartes ne sont pas disponibles hors-ligne. Pour un usage intensif, utilisez votre propre serveur de tuiles.
+- **Fond de carte** : cartes vectorielles **MapLibre GL JS** (embarqué localement) avec les styles gratuits et sans clé d'**OpenFreeMap** (Positron, Liberty, Bright, Dark, Fiord), basés sur les données OpenStreetMap. Le mode automatique suit le thème clair/sombre ; OpenStreetMap raster ou n'importe quelle URL de style MapLibre (serveur de tuiles auto-hébergé, par exemple) sont sélectionnables dans Réglages › Apparence. Les tuiles ne sont pas mises en cache par Contrail : sans réseau, les cartes s'affichent sur un fond uni, avec vos marqueurs et trajets.
 - **Mono-utilisateur** : une instance correspond à un carnet.
 
 ## Développement
@@ -238,4 +238,4 @@ Les traductions sont des fichiers JSON plats dans `static/i18n/` ; le français 
 
 Distribué sous licence MIT (voir `LICENSE`). Rappel : **aucune garantie, aucune maintenance ni aucun support ne sont assurés** (voir la clause en tête de document).
 
-Cartes © contributeurs [OpenStreetMap](https://www.openstreetmap.org/copyright) · [Leaflet](https://leafletjs.com) (BSD-2) · icônes [Lucide](https://lucide.dev) (ISC) · [airportsdata](https://github.com/mborsetti/airportsdata) (MIT) · [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (Apache-2.0) · données : hexdb.io, AirLabs, Aviationstack, OpenSky Network, aviationweather.gov (NOAA), Iowa Environmental Mesonet — chacune soumise à ses propres conditions d'utilisation.
+Cartes © contributeurs [OpenStreetMap](https://www.openstreetmap.org/copyright) · [OpenFreeMap](https://openfreemap.org) · [OpenMapTiles](https://openmaptiles.org) · [MapLibre GL JS](https://maplibre.org) (BSD-3) · icônes [Lucide](https://lucide.dev) (ISC) · [airportsdata](https://github.com/mborsetti/airportsdata) (MIT) · [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (Apache-2.0) · données : hexdb.io, AirLabs, Aviationstack, OpenSky Network, aviationweather.gov (NOAA), Iowa Environmental Mesonet — chacune soumise à ses propres conditions d'utilisation.
