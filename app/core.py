@@ -37,9 +37,16 @@ DIRS = {
 
 
 def ensure_dirs() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    for d in DIRS.values():
-        d.mkdir(parents=True, exist_ok=True)
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        for d in DIRS.values():
+            d.mkdir(parents=True, exist_ok=True)
+    except PermissionError as e:
+        raise SystemExit(
+            f"Contrail ne peut pas écrire dans {DATA_DIR} (UID {os.getuid()}). "
+            f"Donnez-lui les droits sur le dossier de données, par exemple : "
+            f"sudo chown -R {os.getuid()}:{os.getgid()} ./data"
+        ) from e
 
 
 # --------------------------------------------------------------------------- #

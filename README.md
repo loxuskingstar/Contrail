@@ -96,7 +96,8 @@ docker compose up -d --build
 L'application est disponible sur **http://localhost:8000** (ou le port défini par `CONTRAIL_PORT`).
 
 - Le dossier `./data` est créé à côté du `docker-compose.yml` et monté dans le conteneur : c'est le seul état à sauvegarder.
-- Si vous rencontrez une erreur de permissions sur `./data`, renseignez `UID` et `GID` dans `.env` (sortie de `id -u` et `id -g`) puis reconstruisez l'image.
+- Au démarrage, le conteneur rend `./data` accessible à son utilisateur interne puis abandonne les droits root : peu importe que Docker ait créé le dossier en tant que root. Les fichiers appartiennent à l'UID/GID 1000 par défaut ; pour qu'ils appartiennent à votre compte, renseignez `PUID` et `PGID` dans `.env` (sortie de `id -u` et `id -g`).
+- Si vous imposez un utilisateur avec l'option `user:` de compose, l'entrypoint ne peut plus corriger les droits : faites alors `sudo chown -R <uid>:<gid> ./data`.
 - Mise à jour : `git pull && docker compose up -d --build`. Le schéma de base est migré automatiquement au démarrage.
 
 L'image installe Tesseract : l'OCR fonctionne sans configuration.

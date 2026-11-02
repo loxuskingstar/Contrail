@@ -1,10 +1,6 @@
 services:
   contrail:
-    build:
-      context: .
-      args:
-        UID: ${UID:-1000}
-        GID: ${GID:-1000}
+    build: .
     image: contrail:latest
     container_name: contrail
     restart: unless-stopped
@@ -15,6 +11,9 @@ services:
         required: false
     environment:
       TZ: ${TZ:-Europe/Paris}
+      # Propriétaire des fichiers créés dans ./data (sortie de `id -u` et `id -g` sur l'hôte)
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
     volumes:
       # Tout l'état de l'application (BDD, photos, audio, sauvegardes, config) vit ici.
       - ./data:/app/data
