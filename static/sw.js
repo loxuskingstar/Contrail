@@ -1,5 +1,5 @@
 /* Contrail — service worker : coquille hors-ligne, cache API/médias, cible de partage */
-const VERSION = 'contrail-v1.4.1';
+const VERSION = 'contrail-v1.4.2';
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 const MEDIA = 'contrail-media';
@@ -18,7 +18,7 @@ const PRECACHE = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(PRECACHE.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -53,11 +53,18 @@ async function networkFirstApi(req) {
   }
 }
 
+// Réseau d'abord : un fichier modifié est servi dès le rechargement, le cache ne sert que hors connexion
 async function staleWhileRevalidate(req) {
   const cache = await caches.open(SHELL);
-  const hit = await cache.match(req);
-  const fresh = fetch(req).then((res) => { if (res.ok) cache.put(req, res.clone()); return res; }).catch(() => hit);
-  return hit || fresh;
+  try {
+    const res = await fetch(req);
+    if (res.ok) cache.put(req, res.clone());
+    return res;
+  } catch (err) {
+    const hit = await cache.match(req);
+    if (hit) return hit;
+    throw err;
+  }
 }
 
 async function cacheFirst(req, cacheName, max) {

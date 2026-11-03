@@ -62,6 +62,8 @@ async def guard(request: Request, call_next):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     if path.startswith("/api/") and request.method == "GET" and "cache-control" not in response.headers:
         response.headers["Cache-Control"] = "no-store" if not path.startswith("/api/public/") else "public, max-age=60"
+    if path.startswith("/static/") and "cache-control" not in response.headers:
+        response.headers["Cache-Control"] = "no-cache"  # revalidation par ETag : jamais de fichier périmé
     return response
 
 

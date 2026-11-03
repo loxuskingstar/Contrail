@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
