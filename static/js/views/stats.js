@@ -111,8 +111,8 @@ export async function render(root, _p, query) {
         ${f.classes.length ? `<div class="card"><div class="card-title">${esc(t('flight.class'))}</div>${hbars(f.classes, { label: (r) => esc(t(`cabin_class.${r.k}`)) })}</div>` : ''}
       </div>
       <div class="grid two" style="margin-top:14px">
-        <a class="card kpi" href="#/flights/${f.longest.id_flight}/edit">${icon('arrow-up')}<div class="v mono" style="font-size:20px">${esc(f.longest.dep_icao)} → ${esc(f.longest.arr_icao)}</div><div class="l">${esc(t('stats.longest'))} · ${fmtNum(f.longest.distance_km)} km</div></a>
-        ${f.shortest ? `<a class="card kpi" href="#/flights/${f.shortest.id_flight}/edit">${icon('arrow-down')}<div class="v mono" style="font-size:20px">${esc(f.shortest.dep_icao)} → ${esc(f.shortest.arr_icao)}</div><div class="l">${esc(t('stats.shortest'))} · ${fmtNum(f.shortest.distance_km)} km</div></a>` : ''}
+        <a class="card kpi" href="#/flights/${f.longest.id_flight}">${icon('arrow-up')}<div class="v mono" style="font-size:20px">${esc(f.longest.dep_icao)} → ${esc(f.longest.arr_icao)}</div><div class="l">${esc(t('stats.longest'))} · ${fmtNum(f.longest.distance_km)} km</div></a>
+        ${f.shortest ? `<a class="card kpi" href="#/flights/${f.shortest.id_flight}">${icon('arrow-down')}<div class="v mono" style="font-size:20px">${esc(f.shortest.dep_icao)} → ${esc(f.shortest.arr_icao)}</div><div class="l">${esc(t('stats.shortest'))} · ${fmtNum(f.shortest.distance_km)} km</div></a>` : ''}
       </div>
       ${f.by_year.length > 1 ? `<div class="card" style="margin-top:14px"><div class="card-title">${esc(t('stats.by_year'))}</div>${vbars(f.by_year)}</div>` : ''}`;
   }
