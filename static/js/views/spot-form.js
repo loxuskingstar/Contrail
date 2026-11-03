@@ -1,0 +1,362 @@
+// Création / édition d'un spot : photo (EXIF + OCR), remplissage auto, étiquettes, audio, brouillon hors-ligne
+import { api, mediaUrl, ApiError } from '../api.js';
+import { store, navigate } from '../app.js';
+import { t, fmtDate, flag, countryName } from '../i18n.js';
+import { icon } from '../lib/icons.js';
+import { airportInput, tagPicker, rememberAirport } from '../lib/fields.js';
+import { esc, toast, errorToast, confirmDialog, stars, bindStars, pageHead, debounce } from '../ui.js';
+import { saveDraft, uuid } from '../offline.js';
+
+const FLIGHT_TYPES = ['commercial', 'cargo', 'test', 'delivery', 'ferry', 'military', 'business', 'general', 'helicopter', 'medical', 'training', 'airshow', 'government', 'other'];
+
+function nowLocal() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
+export async function render(root, params, query) {
+  const editing = !!params.id;
+  const s = editing ? await api(`/api/spots/${params.id}`) : {
+    registration: query.reg || '', airport: query.airport || store.settings.default_airport || '', date: nowLocal(),
+    icao24: query.icao24 || '', tags: [], military: 0, favorite: 0, rating: null,
+  };
+  const [tags, locations] = await Promise.all([
+    store.tags ? Promise.resolve(store.tags) : store.refreshTags().catch(() => []),
+    store.mod('locations') ? api('/api/locations').catch(() => []) : Promise.resolve([]),
+  ]);
+  let imageFile = null, audioFile = null, removeImage = false, removeAudio = false, dateTouched = editing;
+  let recorder = null;
+
+  root.innerHTML = `
+    ${pageHead(esc(editing ? t('spot.edit') : t('spot.new')), { compact: false, sub: editing ? `<span class="mono">${esc(s.registration)}</span>` : esc(t('spot.new_sub')) })}
+    <form class="stack" style="gap:16px" novalidate>
+      <div class="dropzone ${s.image ? 'has' : ''}" data-drop tabindex="0">
+        ${s.image ? `<img class="preview" src="${mediaUrl('images', s.image)}" alt="">` : ''}
+        <div class="dz-in" ${s.image ? 'hidden' : ''}>${icon('image-plus', '', 40)}<b>${esc(t('spot.photo_drop'))}</b><span class="small muted">${esc(t('spot.photo_hint'))}</span></div>
+        <div class="dz-tools" ${s.image ? '' : 'hidden'}><button type="button" class="btn-icon" data-rmimg title="${esc(t('common.remove'))}">${icon('trash-2', '', 18)}</button></div>
+        <input type="file" accept="image/*" hidden data-file>
+      </div>
+      <div data-analysis></div>
+
+      <div class="card stack">
+        <label class="field"><span>${esc(t('spot.registration'))}</span>
+          <div class="input-wrap"><input class="input big" name="registration" value="${esc(s.registration)}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="F-HBXA" required>
+          <button type="button" class="btn-icon" data-lookup title="${esc(t('spot.lookup'))}">${icon('wand-sparkles')}</button></div></label>
+        <div data-lookup-res></div>
+        <div data-dup></div>
+        <div class="field-row">
+          <label class="field"><span>${esc(t('spot.aircraft'))}</span><input name="aircraft" value="${esc(s.aircraft)}" placeholder="Airbus A320-214"></label>
+          <label class="field"><span>${esc(t('spot.type_code'))}</span><input name="aircraft_icao" value="${esc(s.aircraft_icao)}" placeholder="A320" autocapitalize="characters"></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>${esc(t('spot.owner'))}</span><input name="owner" value="${esc(s.owner)}" placeholder="Air France"></label>
+          <label class="field"><span>${esc(t('spot.airline_icao'))}</span><input name="airline_icao" value="${esc(s.airline_icao)}" placeholder="AFR" maxlength="4" autocapitalize="characters"></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>${esc(t('spot.msn'))}</span><input name="msn" value="${esc(s.msn)}" inputmode="text"></label>
+          <label class="field"><span>${esc(t('spot.manufacturer'))}</span><input name="manufacturer" value="${esc(s.manufacturer)}"></label>
+        </div>
+      </div>
+
+      <div class="card stack">
+        <div class="field-row">
+          <label class="field"><span>${esc(t('spot.airport'))}</span><div class="input-wrap"><input name="airport" value="${esc(s.airport)}" placeholder="LFBO / TLS / Toulouse" autocomplete="off"></div></label>
+          <label class="field"><span>${esc(t('spot.date'))}</span><input type="datetime-local" name="date" value="${esc((s.date || '').slice(0, 16))}"></label>
+        </div>
+        <div class="field"><span>${esc(t('spot.tags'))}</span><div data-tags></div></div>
+      </div>
+
+      <details class="card fold" ${s.livery || s.description || s.flight_type || s.location_id ? 'open' : ''}>
+        <summary>${icon('sliders-horizontal', '', 18)} ${esc(t('spot.more_details'))} ${icon('chevron-down', 'chev', 18)}</summary>
+        <div class="fold-body stack">
+          <label class="field"><span>${esc(t('spot.livery'))}</span><input name="livery" value="${esc(s.livery && s.livery !== 'None' ? s.livery : '')}" placeholder="${esc(t('spot.livery_ph'))}"></label>
+          <div class="field-row">
+            <label class="field"><span>${esc(t('spot.flight_type'))}</span><select name="flight_type"><option value="">—</option>${FLIGHT_TYPES.map((f) => `<option value="${f}" ${s.flight_type === f ? 'selected' : ''}>${esc(t(`ftype.${f}`))}</option>`).join('')}</select></label>
+            ${locations.length ? `<label class="field"><span>${esc(t('spot.location'))}</span><select name="location_id"><option value="">—</option>${locations.map((l) => `<option value="${l.id_location}" ${s.location_id === l.id_location ? 'selected' : ''}>${esc(l.name)}${l.airport ? ` (${esc(l.airport)})` : ''}</option>`).join('')}</select></label>` : ''}
+          </div>
+          <div class="card" style="padding:2px 14px;background:transparent;box-shadow:none">
+            <label class="toggle-row"><span class="t">${esc(t('spot.military'))}</span><span class="switch"><input type="checkbox" name="military" ${s.military ? 'checked' : ''}><span></span></span></label>
+            <label class="toggle-row"><span class="t">${esc(t('spot.favorite'))}</span><span class="switch"><input type="checkbox" name="favorite" ${s.favorite ? 'checked' : ''}><span></span></span></label>
+            <div class="toggle-row"><span class="t">${esc(t('spot.rating'))}</span>${stars(s.rating || 0)}</div>
+          </div>
+          <label class="field"><span>${esc(t('spot.description'))}</span><textarea name="description" rows="3">${esc(s.description)}</textarea></label>
+        </div>
+      </details>
+
+      <details class="card fold" ${s.atc_audio ? 'open' : ''}>
+        <summary>${icon('radio', '', 18)} ${esc(t('spot.audio'))} ${icon('chevron-down', 'chev', 18)}</summary>
+        <div class="fold-body stack" data-audio-box>
+          <div data-audio-current>${s.atc_audio ? `<audio controls src="${mediaUrl('audio', s.atc_audio)}"></audio>` : ''}</div>
+          <div class="row wrap">
+            <label class="btn sm">${icon('upload', '', 16)} ${esc(t('spot.audio_file'))}<input type="file" accept="audio/*" hidden data-audio></label>
+            ${window.MediaRecorder ? `<button type="button" class="btn sm" data-rec>${icon('mic', '', 16)} ${esc(t('spot.audio_record'))}</button>` : ''}
+            ${s.atc_audio ? `<button type="button" class="btn sm danger" data-rmaudio>${icon('trash-2', '', 16)} ${esc(t('common.remove'))}</button>` : ''}
+          </div>
+          <p class="tiny muted">${esc(t('spot.audio_hint'))}</p>
+        </div>
+      </details>
+
+      <details class="card fold">
+        <summary>${icon('camera', '', 18)} ${esc(t('spot.exif'))} ${icon('chevron-down', 'chev', 18)}</summary>
+        <div class="fold-body stack">
+          <div class="field-row">
+            <label class="field"><span>${esc(t('exif.camera'))}</span><input name="camera" value="${esc(s.camera)}"></label>
+            <label class="field"><span>${esc(t('exif.lens'))}</span><input name="lens" value="${esc(s.lens)}"></label>
+          </div>
+          <div class="field-row">
+            <label class="field"><span>${esc(t('exif.focal'))}</span><input name="focal" value="${esc(s.focal)}" inputmode="decimal"></label>
+            <label class="field"><span>${esc(t('exif.aperture'))}</span><input name="aperture" value="${esc(s.aperture)}" inputmode="decimal"></label>
+            <label class="field"><span>ISO</span><input name="iso" value="${esc(s.iso)}" inputmode="numeric"></label>
+            <label class="field"><span>${esc(t('exif.shutter'))}</span><input name="shutter" value="${esc(s.shutter)}"></label>
+          </div>
+          <p class="tiny muted">${esc(t('spot.exif_hint'))}</p>
+        </div>
+      </details>
+      <input type="hidden" name="icao24" value="${esc(s.icao24)}">
+      <input type="hidden" name="lat" value="${esc(s.lat ?? '')}"><input type="hidden" name="lng" value="${esc(s.lng ?? '')}">
+
+      <div class="sticky-actions glass">
+        <a class="btn ghost" href="${editing ? `#/spots/${s.id_spotting}` : '#/spots'}">${esc(t('common.cancel'))}</a>
+        <button class="btn primary grow" type="submit">${icon('check', '', 18)} ${esc(t('common.save'))}</button>
+      </div>
+    </form>`;
+
+  const form = root.querySelector('form');
+  const F = (n) => form.elements[n];
+  const drop = root.querySelector('[data-drop]');
+  const fileInput = root.querySelector('[data-file]');
+  const picker = tagPicker(root.querySelector('[data-tags]'), tags, s.tags || []);
+  let rating = s.rating || 0;
+  root.querySelector('[data-stars]').dataset.value = rating;
+  bindStars(root, (v) => (rating = v));
+  airportInput(F('airport'), { onPick: () => checkDup() });
+  F('date').addEventListener('input', () => (dateTouched = true));
+
+  // ------------------------------------------------------------ photo
+  const setPreview = (file) => {
+    imageFile = file;
+    removeImage = false;
+    drop.classList.add('has');
+    drop.querySelector('img.preview')?.remove();
+    const img = document.createElement('img');
+    img.className = 'preview';
+    img.src = URL.createObjectURL(file);
+    drop.prepend(img);
+    drop.querySelector('.dz-in').hidden = true;
+    drop.querySelector('.dz-tools').hidden = false;
+    analyze(file);
+  };
+  drop.addEventListener('click', (e) => { if (!e.target.closest('.dz-tools')) fileInput.click(); });
+  drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+  fileInput.onchange = () => fileInput.files[0] && setPreview(fileInput.files[0]);
+  ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('drag'); }));
+  ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('drag'); }));
+  drop.addEventListener('drop', (e) => { const f = e.dataTransfer.files?.[0]; if (f?.type.startsWith('image/')) setPreview(f); });
+  root.querySelector('[data-rmimg]').onclick = () => {
+    imageFile = null; removeImage = true;
+    drop.classList.remove('has'); drop.querySelector('img.preview')?.remove();
+    drop.querySelector('.dz-in').hidden = false; drop.querySelector('.dz-tools').hidden = true;
+    root.querySelector('[data-analysis]').innerHTML = '';
+  };
+  // Coller une image depuis le presse-papiers
+  const onPaste = (e) => { const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith('image/')); if (f) setPreview(f); };
+  document.addEventListener('paste', onPaste);
+
+  async function analyze(file) {
+    const box = root.querySelector('[data-analysis]');
+    if (!navigator.onLine) { box.innerHTML = `<div class="ocr-strip small">${icon('wifi-off', '', 16)} ${esc(t('spot.analyze_offline'))}</div>`; return; }
+    box.innerHTML = `<div class="ocr-strip small">${icon('scan-text', '', 16)} ${esc(t('spot.analyzing'))}</div>`;
+    const fd = new FormData();
+    fd.append('image', file);
+    try {
+      const res = await api('/api/media/analyze', { method: 'POST', form: fd, query: { ocr: store.mod('ocr'), airport: F('airport').value.trim() } });
+      const ex = res.exif || {};
+      if (ex.datetime && !dateTouched) F('date').value = ex.datetime;
+      for (const k of ['camera', 'lens', 'focal', 'aperture', 'iso', 'shutter']) if (ex[k] != null && !F(k).value) F(k).value = ex[k];
+      if (ex.lat != null) { F('lat').value = ex.lat; F('lng').value = ex.lng; }
+      if (res.nearest_airport && !F('airport').value) F('airport').value = res.nearest_airport.icao;
+      const parts = [];
+      const cands = res.ocr?.candidates || [];
+      if (cands.length) {
+        parts.push(`${icon('scan-text', '', 16)} <span>${esc(t('spot.ocr_found'))}</span>` + cands.slice(0, 4).map((c) => `<button type="button" class="chip" data-reg="${esc(c.registration)}">${flag(c.country)} <span class="mono">${esc(c.registration)}</span></button>`).join(''));
+        if (!F('registration').value) { F('registration').value = cands[0].registration; lookup(); }
+      } else if (store.mod('ocr') && res.ocr?.available) parts.push(`${icon('scan-text', '', 16)} <span class="muted">${esc(t('spot.ocr_none'))}</span>`);
+      const exBits = [ex.camera, ex.lens, ex.focal && `${ex.focal} mm`, ex.aperture && `f/${ex.aperture}`, ex.shutter, ex.iso && `ISO ${ex.iso}`].filter(Boolean);
+      if (exBits.length) parts.push(`<span class="small muted" style="width:100%">${icon('camera', '', 14)} ${esc(exBits.join(' · '))}</span>`);
+      if (ex.datetime) parts.push(`<span class="small muted">${icon('clock', '', 14)} ${esc(fmtDate(ex.datetime))}</span>`);
+      if (res.nearest_airport) parts.push(`<span class="small muted">${icon('map-pin', '', 14)} ${esc(res.nearest_airport.name)}</span>`);
+      box.innerHTML = parts.length ? `<div class="ocr-strip">${parts.join('')}</div>` : '';
+      box.querySelectorAll('[data-reg]').forEach((b) => (b.onclick = () => { F('registration').value = b.dataset.reg; lookup(true); }));
+      checkDup();
+    } catch (e) {
+      box.innerHTML = '';
+      if (!e.offline) errorToast(e);
+    }
+  }
+
+  // ------------------------------------------------------------ remplissage automatique
+  let lastLookup = editing ? s.registration : '';
+  async function lookup(force = false) {
+    const reg = F('registration').value.trim();
+    const out = root.querySelector('[data-lookup-res]');
+    if (!reg || (!force && reg.toUpperCase() === lastLookup)) return;
+    lastLookup = reg.toUpperCase();
+    out.innerHTML = `<div class="lookup-card small">${icon('refresh-cw', '', 16)} ${esc(t('spot.looking_up'))}</div>`;
+    try {
+      const d = await api(`/api/lookup/aircraft/${encodeURIComponent(reg)}`);
+      F('registration').value = d.registration;
+      const fill = { aircraft: d.aircraft, aircraft_icao: d.aircraft_icao, owner: d.owner, airline_icao: d.airline_icao, msn: d.msn, manufacturer: d.manufacturer, icao24: d.icao24 };
+      let filled = 0;
+      for (const [k, v] of Object.entries(fill)) if (v && !F(k).value) { F(k).value = v; filled++; }
+      if (d.military && !editing) F('military').checked = true;
+      const src = (d.sources || []).map((x) => t(`source.${x}`)).join(', ');
+      out.innerHTML = `<div class="lookup-card">${d.country ? `<span class="flag" style="font-size:26px">${flag(d.country)}</span>` : icon('plane', '', 24)}
+        <div class="grow"><b>${esc(d.aircraft || d.aircraft_icao || t('spot.unknown_aircraft'))}</b>
+        <div class="small muted">${esc([d.owner, d.country && countryName(d.country), d.msn && `MSN ${d.msn}`].filter(Boolean).join(' · '))}</div>
+        <div class="tiny muted">${d.found ? esc(t('spot.lookup_sources', { src: src || '—', n: filled })) : esc(t('spot.lookup_none'))}</div></div>
+        ${(d.sources || []).includes('history') ? `<a class="badge accent" href="#/airframe/${encodeURIComponent(d.registration)}" target="_blank">${icon('history', '', 12)} ${esc(t('spot.seen_before'))}</a>` : ''}</div>`;
+      checkDup();
+    } catch (e) {
+      out.innerHTML = e.offline ? `<div class="lookup-card small muted">${icon('wifi-off', '', 16)} ${esc(t('spot.lookup_offline'))}</div>` : '';
+    }
+  }
+  F('registration').addEventListener('blur', () => lookup());
+  F('registration').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lookup(true); } });
+  F('registration').addEventListener('input', (e) => { const p = e.target.selectionStart; e.target.value = e.target.value.toUpperCase(); e.target.setSelectionRange(p, p); });
+  root.querySelector('[data-lookup]').onclick = () => lookup(true);
+
+  // ------------------------------------------------------------ doublons
+  const checkDup = debounce(async () => {
+    const reg = F('registration').value.trim(), ap = F('airport').value.trim(), date = F('date').value;
+    const box = root.querySelector('[data-dup]');
+    if (!reg || !ap || !date || !navigator.onLine) { box.innerHTML = ''; return; }
+    try {
+      const r = await api('/api/spots/check-duplicate', { method: 'POST', body: { registration: reg, airport: ap, date, exclude_id: s.id_spotting || null } });
+      box.innerHTML = r.duplicates.length ? `<div class="ocr-strip warn">${icon('triangle-alert', '', 18)}
+        <span class="small grow">${esc(t('spot.dup_warning', { n: r.duplicates.length }))}</span>
+        ${r.duplicates.map((d) => `<a class="chip" href="#/spots/${d.id_spotting}" target="_blank">#${d.id_spotting}</a>`).join('')}</div>` : '';
+    } catch { box.innerHTML = ''; }
+  }, 400);
+  ['change', 'blur'].forEach((ev) => { F('airport').addEventListener(ev, checkDup); F('date').addEventListener(ev, checkDup); F('registration').addEventListener(ev, checkDup); });
+
+  // ------------------------------------------------------------ audio
+  const audioInput = root.querySelector('[data-audio]');
+  const setAudio = (file) => {
+    audioFile = file; removeAudio = false;
+    root.querySelector('[data-audio-current]').innerHTML = `<audio controls src="${URL.createObjectURL(file)}"></audio><div class="tiny muted">${esc(file.name || '')}</div>`;
+  };
+  audioInput.onchange = () => audioInput.files[0] && setAudio(audioInput.files[0]);
+  root.querySelector('[data-rmaudio]')?.addEventListener('click', () => { removeAudio = true; audioFile = null; root.querySelector('[data-audio-current]').innerHTML = ''; });
+  const recBtn = root.querySelector('[data-rec]');
+  if (recBtn) recBtn.onclick = async () => {
+    if (recorder) { recorder.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks = [];
+      const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg'].find((m) => MediaRecorder.isTypeSupported?.(m)) || '';
+      recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      const started = Date.now();
+      const tick = setInterval(() => { recBtn.innerHTML = `<span class="rec-dot"></span> ${Math.floor((Date.now() - started) / 1000)} s · ${esc(t('spot.audio_stop'))}`; if (Date.now() - started > 120000) recorder?.stop(); }, 250);
+      recorder.onstop = () => {
+        clearInterval(tick);
+        stream.getTracks().forEach((tr) => tr.stop());
+        const mime = recorder.mimeType || 'audio/webm';
+        const ext = mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : 'webm';
+        setAudio(new File(chunks, `atc-${Date.now()}.${ext}`, { type: mime }));
+        recorder = null;
+        recBtn.innerHTML = `${icon('mic', '', 16)} ${esc(t('spot.audio_record'))}`;
+      };
+      recorder.start();
+    } catch { toast(esc(t('spot.mic_denied')), { type: 'error' }); }
+  };
+
+  // ------------------------------------------------------------ enregistrement
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const reg = F('registration').value.trim();
+    if (!reg) { F('registration').focus(); toast(esc(t('err.registration_required')), { type: 'error' }); return; }
+    const data = {};
+    for (const k of ['registration', 'aircraft', 'aircraft_icao', 'owner', 'airline_icao', 'msn', 'manufacturer', 'airport', 'date', 'livery', 'flight_type', 'description', 'camera', 'lens', 'focal', 'aperture', 'iso', 'shutter', 'icao24', 'lat', 'lng']) data[k] = F(k).value.trim();
+    data.location_id = F('location_id')?.value || null;
+    data.military = F('military').checked;
+    data.favorite = F('favorite').checked;
+    data.rating = rating || null;
+    data.tags = picker.value();
+    if (removeImage) data.remove_image = true;
+    if (removeAudio) data.remove_audio = true;
+    if (!editing) data.draft_uuid = uuid();
+    rememberAirport(data.airport.toUpperCase());
+    const btn = form.querySelector('[type=submit]');
+    btn.disabled = true;
+
+    const asDraft = async () => {
+      await saveDraft({ data, image: imageFile, audio: audioFile });
+      toast(esc(t('drafts.saved')), { type: 'success' });
+      navigate('#/drafts');
+    };
+    if (!editing && !navigator.onLine) { await asDraft(); return; }
+    const send = async (force = false) => {
+      const fd = new FormData();
+      fd.append('data', JSON.stringify(data));
+      if (imageFile) fd.append('image', imageFile, imageFile.name || 'photo.jpg');
+      if (audioFile) fd.append('audio', audioFile, audioFile.name || 'audio.webm');
+      return api(editing ? `/api/spots/${s.id_spotting}` : '/api/spots', { method: editing ? 'PUT' : 'POST', form: fd, query: { force } });
+    };
+    try {
+      let res;
+      try {
+        res = await send();
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 409 && err.detail?.code === 'duplicate') {
+          const ok = await confirmDialog(esc(t('spot.dup_confirm', { n: err.detail.duplicates.length })), { ok: t('spot.save_anyway') });
+          if (!ok) { btn.disabled = false; return; }
+          res = await send(true);
+        } else throw err;
+      }
+      store.facets = null;
+      if (data.tags.some((x) => typeof x === 'string')) store.refreshTags().catch(() => {});
+      afterSave(res);
+      navigate(`#/spots/${res.spot.id_spotting}`, { replace: editing });
+    } catch (err) {
+      btn.disabled = false;
+      if (err.offline && !editing) { await asDraft(); return; }
+      errorToast(err);
+    }
+  };
+
+  // Photo reçue via la cible de partage du système (Android : « Partager vers Contrail »)
+  if (!editing && query.shared && 'caches' in window) {
+    caches.open('contrail-share').then(async (c) => {
+      const res = await c.match('/shared-image');
+      if (!res) return;
+      const name = decodeURIComponent(res.headers.get('x-filename') || 'photo.jpg');
+      setPreview(new File([await res.blob()], name, { type: res.headers.get('content-type') || 'image/jpeg' }));
+      c.delete('/shared-image');
+    }).catch(() => {});
+  }
+  if (!editing && query.reg) lookup(true);
+  if (!editing) setTimeout(() => F('registration').focus({ preventScroll: true }), 200);
+  return () => { document.removeEventListener('paste', onPaste); recorder?.stop(); };
+}
+
+export async function afterSave(res) {
+  window.dispatchEvent(new Event('contrail-local-action'));
+  toast(esc(t('common.saved')), { type: 'success', duration: 2000 });
+  if (res.crossref?.length) {
+    const reg = res.spot?.registration || res.flight?.registration;
+    const key = res.spot ? 'crossref.spot' : 'crossref.flight';
+    toast(`<b>${esc(t(key, { reg, n: res.crossref.length }))}</b>`, { type: 'star', duration: 7000, action: t('nav.airframe'), onAction: () => (location.hash = `#/airframe/${encodeURIComponent(reg)}`) });
+  }
+  if (res.achievements?.length) {
+    const { achName, achDesc, parseCode } = await import('../lib/ach.js');
+    // Un toast par série (palier le plus haut), trois au maximum
+    const best = new Map();
+    for (const code of res.achievements) best.set(parseCode(code).series, code);
+    const list = [...best.values()];
+    list.slice(0, 3).forEach((code) => toast(`<b>${esc(t('ach.unlocked'))}</b><br>${esc(achName(code))} · ${esc(achDesc(code))}`,
+      { type: 'star', duration: 6000, action: t('common.open'), onAction: () => (location.hash = '#/achievements') }));
+    if (list.length > 3) toast(esc(t('ach.more_unlocked', { n: list.length - 3 })), { type: 'star', duration: 6000, action: t('common.open'), onAction: () => (location.hash = '#/achievements') });
+  }
+}
