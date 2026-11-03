@@ -4,6 +4,7 @@ import { store } from '../app.js';
 import { t, fmtDate, countryName, flag, fmtNum } from '../i18n.js';
 import { icon } from '../lib/icons.js';
 import { esc, badgesHtml, toast, errorToast, emptyState } from '../ui.js';
+import { planespottersPhoto, photoBlock } from '../lib/photos.js';
 
 export async function render(root, params) {
   const a = await api(`/api/airframe/${encodeURIComponent(params.reg)}`);
@@ -22,6 +23,7 @@ export async function render(root, params) {
         <a class="btn primary" href="#/spots/new?reg=${encodeURIComponent(i.registration)}">${icon('plus', '', 18)} ${esc(t('spot.new'))}</a>
       </div>
     </header>
+    ${a.cover ? '' : `<div class="ac-photo" data-ext-photo hidden style="max-width:460px;margin-bottom:14px"></div>`}
     <div class="grid kpis" style="margin-bottom:14px">
       <div class="card kpi">${icon('camera')}<div class="v">${a.spots}</div><div class="l">${esc(t('airframe.encounters'))}</div></div>
       <div class="card kpi">${icon('ticket')}<div class="v">${a.flights}</div><div class="l">${esc(t('airframe.flights'))}</div></div>
@@ -34,6 +36,10 @@ export async function render(root, params) {
       <div class="stack"><div class="card flush"><div class="map" style="height:380px;border-radius:0" data-map></div></div>
         ${a.changes.length ? `<div class="card"><div class="card-title">${esc(t('airframe.changes'))}</div>${a.changes.map((c) => `<div class="small" style="padding:6px 0;border-bottom:1px solid var(--hair)"><b>${fmtDate(c.date, { time: false })}</b> — ${esc(c.owner || '?')}${c.livery ? ` · ${esc(c.livery)}` : ''}</div>`).join('')}</div>` : ''}
       </div></div>` : `<div class="card">${emptyState('plane', t('airframe.empty'), t('airframe.empty_text'))}</div>`}`;
+
+  // Pas encore de photo personnelle : la plus récente de Planespotters.net (avec crédit et lien)
+  const ext = root.querySelector('[data-ext-photo]');
+  if (ext) planespottersPhoto({ hex: i.icao24, reg: i.registration }).then((p) => { if (p && ext.isConnected) { ext.innerHTML = photoBlock(p); ext.hidden = false; } });
 
   let mp = Promise.resolve(null);
   if (a.events.length) {
@@ -48,13 +54,15 @@ export async function render(root, params) {
         }
       }
       m.lines('flights', lines, { color: '#7c3aed', width: 2.5, dash: [2, 2], onClick: (p, at) => m.popup([at.lat, at.lng], `${esc(p.label)}<br>${fmtDate(p.date)}`) });
+      const items = [];
       for (const e of a.events) {
         if (e.kind === 'spot' && e.lat != null) {
           n++;
           pts.push([e.lat, e.lng]);
-          m.marker([e.lat, e.lng], { label: n, popup: `<b>${esc(e.airport_name || e.airport)}</b><br>${fmtDate(e.date)}<br><a href="#/spots/${e.id}">${esc(t('common.open'))} →</a>` });
+          items.push({ lat: e.lat, lng: e.lng, label: n, popup: `<b>${esc(e.airport_name || e.airport)}</b><br>${fmtDate(e.date)}<br><a href="#/spots/${e.id}">${esc(t('common.open'))} →</a>` });
         }
       }
+      m.clusters('spots', items);
       m.fit(pts, { maxZoom: 9 });
       return m;
     }).catch(() => null);

@@ -64,6 +64,7 @@ const ROUTES = [
   [/^spots$/, 'spots'],
   [/^spots\/new$/, 'spot-form'],
   [/^spots\/(\d+)\/edit$/, 'spot-form', ['id']],
+  [/^spots\/(\d+)\/share$/, 'spot-share', ['id']],
   [/^spots\/(\d+)$/, 'spot-detail', ['id']],
   [/^airframe\/([^/]+)$/, 'airframe', ['reg']],
   [/^flights$/, 'flights'],

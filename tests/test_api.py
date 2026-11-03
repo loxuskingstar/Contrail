@@ -224,3 +224,73 @@ def test_test_session_is_isolated(client):
     assert client.get("/api/session").json()["profile"] == "main"
     assert client.get("/api/stats").json()["totals"]["spots"] == before
     assert client.get("/api/spots", params={"registration": "F-TEST"}).json()["total"] == 0
+
+
+def test_refdb_import_and_radar_enrichment(client, tmp_path):
+    import gzip
+    from app.services import opensky, refdb
+    lines = ["39e68b;F-HBXA;A320;00;AIRBUS A-320;2012;Air France;",
+             "39e68c;F-HBXB;A320;00;AIRBUS A-320;2012;Air France;",
+             "39e68d;F-HBXC;A321;00;AIRBUS A-321;2014;Air France;",
+             "3b7752;F-RARF;A332;10;AIRBUS A-330-200;2010;French Air Force;",
+             "3a1234;F-GCQJ;P28R;00;PIPER PA-28R-201;1980;Air France;",
+             "nothex;F-XXXX;A320;00;bad;;;"]
+    f = tmp_path / "aircraft.csv.gz"
+    f.write_bytes(gzip.compress("\n".join(lines).encode()))
+    assert refdb.import_file(f, "test") == 5
+    assert refdb.by_reg("F-HBXA")["typecode"] == "A320"
+    assert refdb.by_hex(["3b7752"])["3b7752"]["military"] == 1
+    # en-tête OpenSky
+    g = tmp_path / "os.csv"
+    g.write_text("'icao24','registration','manufacturername','model','typecode','operator','operatoricao','built'\n"
+                 "'4ca123','EI-ABC','Boeing','737-8AS','B738','Ryanair','RYR','2005-01-01'\n")
+    from app.services.refdb import _rows_from_text
+    fmt, rows = _rows_from_text(open(g, encoding="utf-8"))
+    assert fmt == "opensky" and next(rows)[2] == "B738"
+    # le radar classe les appareils grâce à la base locale
+    opensky._cache.clear()
+    orig = opensky._states
+    opensky._states = lambda params: {"time": 1, "states": [
+        {"icao24": "39e68b", "callsign": "AFR1", "lat": 43.6, "lng": 1.4, "alt_m": 1000, "on_ground": False, "track": 90, "category": 0},
+        {"icao24": "abcdef", "callsign": "HELI", "lat": 43.6, "lng": 1.4, "alt_m": 300, "on_ground": False, "track": 0, "category": 8}]}
+    try:
+        st = {s["icao24"]: s for s in client.get("/api/radar", params={"lamin": 43, "lomin": 1, "lamax": 44, "lomax": 2}).json()["states"]}
+    finally:
+        opensky._states = orig
+    assert st["39e68b"]["cls"] == "narrow" and st["39e68b"]["registration"] == "F-HBXA"
+    assert st["abcdef"]["cls"] == "heli"
+    # remplissage automatique hors-ligne depuis la base locale
+    assert client.get("/api/lookup/aircraft/F-RARF").json()["aircraft_icao"] == "A332"
+
+
+def test_fleet_airlabs_pagination_and_exclusions(client, monkeypatch):
+    import httpx
+    from app.routers import fleets as fl
+    from app.core import save_config
+    save_config({"airlabs_api_key": "k"})
+    regs_ = [f"F-H{chr(65 + i // 26)}{chr(65 + i % 26)}Z" for i in range(120)]
+
+    def handler(req: httpx.Request):
+        if req.url.path.endswith("/airlines"):
+            return httpx.Response(200, json={"response": [{"name": "Air France", "iata_code": "AF"}]})
+        limit = min(int(req.url.params["limit"]), 50)
+        off = int(req.url.params["offset"])
+        page = [{"reg_number": r, "icao": "A320", "model": "Airbus A320-200", "hex": "39" + f"{i:04x}", "engine": "jet", "type": "landplane"}
+                for i, r in enumerate(regs_[off:off + limit], start=off)]
+        if off == 0:
+            page[0] = {"reg_number": "F-GCQJ", "icao": "P28R", "model": "PA-28RT-201 Arrow 4", "engine": "piston", "type": "landplane"}
+        return httpx.Response(200, json={"request": {"has_more": off + limit < len(regs_)}, "response": page})
+
+    monkeypatch.setattr(fl.ac, "client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+    d = client.post("/api/fleets/AFR/fetch", json={}).json()
+    assert d["fetch"]["received"] == 120 and d["fetch"]["skipped_light"] == 1
+    assert len(d["fleet"]) >= 119 and d["by_type"][0]["type"] == "Airbus A320 family"
+    d = client.post("/api/fleets/AFR/exclude", json={"registration": regs_[5]}).json()
+    assert regs_[5] in [x["registration"] for x in d["excluded"]]
+    assert regs_[5] not in [f["registration"] for f in d["fleet"]]
+    d = client.delete(f"/api/fleets/AFR/exclude/{regs_[5]}").json()
+    assert not d["excluded"]
+    d = client.post("/api/fleets/AFR/complete-local").json()
+    assert d["added"] == 1  # F-HBXC (base locale) ; F-GCQJ, avion léger, est ignoré
+    assert any(f["registration"] == "F-HBXC" and f["source"] == "refdb" for f in d["fleet"])
+    save_config({"airlabs_api_key": ""})

@@ -307,20 +307,45 @@ export function hbars(rows, { label = (r) => r.k, value = (r) => r.n, href } = {
   }).join('')}</div>`;
 }
 
-export function vbars(rows, { label = (r) => r.k, value = (r) => r.n, height = 150, highlightLast = false } = {}) {
+function niceMax(v) {
+  if (v <= 4) return Math.max(1, Math.ceil(v));
+  const p = 10 ** Math.floor(Math.log10(v)), n = v / p;
+  const step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+  const m = step * p;
+  return Number.isInteger(m / 2) ? m : m * 2;
+}
+
+/**
+ * Histogramme en colonnes, rendu en HTML/CSS : hauteur fixe, typographie identique quel que
+ * soit le nombre de colonnes, barres de 24 px maximum, grille discrète, valeur affichée
+ * seulement sur le maximum (et la dernière colonne si `highlightLast`), info-bulle au survol.
+ */
+export function vbars(rows, { label = (r) => r.k, value = (r) => r.n, height = 168, highlightLast = false, every = 0, unit = '' } = {}) {
   if (!rows?.length) return `<p class="muted small">${esc(t('common.no_data'))}</p>`;
-  const W = Math.max(rows.length * 34, 280), H = height, pad = 18;
-  const max = Math.max(...rows.map(value), 1);
-  const bw = (W / rows.length) * 0.62;
-  const bars = rows.map((r, i) => {
-    const v = value(r), h = Math.max(2, (v / max) * (H - pad * 2));
-    const x = (W / rows.length) * i + (W / rows.length - bw) / 2, y = H - pad - h;
-    const dim = highlightLast && i !== rows.length - 1 ? 'dim' : '';
-    return `<rect class="bar ${dim}" x="${x}" y="${y}" width="${bw}" height="${h}" rx="${Math.min(6, bw / 2)}"><title>${esc(label(r))}: ${v}</title></rect>
-      ${v ? `<text class="val" x="${x + bw / 2}" y="${y - 4}" text-anchor="middle">${v}</text>` : ''}
-      <text x="${x + bw / 2}" y="${H - 3}" text-anchor="middle">${esc(label(r))}</text>`;
+  const vals = rows.map(value);
+  const max = Math.max(...vals);
+  if (!max) return `<p class="muted small">${esc(t('common.no_data'))}</p>`;
+  const top = niceMax(max);
+  const n = rows.length;
+  const step = every || (n > 16 ? Math.ceil(n / 8) : n > 10 ? 2 : 1);
+  const iMax = vals.indexOf(max);
+  const fmt = (v) => new Intl.NumberFormat(document.documentElement.lang || undefined).format(v);
+  const ticks = [top, top / 2, 0];
+  const cols = rows.map((r, i) => {
+    const v = vals[i];
+    const show = i === iMax || (highlightLast && i === n - 1);
+    const dim = highlightLast && i !== n - 1 ? ' dim' : '';
+    const tip = `${label(r)} · ${fmt(v)}${unit}`;
+    return `<div class="cc-col" tabindex="0" data-tip="${esc(tip)}" aria-label="${esc(tip)}">
+      <i class="cc-bar${dim}${v ? '' : ' zero'}" style="height:${(v / top) * 100}%">${show && v ? `<span class="cc-val">${fmt(v)}</span>` : ''}</i></div>`;
   }).join('');
-  return `<svg class="vchart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${bars}</svg>`;
+  const xl = rows.map((r, i) => `<span>${i % step === 0 || i === n - 1 && step === 1 ? esc(label(r)) : ''}</span>`).join('');
+  return `<div class="cchart" style="--h:${height}px;--n:${n}" role="img">
+    <div class="cc-y">${ticks.map((v) => `<span>${fmt(v)}</span>`).join('')}</div>
+    <div class="cc-main">
+      <div class="cc-plot"><div class="cc-grid">${ticks.map(() => '<i></i>').join('')}</div><div class="cc-cols">${cols}</div></div>
+      <div class="cc-x">${xl}</div>
+    </div></div>`;
 }
 
 export function stars(value, name = 'rating') {

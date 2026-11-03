@@ -124,8 +124,10 @@ class ContrailMap {
       setLatLng: (p) => m.setLngLat(ll(p)),
       getLatLng: () => { const p = m.getLngLat(); return { lat: p.lat, lng: p.lng }; },
     };
-    if (!this.groups.has(group)) this.groups.set(group, []);
-    this.groups.get(group).push(api);
+    if (!group.startsWith('__')) {
+      if (!this.groups.has(group)) this.groups.set(group, []);
+      this.groups.get(group).push(api);
+    }
     return api;
   }
 
@@ -139,6 +141,71 @@ class ContrailMap {
     if (src) { src.setData(data); return false; }
     this.map.addSource(id, { type: 'geojson', data });
     return true;
+  }
+
+  /**
+   * Points regroupés en clusters quand la carte est dézoomée.
+   * points = [{ lat, lng, count = 1, label, popup, title, onClick }]
+   * Les clusters et les points isolés sont des marqueurs HTML (aucune dépendance aux polices du style) ;
+   * un clic sur un cluster zoome jusqu'à son éclatement.
+   */
+  clusters(id, points, { radius = 46, maxZoom = 13 } = {}) {
+    const byId = new Map(points.map((p, i) => [i, p]));
+    const data = {
+      type: 'FeatureCollection',
+      features: points.map((p, i) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lng, p.lat] }, properties: { i, n: p.count || 1 } })),
+    };
+    const old = this._clusterState?.get(id);
+    if (old) { old.markers.forEach((m) => m.remove()); this.map.off('render', old.onRender); }
+    if (this.map.getSource(id)) this.map.getSource(id).setData(data);
+    else {
+      this.map.addSource(id, { type: 'geojson', data, cluster: true, clusterRadius: radius, clusterMaxZoom: maxZoom,
+        clusterProperties: { total: ['+', ['get', 'n']] } });
+      // Couche invisible : nécessaire pour que la source soit calculée et interrogeable
+      this.map.addLayer({ id: `${id}-hit`, type: 'circle', source: id, paint: { 'circle-radius': 1, 'circle-opacity': 0 } });
+    }
+    const markers = new Map();
+    let scheduled = false;
+    const update = () => {
+      scheduled = false;
+      const seen = new Set();
+      for (const f of this.map.querySourceFeatures(id)) {
+        const p = f.properties;
+        const key = p.cluster ? `c${p.cluster_id}` : `p${p.i}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (markers.has(key)) continue;
+        const [lng, lat] = f.geometry.coordinates;
+        let m;
+        if (p.cluster) {
+          const total = p.total || p.point_count;
+          const size = Math.round(30 + Math.min(26, Math.log2(total + 1) * 5));
+          const el = document.createElement('button');
+          el.type = 'button';
+          el.className = 'mcluster';
+          el.style.width = el.style.height = `${size}px`;
+          el.textContent = total > 999 ? `${Math.round(total / 100) / 10}k` : total;
+          el.setAttribute('aria-label', `${total}`);
+          el.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const src = this.map.getSource(id);
+            const z = await src.getClusterExpansionZoom(p.cluster_id);
+            this.map.easeTo({ center: [lng, lat], zoom: Math.min(z + 0.3, 18), duration: 450 });
+          });
+          m = new this.ml.Marker({ element: el, anchor: 'center' }).setLngLat([lng, lat]).addTo(this.map);
+        } else {
+          const pt = byId.get(p.i);
+          m = this.marker([lat, lng], { label: pt.label ?? '', popup: pt.popup, title: pt.title, onClick: pt.onClick, color: pt.color, group: `__${id}` }).marker;
+        }
+        markers.set(key, m);
+      }
+      for (const [k, m] of markers) if (!seen.has(k)) { m.remove(); markers.delete(k); }
+    };
+    const onRender = () => { if (!scheduled && this.map.isSourceLoaded(id)) { scheduled = true; requestAnimationFrame(update); } };
+    this.map.on('render', onRender);
+    this._clusterState ||= new Map();
+    this._clusterState.set(id, { markers, onRender });
+    requestAnimationFrame(update);
   }
 
   /** Lignes (ex. orthodromies) : lines = [{ coords: [[lat,lng]...], props }] */

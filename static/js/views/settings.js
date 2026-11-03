@@ -113,6 +113,7 @@ export async function render(root, params) {
         ${field('airlabs_api_key', 'AirLabs API key', `<a href="https://airlabs.co/signup" target="_blank" rel="noopener">airlabs.co</a> — ${esc(t('settings.airlabs_hint'))}`)}
         ${field('aviationstack_api_key', 'Aviationstack API key', `<a href="https://aviationstack.com/signup/free" target="_blank" rel="noopener">aviationstack.com</a> — ${esc(t('settings.experimental'))}`)}
       </div>
+      <div class="card stack" data-refdb><div class="card-title">${icon('database', '', 15)} ${esc(t('refdb.title'))}</div><div class="skeleton" style="height:80px"></div></div>
       <div class="card stack"><div class="card-title">OpenSky Network</div>
         <p class="small muted">${esc(t('settings.opensky_d'))}</p>
         ${field('opensky_client_id', 'Client ID', '')}${field('opensky_client_secret', 'Client secret', '', 'password')}
@@ -132,6 +133,7 @@ export async function render(root, params) {
       catch (e) { errorToast(e); }
     };
     body.querySelector('[data-perm]')?.addEventListener('click', () => Notification.requestPermission().then(() => render(root, params)));
+    refdbCard(body.querySelector('[data-refdb]'));
   }
 
   if (section === 'data') {
@@ -220,7 +222,7 @@ export async function render(root, params) {
       <div class="card" style="border-color:#f59e0b66"><div class="card-title">${icon('triangle-alert', '', 16)} ${esc(t('about.maintenance_title'))}</div><p class="small">${esc(t('about.maintenance'))}</p></div>
       <div class="card small"><div class="card-title">${esc(t('about.credits'))}</div>
         <p>${esc(t('about.credits_text'))}</p>
-        <p class="muted" style="margin-top:8px">OpenStreetMap · OpenFreeMap · OpenMapTiles · MapLibre GL JS · Lucide · hexdb.io · AirLabs · Aviationstack · OpenSky Network · aviationweather.gov · Iowa Environmental Mesonet · airportsdata · Tesseract OCR</p></div>
+        <p class="muted" style="margin-top:8px">OpenStreetMap · OpenFreeMap · OpenMapTiles · MapLibre GL JS · Lucide · Inter · JetBrains Mono · Fraunces · Caveat · Mictronics / tar1090-db · Planespotters.net · hexdb.io · AirLabs · Aviationstack · OpenSky Network · aviationweather.gov · Iowa Environmental Mesonet · airportsdata · Tesseract OCR</p></div>
       <div class="card"><a class="row" href="/api/docs" target="_blank" rel="noopener">${icon('file-text', '', 20)}<span class="grow">${esc(t('about.api_docs'))}</span>${icon('external-link', '', 18)}</a></div>
       <div class="card"><button class="btn danger" data-logout>${icon('log-out', '', 18)} ${esc(t('auth.logout'))}</button></div>
     </div>`;
@@ -276,4 +278,42 @@ function importWizard(kind) {
       };
     } catch (err) { errorToast(err); }
   };
+}
+
+
+// ------------------------------------------------------------------ base de référence des appareils
+async function refdbCard(box) {
+  let timer = null;
+  const draw = async () => {
+    if (!box.isConnected) { clearTimeout(timer); return; }
+    const st = await api('/api/refdb').catch(() => null);
+    if (!st) return;
+    const phase = st.running ? t(`refdb.phase_${st.phase || 'import'}`) + (st.rows ? ` · ${fmtNum(st.rows)}` : '') : '';
+    box.innerHTML = `<div class="card-title">${icon('database', '', 15)} ${esc(t('refdb.title'))}</div>
+      <p class="small muted">${esc(t('refdb.desc'))}</p>
+      <div class="row wrap small">${st.available
+        ? `<span class="badge green">${icon('circle-check', '', 12)} ${esc(t('refdb.count', { n: fmtNum(st.count || 0) }))}</span><span class="muted">${esc(t('refdb.imported', { date: fmtDate(st.imported_at, { time: false }), src: st.source || '' }))}</span>`
+        : `<span class="badge">${esc(t('refdb.none'))}</span>`}</div>
+      ${st.running ? `<div class="row small">${icon('refresh-cw', '', 15)} ${esc(phase)}</div><div class="progress"><i style="width:${st.phase === 'download' ? 35 : 75}%"></i></div>` : ''}
+      ${st.error ? `<p class="small" style="color:var(--danger)">${esc(t(`err.${st.error}`) === `err.${st.error}` ? st.error : t(`err.${st.error}`))}</p>` : ''}
+      <div class="row wrap">
+        <button class="btn ${st.available ? '' : 'primary'}" data-dl ${st.running ? 'disabled' : ''}>${icon('download', '', 18)} ${esc(t(st.available ? 'refdb.update' : 'refdb.download'))}</button>
+        <label class="btn ${st.running ? 'disabled' : ''}">${icon('upload', '', 18)} ${esc(t('refdb.upload'))}<input type="file" accept=".csv,.gz,text/csv,application/gzip" hidden data-up></label>
+        ${st.available && !st.running ? `<button class="btn ghost danger" data-del>${icon('trash-2', '', 18)}</button>` : ''}</div>
+      <p class="tiny muted">${esc(t('refdb.credits'))}</p>`;
+    box.querySelector('[data-dl]').onclick = async () => { await api('/api/refdb/download', { method: 'POST' }).catch(errorToast); draw(); };
+    box.querySelector('[data-up]').onchange = async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const fd = new FormData(); fd.append('file', f);
+      await api('/api/refdb/upload', { method: 'POST', form: fd }).catch(errorToast);
+      draw();
+    };
+    box.querySelector('[data-del]')?.addEventListener('click', async () => {
+      if (await confirmDialog(esc(t('refdb.delete_confirm')), { danger: true })) { await api('/api/refdb', { method: 'DELETE' }); draw(); }
+    });
+    clearTimeout(timer);
+    if (st.running) timer = setTimeout(draw, 1500);
+  };
+  draw();
 }

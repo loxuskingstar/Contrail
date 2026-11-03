@@ -13,6 +13,7 @@ import time
 import httpx
 
 from ..core import get_config, get_setting, now_iso, q, execute
+from . import actypes, refdb
 from . import aircraft as ac
 from .notify import notify, texts
 
@@ -72,26 +73,36 @@ def radar(lamin: float, lomin: float, lamax: float, lomax: float) -> dict:
     key = f"{lamin:.1f},{lomin:.1f},{lamax:.1f},{lomax:.1f}"
     hit = _cache.get(key)
     if hit and time.time() - hit[0] < 8:
-        return hit[1]
-    res = _states([("lamin", f"{lamin:.4f}"), ("lomin", f"{lomin:.4f}"), ("lamax", f"{lamax:.4f}"),
-                   ("lomax", f"{lomax:.4f}"), ("extended", "1")])
-    # Enrichissement local : appareils de la watchlist et appareils déjà spottés
+        raw = hit[1]
+    else:
+        raw = _states([("lamin", f"{lamin:.4f}"), ("lomin", f"{lomin:.4f}"), ("lamax", f"{lamax:.4f}"),
+                       ("lomax", f"{lomax:.4f}"), ("extended", "1")])
+        if len(_cache) > 50:
+            _cache.clear()
+        _cache[key] = (time.time(), raw)
+    # Copie : l'enrichissement dépend du profil (données réelles ou session de test)
+    res = {"time": raw.get("time"), "error": raw.get("error"), "states": [dict(s) for s in raw["states"]]}
     watch = {r["icao24"]: r["registration"] for r in q("SELECT icao24, registration FROM watchlist WHERE icao24 IS NOT NULL")}
     spotted = {r["icao24"]: r["registration"] for r in q(
         "SELECT DISTINCT icao24, registration FROM spotting WHERE icao24 IS NOT NULL")}
-    cached = {}
-    for row in q("SELECT registration, json_extract(data,'$.icao24') hx FROM aircraft_cache WHERE hx IS NOT NULL"):
-        cached[row["hx"]] = row["registration"]
+    cached = {r["hx"]: r for r in q(
+        "SELECT registration, json_extract(data,'$.icao24') hx, json_extract(data,'$.aircraft_icao') typ "
+        "FROM aircraft_cache WHERE hx IS NOT NULL")}
     seen_regs = {r["registration"] for r in q("SELECT DISTINCT registration FROM spotting")}
+    ref = refdb.by_hex([s["icao24"] for s in res["states"]])
     for s in res["states"]:
         hx = s["icao24"]
-        reg = watch.get(hx) or spotted.get(hx) or cached.get(hx)
+        r = ref.get(hx) or {}
+        c = cached.get(hx) or {}
+        reg = watch.get(hx) or spotted.get(hx) or c.get("registration") or r.get("registration")
+        typ = c.get("typ") or r.get("typecode")
         s["registration"] = reg
+        s["type"] = typ
+        s["desc"] = r.get("description")
+        s["cls"] = actypes.classify(typ, s.get("category"), r.get("description"))
+        s["military"] = bool(r.get("military"))
         s["watch"] = hx in watch
         s["spotted"] = hx in spotted or (reg in seen_regs if reg else False)
-    if len(_cache) > 50:
-        _cache.clear()
-    _cache[key] = (time.time(), res)
     return res
 
 

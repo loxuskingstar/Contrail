@@ -4,11 +4,15 @@ import { store } from '../app.js';
 import { t, fmtNum } from '../i18n.js';
 import { icon } from '../lib/icons.js';
 import { esc, sheet, toast, errorToast } from '../ui.js';
+import { mediaUrl } from '../api.js';
+import { CLASSES, aircraftImage, aircraftDataUrl, loadTypes, typeName } from '../lib/shapes.js';
+import { planespottersPhoto, photoBlock } from '../lib/photos.js';
 
 const REFRESH_MS = 12000;
 
 export async function render(root) {
-  const { createMap, planeImage } = await import('../lib/map.js');
+  const { createMap } = await import('../lib/map.js');
+  loadTypes();
   root.innerHTML = `
     <h1 class="sr">${esc(t('nav.radar'))}</h1>
     <div class="map full" data-map></div>
@@ -26,17 +30,25 @@ export async function render(root) {
   const states = new Map();
   let timer = null, aborter = null, me = null, stopped = false;
 
-  // Avions : une couche symbole GeoJSON, icônes pivotées selon le cap (rendu GPU, fluide même avec des centaines d'appareils)
+  // Avions : couche symbole GeoJSON ; une silhouette par classe d'appareil et par état,
+  // générée à la demande et pivotée selon le cap par le GPU (fluide même avec des centaines d'appareils).
   const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2563eb';
-  const ICONS = { 'plane-watch': '#dc2626', 'plane-spotted': '#16a34a', 'plane-ground': '#94a3b8', 'plane-air': accent };
-  for (const [name, col] of Object.entries(ICONS)) if (!map.hasImage(name)) map.addImage(name, planeImage(col), { pixelRatio: 2 });
+  const COLORS = { air: accent, ground: '#94a3b8', watch: '#dc2626', spotted: '#16a34a', mil: '#a16207' };
+  const addIcon = (id) => {
+    const m = /^ac-(\w+)-(\w+)$/.exec(id);
+    if (!m || map.hasImage(id)) return;
+    map.addImage(id, aircraftImage(CLASSES.includes(m[1]) ? m[1] : 'unknown', COLORS[m[2]] || accent, 72), { pixelRatio: 2 });
+  };
+  map.on('styleimagemissing', (e) => addIcon(e.id));
+  for (const st of Object.keys(COLORS)) addIcon(`ac-narrow-${st}`);
   map.addSource('planes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addLayer({
     id: 'planes', type: 'symbol', source: 'planes',
     layout: {
-      'icon-image': ['get', 'icon'], 'icon-rotate': ['get', 'track'], 'icon-rotation-alignment': 'map',
-      'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-size': ['case', ['get', 'watch'], 1.3, 1],
-      'symbol-sort-key': ['case', ['get', 'watch'], 2, ['get', 'spotted'], 1, 0],
+      'icon-image': ['concat', 'ac-', ['get', 'cls'], '-', ['get', 'state']], 'icon-rotate': ['get', 'track'],
+      'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true,
+      'icon-size': ['case', ['get', 'watch'], 1.2, 1],
+      'symbol-sort-key': ['case', ['get', 'watch'], 3, ['get', 'spotted'], 2, ['get', 'ground'], 0, 1],
     },
   });
   map.on('click', 'planes', (e) => { const s = states.get(e.features[0].properties.icao24); if (s) detail(s); });
@@ -52,7 +64,7 @@ export async function render(root) {
   }, () => fly && toast(esc(t('radar.no_geo')), { type: 'warn' }), { enableHighAccuracy: true, timeout: 8000 });
   if (!home && !homeAp) locate(true);
 
-  const iconFor = (s) => (s.watch ? 'plane-watch' : s.spotted ? 'plane-spotted' : s.on_ground ? 'plane-ground' : 'plane-air');
+  const stateOf = (s) => (s.watch ? 'watch' : s.spotted ? 'spotted' : s.on_ground ? 'ground' : s.military ? 'mil' : 'air');
 
   async function refresh() {
     if (stopped || document.hidden) return;
@@ -73,7 +85,8 @@ export async function render(root) {
       const features = res.states.map((s) => {
         states.set(s.icao24, s);
         return { type: 'Feature', geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
-          properties: { icao24: s.icao24, track: s.track || 0, icon: iconFor(s), watch: !!s.watch, spotted: !!s.spotted } };
+          properties: { icao24: s.icao24, track: s.track || 0, cls: s.cls || 'unknown', state: stateOf(s),
+            watch: !!s.watch, spotted: !!s.spotted, ground: !!s.on_ground } };
       });
       map.getSource('planes')?.setData({ type: 'FeatureCollection', features });
       if (res.error === 'rate_limited') status.innerHTML = `${icon('triangle-alert', '', 16)} ${esc(t('radar.rate_limited'))}`;
@@ -85,16 +98,25 @@ export async function render(root) {
   }
 
   async function detail(s) {
-    const sh = sheet({ title: `<span class="mono">${esc(s.callsign || s.icao24.toUpperCase())}</span>`, body: `<div class="skeleton" style="height:120px"></div>` });
+    const sh = sheet({ title: `<span class="mono">${esc(s.callsign || s.icao24.toUpperCase())}</span>`, body: `<div class="skeleton" style="height:220px"></div>` });
     const info = await api(`/api/lookup/hex/${s.icao24}`, { query: { callsign: s.callsign || '' } }).catch(() => ({}));
+    await loadTypes();
     const reg = info.registration || s.registration;
+    const code = info.aircraft_icao || s.type;
+    const cls = s.cls && s.cls !== 'unknown' ? s.cls : (info.cls || 'unknown');
+    const model = info.aircraft || typeName(code) || s.desc;
     const alt = s.alt_m != null ? (store.settings.units === 'imperial' ? `${fmtNum(Math.round(s.alt_m * 3.28084))} ft` : `${fmtNum(Math.round(s.alt_m * 3.28084 / 100) * 100)} ft · ${fmtNum(Math.round(s.alt_m))} m`) : '—';
     const spd = s.velocity != null ? `${fmtNum(Math.round(s.velocity * 1.94384))} kt` : '—';
+    const tag = s.watch ? `<span class="badge rose">${icon('eye', '', 12)} ${esc(t('nav.watchlist'))}</span>` : '';
     sh.body.innerHTML = `
-      <div class="row" style="margin-bottom:14px">${icon('plane', '', 30)}<div class="grow">
-        <div style="font-size:22px;font-weight:760" class="mono">${esc(reg || '—')}</div>
-        <div class="muted">${esc([info.aircraft || info.aircraft_icao, info.owner].filter(Boolean).join(' · ') || t('radar.unknown'))}</div></div>
-        ${s.watch ? `<span class="badge rose">${icon('eye', '', 12)} ${esc(t('nav.watchlist'))}</span>` : ''}${info.spotted ? `<span class="badge green">${icon('camera', '', 12)} ${info.spotted}×</span>` : ''}</div>
+      <div data-photo class="ac-photo"><img class="ac-sil" src="${aircraftDataUrl(cls, getComputedStyle(document.documentElement).getPropertyValue('--muted').trim(), 120)}" alt=""></div>
+      <div class="row" style="margin:14px 0">
+        <img src="${aircraftDataUrl(cls, accent, 44)}" width="44" height="44" alt="" title="${esc(t(`cls.${cls}`))}">
+        <div class="grow">
+          <div style="font-size:22px;font-weight:750" class="mono">${esc(reg || '—')}</div>
+          <div class="muted">${esc([model, info.owner].filter(Boolean).join(' · ') || t('radar.unknown'))}</div>
+          <div class="tiny muted">${esc(t(`cls.${cls}`))}${code ? ` · ${esc(code)}` : ''}</div></div>
+        <div class="stack" style="gap:4px;align-items:flex-end">${tag}${info.spotted ? `<span class="badge green">${icon('camera', '', 12)} ${info.spotted}×</span>` : ''}</div></div>
       <div class="wx-grid">
         <div><b>${esc(alt)}</b><small>${esc(t('radar.altitude'))}</small></div>
         <div><b>${esc(spd)}</b><small>${esc(t('radar.speed'))}</small></div>
@@ -115,14 +137,28 @@ export async function render(root) {
       try { await api('/api/watchlist', { method: 'POST', body: { registration: reg } }); toast(esc(t('watch.added')), { type: 'success' }); sh.close(); }
       catch (e) { errorToast(e); }
     });
+    // Photo : la vôtre si l'appareil a déjà été spotté, sinon la plus récente de Planespotters.net
+    const box = sh.body.querySelector('[data-photo]');
+    if (info.own_photo) {
+      box.innerHTML = `<a href="#/spots/${info.own_photo.id_spotting}" data-close-photo><img src="${mediaUrl('images', info.own_photo.image)}" alt="${esc(reg || '')}"></a>
+        <div class="ac-credit">${icon('camera', '', 12)} ${esc(t('radar.your_photo'))}</div>`;
+      box.querySelector('[data-close-photo]').addEventListener('click', () => sh.close());
+    } else {
+      const ph = await planespottersPhoto({ hex: s.icao24, reg });
+      if (ph && box.isConnected) box.innerHTML = photoBlock(ph);
+      else if (box.isConnected) box.insertAdjacentHTML('beforeend', `<div class="ac-credit">${esc(t('radar.no_photo'))}</div>`);
+    }
   }
 
   const schedule = () => { clearInterval(timer); timer = setInterval(refresh, REFRESH_MS); };
   cm.onMoveEnd(() => { refresh(); schedule(); });
   root.querySelector('[data-locate]').onclick = () => locate(true);
   root.querySelector('[data-legend]').onclick = () => sheet({ title: esc(t('radar.legend')), body: `<div class="stack">
-    ${[['#ef4444', t('radar.l_watch')], ['#16a34a', t('radar.l_spotted')], ['var(--accent)', t('radar.l_air')], ['#94a3b8', t('radar.l_ground')]]
-      .map(([c, l]) => `<div class="row"><span class="legend-dot" style="background:${c};width:14px;height:14px"></span>${esc(l)}</div>`).join('')}
+    <div class="legend-grid">${[['watch', 'radar.l_watch'], ['spotted', 'radar.l_spotted'], ['air', 'radar.l_air'], ['mil', 'radar.l_mil'], ['ground', 'radar.l_ground']]
+      .map(([k, l]) => `<div class="row"><span class="legend-dot" style="background:${COLORS[k]};width:12px;height:12px"></span>${esc(t(l))}</div>`).join('')}</div>
+    <div class="card-title" style="margin:6px 0 0">${esc(t('radar.shapes'))}</div>
+    <div class="legend-grid">${CLASSES.filter((c) => c !== 'unknown').map((c) => `<div class="row"><img src="${aircraftDataUrl(c, accent, 30)}" width="30" height="30" alt="">${esc(t(`cls.${c}`))}</div>`).join('')}</div>
+    <p class="small muted">${esc(t('radar.shapes_hint'))}</p>
     <p class="small muted">${esc(t('radar.about'))}</p></div>` });
   const vis = () => { if (!document.hidden) refresh(); };
   document.addEventListener('visibilitychange', vis);

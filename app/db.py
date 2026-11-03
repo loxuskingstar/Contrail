@@ -181,7 +181,20 @@ CREATE TABLE IF NOT EXISTS shares (
 );
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1]
+SCHEMA_V2 = """
+ALTER TABLE fleets ADD COLUMN aircraft_icao TEXT;
+ALTER TABLE fleets ADD COLUMN icao24 TEXT;
+ALTER TABLE fleets ADD COLUMN built TEXT;
+ALTER TABLE fleets ADD COLUMN source TEXT;
+CREATE TABLE IF NOT EXISTS fleet_exclusions (
+    airline_key  TEXT NOT NULL,
+    registration TEXT NOT NULL,
+    created_at   TEXT,
+    PRIMARY KEY (airline_key, registration)
+);
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2]
 
 
 def init_db() -> None:

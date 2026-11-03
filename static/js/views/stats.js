@@ -64,7 +64,7 @@ export async function render(root, _p, query) {
       </div>
       <div class="card" style="margin-top:14px"><div class="card-title">${esc(t('stats.by_month'))}</div>${vbars(months, { label: (r) => fmtMonth(r.k) })}</div>
       <div class="grid two" style="margin-top:14px">
-        <div class="card"><div class="card-title">${esc(t('stats.by_hour'))}</div>${vbars(Array.from({ length: 24 }, (_, h) => ({ k: String(h), n: hourMap[h] || 0 })), { label: (r) => (Number(r.k) % 3 === 0 ? r.k : '') })}</div>
+        <div class="card"><div class="card-title">${esc(t('stats.by_hour'))}</div>${vbars(Array.from({ length: 24 }, (_, h) => ({ k: `${h} h`, n: hourMap[h] || 0 })), { every: 3 })}</div>
         <div class="card"><div class="card-title">${esc(t('stats.by_weekday'))}</div>${vbars(wd.map((d, i) => ({ k: wdNames[i], n: wdMap[d] || 0 })))}</div>
       </div>
       ${!year && s.by_year.length > 1 ? `<div class="card" style="margin-top:14px"><div class="card-title">${esc(t('stats.by_year'))}</div>${vbars(s.by_year)}</div>` : ''}
@@ -89,7 +89,7 @@ export async function render(root, _p, query) {
         <div class="card"><div class="card-title">${esc(t('stats.cameras'))}</div>${hbars(s.cameras, { label: (r) => esc(r.k) })}</div>
         <div class="card"><div class="card-title">${esc(t('stats.lenses'))}</div>${hbars(s.lenses, { label: (r) => esc(r.k) })}</div>
       </div>
-      <div class="card" style="margin-top:14px"><div class="card-title">${esc(t('stats.focal'))}</div>${vbars(s.focal, { label: (r) => `${r.k} mm` })}</div>`;
+      <div class="card" style="margin-top:14px"><div class="card-title">${esc(t('stats.focal'))}</div>${vbars(s.focal, { label: (r) => r.k, unit: '' })}<p class="tiny muted" style="margin-top:6px">mm</p></div>`;
   }
 
   function drawFlights(f) {

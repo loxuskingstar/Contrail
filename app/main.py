@@ -15,7 +15,7 @@ import asyncio
 
 from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs, set_profile, _profile
 from .db import init_db
-from .routers import field, flights, io, misc, share, spots, stats
+from .routers import field, fleets, flights, io, misc, share, spots, stats
 from .services import gamification, sandbox, scheduler
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
@@ -65,7 +65,7 @@ async def guard(request: Request, call_next):
     return response
 
 
-for r in (auth.router, misc.router, spots.router, flights.router, stats.router, field.router, share.router, io.router):
+for r in (auth.router, misc.router, spots.router, flights.router, stats.router, fleets.router, field.router, share.router, io.router):
     app.include_router(r)
 
 

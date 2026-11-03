@@ -43,6 +43,7 @@ export async function render(root, params) {
       </div>
       <div class="actions">
         <button class="btn-icon glassy" data-fav title="${esc(t('spot.favorite'))}" style="${s.favorite ? 'color:#f59e0b' : ''}">${icon('star')}</button>
+        <a class="btn-icon glassy" href="#/spots/${s.id_spotting}/share" title="${esc(t('share_img.title'))}">${icon('image')}</a>
         <a class="btn-icon glassy" href="#/spots/${s.id_spotting}/edit" title="${esc(t('common.edit'))}">${icon('pencil')}</a>
         <button class="btn-icon glassy" data-menu>${icon('ellipsis')}</button>
       </div>
@@ -123,7 +124,8 @@ export async function render(root, params) {
   });
   root.querySelector('[data-menu]').onclick = (e) => menu(e.currentTarget, [
     { icon: 'history', label: t('nav.airframe'), onClick: () => navigate(`#/airframe/${encodeURIComponent(s.registration)}`) },
-    { icon: 'share-2', label: t('share.this_spot'), onClick: async () => (await import('./shares.js')).createShareFlow({ kind: 'spot', target: String(s.id_spotting) }) },
+    { icon: 'image', label: t('share_img.title'), onClick: () => navigate(`#/spots/${s.id_spotting}/share`) },
+    { icon: 'link', label: t('share.this_spot'), onClick: async () => (await import('./shares.js')).createShareFlow({ kind: 'spot', target: String(s.id_spotting) }) },
     store.mod('watchlist') && { icon: 'eye', label: t('watch.add'), onClick: async () => { try { await api('/api/watchlist', { method: 'POST', body: { registration: s.registration } }); toast(esc(t('watch.added')), { type: 'success' }); } catch (err) { errorToast(err); } } },
     { icon: 'copy', label: t('spot.duplicate'), onClick: () => navigate(`#/spots/new?airport=${encodeURIComponent(s.airport || '')}`) },
     s.image && { icon: 'download', label: t('spot.download_photo'), onClick: () => { const a = document.createElement('a'); a.href = mediaUrl('images', s.image); a.download = `${s.registration}.webp`; a.click(); } },

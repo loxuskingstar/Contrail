@@ -94,6 +94,8 @@ def hexdb_route(callsign: str) -> str | None:
 def by_icao24(icao24: str) -> dict | None:
     """Utilisé par le radar : hex Mode-S -> données appareil."""
     icao24 = icao24.lower().strip()
+    from . import actypes, refdb
+    ref = refdb.by_hex([icao24]).get(icao24)
     row = q1("SELECT data FROM aircraft_cache WHERE json_extract(data,'$.icao24') = ?", (icao24,))
     if row:
         return json.loads(row["data"])
@@ -101,7 +103,11 @@ def by_icao24(icao24: str) -> dict | None:
         with client() as c:
             d = hexdb_aircraft(icao24, c)
     except httpx.HTTPError:
-        return None
+        d = None
+    if not d and ref:
+        return {"registration": ref.get("registration"), "aircraft_icao": ref.get("typecode"),
+                "aircraft": ref.get("description") or actypes.name(ref.get("typecode")), "owner": ref.get("ownop"),
+                "icao24": icao24, "country": regs.country_of(ref.get("registration"))}
     if d and d.get("registration"):
         d["country"] = regs.country_of(d["registration"])
         _store(regs.normalize(d["registration"]), d, "hexdb")
@@ -207,6 +213,19 @@ def lookup(reg_in: str, refresh: bool = False) -> dict:
             if v not in (None, "") and not result.get(k):
                 result[k] = v
         sources.append("cache")
+
+    # Base de référence locale (hors-ligne) : Mode-S, type, opérateur
+    from . import actypes, refdb
+    ref = refdb.by_reg(reg)
+    if ref:
+        local = {"icao24": ref.get("icao24"), "aircraft_icao": ref.get("typecode"),
+                 "aircraft": ref.get("description") or actypes.name(ref.get("typecode")), "owner": ref.get("ownop")}
+        if ref.get("military"):
+            local["military"] = 1
+        for k, v in local.items():
+            if v not in (None, "") and not result.get(k):
+                result[k] = v
+        sources.append("refdb")
 
     if not fresh:
         remote: dict = {}

@@ -101,11 +101,20 @@ def lookup_aircraft(reg: str, refresh: bool = False):
 
 @router.get("/api/lookup/hex/{icao24}")
 def lookup_hex(icao24: str, callsign: str = ""):
-    d = aircraft.by_icao24(icao24) or {}
+    from ..services import actypes
+    d = dict(aircraft.by_icao24(icao24) or {})
+    if d.get("aircraft_icao") and not d.get("type_name"):
+        d["type_name"] = actypes.name(d["aircraft_icao"])
+    d["cls"] = actypes.classify(d.get("aircraft_icao"), None, d.get("aircraft"))
     if callsign:
         d["route"] = aircraft.hexdb_route(callsign)
     if d.get("registration"):
-        d["spotted"] = q1("SELECT COUNT(*) n FROM spotting WHERE registration = ?", (regs.normalize(d["registration"]),))["n"]
+        r = regs.normalize(d["registration"])
+        d["spotted"] = q1("SELECT COUNT(*) n FROM spotting WHERE registration = ?", (r,))["n"]
+        own = q1("SELECT id_spotting, image, thumb FROM spotting WHERE registration = ? AND image IS NOT NULL "
+                 "ORDER BY favorite DESC, date DESC LIMIT 1", (r,))
+        if own:
+            d["own_photo"] = own
     return d
 
 
@@ -180,6 +189,47 @@ def nearest_airport(lat: float, lng: float, max_km: float = 15) -> dict | None:
 @router.get("/api/airports/nearest/{lat}/{lng}")
 def airport_nearest(lat: float, lng: float):
     return nearest_airport(lat, lng, 40) or {}
+
+
+# --------------------------------------------------------------------------- #
+# Base de référence des appareils (hors-ligne)
+# --------------------------------------------------------------------------- #
+@router.get("/api/refdb")
+def refdb_status():
+    from ..services import refdb
+    return refdb.status()
+
+
+@router.post("/api/refdb/download")
+def refdb_download():
+    from ..services import refdb
+    if not refdb.start_download():
+        raise HTTPException(409, "refdb_busy")
+    return refdb.status()
+
+
+@router.post("/api/refdb/upload")
+def refdb_upload(file: UploadFile = File(...)):
+    import shutil
+    import uuid
+
+    from ..core import DATA_DIR
+    from ..services import refdb
+    tmp = DATA_DIR / "tmp" / f"refdb-{uuid.uuid4().hex}"
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    with open(tmp, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    if not refdb.start_import(tmp, file.filename or "fichier"):
+        tmp.unlink(missing_ok=True)
+        raise HTTPException(409, "refdb_busy")
+    return refdb.status()
+
+
+@router.delete("/api/refdb")
+def refdb_delete():
+    from ..services import refdb
+    refdb.delete()
+    return refdb.status()
 
 
 # --------------------------------------------------------------------------- #

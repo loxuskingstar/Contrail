@@ -131,10 +131,8 @@ async function mountMap(node) {
   const { createMap } = await import('../lib/map.js');
   const res = await api('/api/spots/map');
   const mp = createMap(node.querySelector('[data-map]'), { scrollZoom: false }).then((m) => {
-    for (const c of res.clusters) {
-      m.marker([c.lat, c.lng], { label: c.count > 99 ? '99+' : c.count,
-        popup: `<b>${esc(c.label || c.airport || '')}</b><br><a href="#/spots?airport=${esc(c.airport || '')}">${esc(t('dash.n_spots', { n: c.count }))}</a>` });
-    }
+    m.clusters('spots', res.clusters.map((c) => ({ lat: c.lat, lng: c.lng, count: c.count, label: c.count > 99 ? '99+' : c.count,
+      popup: `<b>${esc(c.label || c.airport || '')}</b><br><a href="#/spots?airport=${esc(c.airport || '')}">${esc(t('dash.n_spots', { n: c.count }))}</a>` })));
     m.fit(res.clusters.map((c) => [c.lat, c.lng]), { maxZoom: 8 });
     return m;
   }).catch(() => null);
