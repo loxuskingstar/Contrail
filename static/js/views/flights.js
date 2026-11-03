@@ -51,7 +51,7 @@ export async function render(root, _p, query) {
         airports[f.dep_icao] = f.dep_info; airports[f.arr_icao] = f.arr_info;
         pts.push(a, b);
       }
-      m.lines('routes', lines, { width: 2.2, opacity: 0.8, onClick: (p, at) => m.popup([at.lat, at.lng], `<b>${esc(p.label)}</b><br>${fmtDate(p.date, { time: false })} · ${fmtNum(p.km)} km<br><a href="#/flights/${p.id}/edit">${esc(t('common.open'))} →</a>`) });
+      m.lines('routes', lines, { width: 2.2, opacity: 0.8, onClick: (p, at) => m.popup([at.lat, at.lng], `<b>${esc(p.label)}</b><br>${fmtDate(p.date, { time: false })} · ${fmtNum(p.km)} km<br><a href="#/flights/${p.id}">${esc(t('common.open'))} →</a>`) });
       for (const [code, info] of Object.entries(airports)) m.marker([info.lat, info.lng], { kind: 'dot', size: 10, title: `${code} · ${info.city || info.name}`, popup: `<b class="mono">${esc(code)}</b> · ${esc(info.name)}` });
       m.fit(pts, { maxZoom: 6 });
     });
@@ -65,7 +65,7 @@ export async function render(root, _p, query) {
     for (const f of res.items) (byYear[f.date.slice(0, 4)] ||= []).push(f);
     list.innerHTML = Object.entries(byYear).sort((a, b) => b[0].localeCompare(a[0])).map(([y, fl]) => `
       <div class="section"><h2>${y}</h2><span class="muted small">${esc(t('flight.sub', { n: fl.length }))} · ${fmtNum(Math.round(fl.reduce((s, f) => s + (f.distance_km || 0), 0)))} km</span></div>
-      <div class="list card" style="padding:6px">${fl.map((f) => `<a class="list-row" href="#/flights/${f.id_flight}/edit">
+      <div class="list card" style="padding:6px">${fl.map((f) => `<a class="list-row" href="#/flights/${f.id_flight}">
         <div style="width:58px;text-align:center"><div style="font-size:20px;font-weight:760" class="num">${f.date.slice(8, 10)}</div><div class="tiny muted">${esc(fmtMonth(f.date.slice(0, 7)))}</div></div>
         <div class="grow"><div class="ttl"><span class="mono">${esc(f.dep_icao)}</span>${icon('plane', '', 15)}<span class="mono">${esc(f.arr_icao)}</span>
           ${f.spotted_count ? `<span class="badge violet" title="${esc(t('flight.spotted_hint'))}">${icon('camera', '', 11)} ${f.spotted_count}</span>` : ''}</div>

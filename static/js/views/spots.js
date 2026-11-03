@@ -184,22 +184,93 @@ export async function render(root, _p, query) {
   }
 
   async function drawMap() {
-    results.innerHTML = '<div class="map tall" data-map></div>';
-    const { createMap } = await import('../lib/map.js');
-    const [m, res] = await Promise.all([createMap(results.querySelector('[data-map]')), api('/api/spots/map', { query: filters })]);
+    results.innerHTML = `<div class="spotmap"><div class="map" data-map></div><aside class="sm-panel" data-panel><div class="skeleton" style="height:100%"></div></aside></div>`;
+    const [{ createMap }, shapes] = await Promise.all([import('../lib/map.js'), import('../lib/shapes.js')]);
+    const [m, res] = await Promise.all([createMap(results.querySelector('[data-map]')), api('/api/spots/map', { query: filters }), shapes.loadTypes()]);
     map = m;
     root.querySelector('[data-count]').textContent = t('spots.count', { n: res.total, nf: fmtNum(res.total) });
-    const pts = [], items = [];
-    for (const c of res.clusters) {
-      pts.push([c.lat, c.lng]);
-      const thumbs = c.spots.filter((s) => s.thumb).slice(0, 6).map((s) => `<a href="#/spots/${s.id_spotting}"><img src="${mediaUrl('thumbs', s.thumb)}" alt="${esc(s.registration)}"></a>`).join('');
-      const regs = c.spots.slice(0, 6).map((s) => `<a href="#/spots/${s.id_spotting}" class="mono">${esc(s.registration)}</a>`).join(', ');
-      items.push({ lat: c.lat, lng: c.lng, count: c.count, label: c.count > 99 ? '99+' : c.count, popup:
-        `<b>${esc(c.label || c.airport || t('spots.custom_location'))}</b> <span class="muted">· ${c.count}</span><div class="small" style="margin-top:4px">${regs}</div>
-         ${thumbs ? `<div class="pop-thumbs">${thumbs}</div>` : ''}${c.airport ? `<div style="margin-top:8px"><a href="#/spots?airport=${esc(c.airport)}">${esc(t('common.see_all'))} →</a></div>` : ''}` });
+    const panel = results.querySelector('[data-panel]');
+    const places = res.places;
+    const byId = new Map(places.map((p) => [p.id, p]));
+    const els = new Map();
+    let selected = null;
+    if (!places.length) { panel.innerHTML = `<div class="sm-empty">${emptyState('map', t('map.empty'), '')}</div>`; return; }
+
+    const placeName = (p) => p.name || (p.kind === 'gps' ? t('map.gps_point') : p.airport) || '—';
+    const placeSub = (p) => [p.kind === 'airport' ? [p.airport, p.iata].filter(Boolean).join(' / ') : (p.airport_name || p.airport),
+      p.city, p.country ? `${flag(p.country)} ${countryName(p.country)}` : ''].filter(Boolean).join(' · ');
+    const kindIcon = { airport: 'plane', location: 'binoculars', gps: 'map-pin' };
+    const period = (p) => {
+      if (!p.first) return '';
+      const a = fmtDate(p.first, { time: false }), b = fmtDate(p.last, { time: false });
+      return a === b ? a : `${a} → ${b}`;
+    };
+    const accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2563eb';
+    const silhouette = (a) => shapes.aircraftDataUrl(shapes.classify(a.aircraft_icao, a.aircraft), accentColor, 40);
+    const spotsHref = (p) => p.location_id ? `#/spots?location_id=${p.location_id}` : (p.airport ? `#/spots?airport=${encodeURIComponent(p.airport)}` : '#/spots');
+
+    const pinHtml = (p) => `<button type="button" class="mplace ${p.kind}" data-place="${esc(p.id)}" title="${esc(placeName(p))}">
+      ${p.thumbs[0] ? `<img src="${mediaUrl('thumbs', p.thumbs[0])}" alt="">` : `<span class="mp-ic">${icon(kindIcon[p.kind], '', 14)}</span>`}
+      <b>${p.count > 999 ? '999+' : p.count}</b></button>`;
+
+    function listView() {
+      selected = null;
+      els.forEach((el) => el.classList.remove('sel'));
+      const b = map.map.getBounds();
+      const inView = places.filter((p) => b.contains([p.lng, p.lat]));
+      const n = inView.reduce((s, p) => s + p.count, 0);
+      panel.innerHTML = `<div class="sm-head"><div><b>${esc(t('map.in_view', { n: inView.length }))}</b><div class="tiny muted">${esc(t('map.spots_n', { n }))}</div></div>
+          ${inView.length < places.length ? `<button class="btn sm" data-fitall>${icon('maximize', '', 16)} ${esc(t('map.fit_all'))}</button>` : ''}</div>
+        <div class="sm-list">${inView.length ? inView.map((p) => `<button class="sm-place" data-pick="${esc(p.id)}">
+          <span class="sm-thumb">${p.thumbs[0] ? `<img loading="lazy" src="${mediaUrl('thumbs', p.thumbs[0])}" alt="">` : icon(kindIcon[p.kind], '', 20)}</span>
+          <span class="grow"><b>${esc(placeName(p))}</b><small>${esc(placeSub(p))}</small>
+            <small class="muted">${esc(t('map.aircraft_n', { n: p.regs }))} · ${esc(t('map.types_n', { n: p.types_count }))}</small></span>
+          <span class="sm-count">${fmtNum(p.count)}</span></button>`).join('') : `<p class="muted small" style="padding:16px">${esc(t('map.none_in_view'))}</p>`}</div>`;
+      panel.querySelector('[data-fitall]')?.addEventListener('click', () => map.fit(places.map((p) => [p.lat, p.lng]), { maxZoom: 10 }));
+      panel.querySelectorAll('[data-pick]').forEach((btn) => {
+        const p = byId.get(btn.dataset.pick);
+        btn.onclick = () => select(p, true);
+        btn.onmouseenter = () => els.get(p.id)?.classList.add('hot');
+        btn.onmouseleave = () => els.get(p.id)?.classList.remove('hot');
+      });
     }
-    map.clusters('spots', items);
-    map.fit(pts, { maxZoom: 10 });
+
+    function select(p, fly) {
+      selected = p;
+      els.forEach((el, id) => el.classList.toggle('sel', id === p.id));
+      if (fly) map.map.easeTo({ center: [p.lng, p.lat], zoom: Math.max(map.map.getZoom(), 11), duration: 500 });
+      const more = p.regs - p.aircraft.length;
+      panel.innerHTML = `<div class="sm-head"><button class="btn sm ghost" data-back>${icon('chevron-left', '', 16)} ${esc(t('map.all_places'))}</button></div>
+        <div class="sm-detail">
+          <div class="row" style="gap:10px;align-items:flex-start"><span class="sm-kind">${icon(kindIcon[p.kind], '', 18)}</span>
+            <div class="grow"><h3>${esc(placeName(p))}</h3><div class="small muted">${esc(placeSub(p))}</div></div></div>
+          <div class="sm-stats">
+            <div><b>${fmtNum(p.count)}</b><span>${esc(t('map.k_spots'))}</span></div>
+            <div><b>${fmtNum(p.regs)}</b><span>${esc(t('map.k_aircraft'))}</span></div>
+            <div><b>${fmtNum(p.types_count)}</b><span>${esc(t('map.k_types'))}</span></div>
+          </div>
+          ${p.first ? `<div class="tiny muted">${icon('calendar', '', 13)} ${esc(period(p))}</div>` : ''}
+          ${p.types.length ? `<div class="chips" style="margin-top:10px">${p.types.map((ty) => `<a class="chip" href="#/spots?type=${encodeURIComponent(ty.k)}">${esc(ty.k)} <span class="muted">${ty.n}</span></a>`).join('')}</div>` : ''}
+          <a class="btn sm primary" style="margin-top:12px;width:100%" href="${spotsHref(p)}">${esc(t('map.see_spots', { n: p.count }))} →</a>
+        </div>
+        <div class="sm-list">${p.aircraft.map((a) => `<a class="sm-ac" href="#/spots/${a.id_spotting}">
+            <span class="sm-thumb ${a.thumb ? '' : 'sil'}">${a.thumb ? `<img loading="lazy" src="${mediaUrl('thumbs', a.thumb)}" alt="">` : `<img src="${silhouette(a)}" alt="">`}</span>
+            <span class="grow"><span class="row" style="gap:6px"><b class="mono">${esc(a.registration)}</b>${a.n > 1 ? `<span class="badge">×${a.n}</span>` : ''}${a.special ? `<span class="badge accent">${icon('palette', '', 11)}</span>` : ''}${a.favorite ? icon('star', 'fav', 13) : ''}</span>
+              <small>${esc([a.aircraft || a.aircraft_icao, a.owner].filter(Boolean).join(' · '))}</small></span>
+            <small class="muted nowrap">${a.date ? esc(fmtDate(a.date, { time: false })) : ''}</small></a>`).join('')}
+          ${more > 0 ? `<a class="sm-more" href="${spotsHref(p)}">${esc(t('map.more_aircraft', { n: more }))} →</a>` : ''}</div>`;
+      panel.querySelector('[data-back]').onclick = listView;
+      panel.scrollTop = 0;
+    }
+
+    map.clusters('spots', places.map((p) => ({ lat: p.lat, lng: p.lng, count: p.count, html: pinHtml(p), _id: p.id, onClick: () => select(p, false) })), {
+      decorate: (pt, el) => { els.set(pt._id, el); if (selected?.id === pt._id) el.classList.add('sel'); },
+    });
+    map.fit(places.map((p) => [p.lat, p.lng]), { maxZoom: 10 });
+    const refresh = debounce(() => { if (!selected) listView(); }, 150);
+    map.map.on('moveend', refresh);
+    map.map.once('idle', listView);
+    setTimeout(() => { if (!selected && panel.querySelector('.skeleton')) listView(); }, 800);
   }
 
   function reload(keepScroll = false) {

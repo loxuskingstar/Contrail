@@ -2,13 +2,15 @@
 import { api } from '../api.js';
 import { t, fmtNum, fmtDate } from '../i18n.js';
 import { icon } from '../lib/icons.js';
-import { esc, emptyState, debounce, promptDialog } from '../ui.js';
+import { esc, emptyState, debounce, promptDialog, toast, errorToast } from '../ui.js';
 
 export async function render(root) {
-  const rows = await api('/api/fleets');
+  let rows = await api('/api/fleets');
+  const ref = await api('/api/refdb').catch(() => ({}));
   root.innerHTML = `
     <header class="page-head"><div><h1>${esc(t('nav.fleets'))}</h1><div class="sub">${esc(t('fleet.sub', { n: rows.length }))}</div></div>
-      <div class="actions"><a class="btn" href="#/liveries">${icon('palette', '', 18)} ${esc(t('nav.liveries'))}</a>
+      <div class="actions">${ref.available ? `<button class="btn" data-build title="${esc(t('fleet.build_all_d'))}">${icon('database', '', 18)} <span class="hide-sm">${esc(t('fleet.build_all'))}</span></button>` : ''}
+      <a class="btn" href="#/liveries">${icon('palette', '', 18)} ${esc(t('nav.liveries'))}</a>
       <button class="btn-icon glassy" data-add title="${esc(t('fleet.add'))}">${icon('plus')}</button></div></header>
     <div class="search" style="margin-bottom:14px">${icon('search', '', 18)}<input class="input" type="search" placeholder="${esc(t('fleet.search'))}"></div>
     <div data-list></div>`;
@@ -25,6 +27,17 @@ export async function render(root) {
           ${r.last ? `<div class="tiny muted">${esc(t('fleet.last', { date: fmtDate(r.last, { time: false }) }))}</div>` : ''}</div></a>`;
     }).join('')}</div>` : `<div class="card">${emptyState('building-2', t('fleet.empty'), t('fleet.empty_text'))}</div>`;
   };
+  root.querySelector('[data-build]')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    b.disabled = true;
+    try {
+      const r = await api('/api/fleets/build-local', { method: 'POST', body: {} });
+      toast(esc(t('fleet.build_all_done', { n: r.with_fleet, a: fmtNum(r.added) })), { type: 'success', duration: 7000 });
+      rows = await api('/api/fleets');
+      draw(root.querySelector('input').value);
+    } catch (err) { errorToast(err); }
+    b.disabled = false;
+  });
   root.querySelector('input').addEventListener('input', debounce((e) => draw(e.target.value), 150));
   root.querySelector('[data-add]').onclick = async () => {
     const code = await promptDialog(t('fleet.add_code'), { placeholder: 'AFR' });

@@ -62,6 +62,7 @@ export async function render(root, _p, query) {
         <div class="card"><div class="card-title">${esc(t('stats.top_countries'))}</div>${hbars(s.top_countries, { label: (r) => `${flag(r.k)} ${esc(countryName(r.k))}`, href: (r) => `#/spots?country=${r.k}` })}</div>
         <div class="card"><div class="card-title">${esc(t('stats.manufacturers'))}</div>${hbars(s.manufacturers, { label: (r) => esc(r.k) })}</div>
       </div>
+      ${s.calendar ? calendar(s.calendar, s.streak, s.best_day) : ''}
       <div class="card" style="margin-top:14px"><div class="card-title">${esc(t('stats.by_month'))}</div>${vbars(months, { label: (r) => fmtMonth(r.k) })}</div>
       <div class="grid two" style="margin-top:14px">
         <div class="card"><div class="card-title">${esc(t('stats.by_hour'))}</div>${vbars(Array.from({ length: 24 }, (_, h) => ({ k: `${h} h`, n: hourMap[h] || 0 })), { every: 3 })}</div>
@@ -119,4 +120,48 @@ export async function render(root, _p, query) {
   root.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { tab = b.dataset.tab; body.innerHTML = '<div class="skeleton" style="height:400px"></div>'; load(); }));
   yearSel.onchange = () => { year = yearSel.value; load(); };
   await load();
+}
+
+
+// ------------------------------------------------------------------ calendrier d'activité
+function calendar(cal, streak, best) {
+  const from = new Date(`${cal.from}T00:00`), to = new Date(`${cal.to}T00:00`);
+  // La grille commence un lundi
+  const start = new Date(from);
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  const vals = Object.values(cal.days).filter((n) => n > 0).sort((a, b) => a - b);
+  const q = (p) => vals[Math.min(vals.length - 1, Math.floor(p * vals.length))] || 1;
+  const cuts = [q(0.25), q(0.5), q(0.75)];
+  const level = (n) => (!n ? 0 : n <= cuts[0] ? 1 : n <= cuts[1] ? 2 : n <= cuts[2] ? 3 : 4);
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const weeks = [];
+  const months = [];
+  for (let d = new Date(start), w = 0; d <= to; w++) {
+    const col = [];
+    for (let i = 0; i < 7; i++, d.setDate(d.getDate() + 1)) {
+      const k = iso(d);
+      const inRange = d >= from && d <= to;
+      if (d.getDate() === 1 && inRange) months.push({ w, label: fmtMonth(k.slice(0, 7)) });
+      col.push(inRange ? { k, n: cal.days[k] || 0 } : null);
+    }
+    weeks.push(col);
+  }
+  if (!months.length || months[0].w > 1) months.unshift({ w: 0, label: fmtMonth(cal.from.slice(0, 7)) });
+  const wd = Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(locale(), { weekday: 'narrow' }).format(new Date(2024, 0, 1 + i)));
+  const st = streak || {};
+  return `<div class="card" style="margin-top:14px">
+    <div class="card-title">${esc(t('stats.calendar'))}</div>
+    <div class="cal-kpis">
+      <div><b>${fmtNum(st.active_days || 0)}</b><span>${esc(t('stats.active_days'))}</span></div>
+      <div><b>${fmtNum(st.longest || 0)}</b><span>${esc(t('stats.longest_streak'))}</span>${st.longest > 1 ? `<small>${esc(fmtDate(st.longest_from, { time: false, short: true }))} → ${esc(fmtDate(st.longest_to, { time: false, short: true }))}</small>` : ''}</div>
+      ${st.current != null ? `<div><b>${fmtNum(st.current || 0)}</b><span>${esc(t('stats.current_streak'))}</span></div>` : ''}
+      ${best ? `<div><b>${fmtNum(best.n)}</b><span>${esc(t('stats.best_day_l'))}</span><small>${esc(fmtDate(best.k, { time: false, short: true }))}</small></div>` : ''}
+    </div>
+    <div class="cal-scroll"><div class="cal" style="--weeks:${weeks.length}">
+      <div class="cal-months">${months.map((m) => `<span style="grid-column:${m.w + 2}">${esc(m.label)}</span>`).join('')}</div>
+      <div class="cal-wd">${wd.map((x, i) => `<span>${i % 2 === 0 ? esc(x) : ''}</span>`).join('')}</div>
+      <div class="cal-grid">${weeks.map((col) => col.map((c) => (c ? `<a class="l${level(c.n)}" href="#/spots?search=${c.k}" title="${esc(`${fmtDate(c.k, { time: false, weekday: true })} · ${t('dash.n_spots', { n: c.n })}`)}"></a>` : '<i></i>')).join('')).join('')}</div>
+    </div></div>
+    <div class="cal-legend tiny muted"><span>${esc(t('stats.less'))}</span>${[0, 1, 2, 3, 4].map((l) => `<i class="l${l}"></i>`).join('')}<span>${esc(t('stats.more'))}</span></div>
+  </div>`;
 }

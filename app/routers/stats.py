@@ -65,6 +65,16 @@ def stats(year: str = ""):
     best_day = q1(f"SELECT substr(date,1,10) k, COUNT(*) n FROM spotting WHERE {w} AND date IS NOT NULL "
                   f"GROUP BY k ORDER BY n DESC LIMIT 1", p)
     first = q1(f"SELECT id_spotting, registration, date FROM spotting WHERE {w} AND date IS NOT NULL ORDER BY date LIMIT 1", p)
+    # Calendrier d'activité : l'année choisie, ou les 53 dernières semaines
+    from datetime import date as _date, timedelta as _td
+    if year:
+        cal_from, cal_to = f"{year}-01-01", f"{year}-12-31"
+    else:
+        end = _date.today()
+        cal_from, cal_to = (end - _td(days=7 * 53 - 1)).isoformat(), end.isoformat()
+    cal = q("SELECT substr(date,1,10) k, COUNT(*) n FROM spotting WHERE date IS NOT NULL AND substr(date,1,10) BETWEEN ? AND ? "
+            "GROUP BY k", (cal_from, cal_to))
+    days_all = q(f"SELECT DISTINCT substr(date,1,10) d FROM spotting WHERE {w} AND date IS NOT NULL", p)
     return {
         "year": year, "totals": totals, "top_registrations": top_regs, "top_airports": top_airports,
         "top_types": top("COALESCE(aircraft_icao, aircraft)", ", MAX(aircraft) label"),
@@ -76,6 +86,8 @@ def stats(year: str = ""):
         "manufacturers": manufacturers, "flight_types": flight_types,
         "by_month": by_month, "by_year": by_year, "by_hour": by_hour, "by_weekday": by_weekday,
         "best_day": best_day, "first": first,
+        "calendar": {"from": cal_from, "to": cal_to, "days": {r["k"]: r["n"] for r in cal}},
+        "streak": streaks(days_all, _date.today() if not year or year == str(_date.today().year) else None),
         "years": [r["k"] for r in by_year][::-1],
     }
 
@@ -132,6 +144,11 @@ def dashboard():
                 "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, COUNT(DISTINCT COALESCE(airline_icao, owner)) airlines, "
                 "COUNT(DISTINCT NULLIF(airport,'')) airports, COUNT(DISTINCT country) countries FROM spotting")
     month = q1("SELECT COUNT(*) n FROM spotting WHERE substr(date,1,7) = ?", (today.strftime("%Y-%m"),))["n"]
+    year_totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
+                     "COUNT(DISTINCT registration) regs, COUNT(DISTINCT substr(date,1,10)) days FROM spotting WHERE substr(date,1,4) = ?",
+                     (str(today.year),))
+    last_year = q1("SELECT COUNT(*) spots FROM spotting WHERE substr(date,1,4) = ? AND substr(date,6,5) <= ?",
+                   (str(today.year - 1), today.strftime("%m-%d")))["spots"]
     year = q1("SELECT COUNT(*) n FROM spotting WHERE substr(date,1,4) = ?", (str(today.year),))["n"]
     recent = q(f"SELECT {LIST_COLS} FROM spotting s ORDER BY COALESCE(s.date, s.created_at) DESC, s.id_spotting DESC LIMIT 12")
     decorate(recent)
@@ -147,12 +164,19 @@ def dashboard():
     watch = q("SELECT registration, airborne, last_status, last_seen_at FROM watchlist ORDER BY airborne DESC, registration LIMIT 6")
     for wr in watch:
         wr["last_status"] = json.loads(wr["last_status"] or "null")
-    ach = q("SELECT code, icon, unlocked_at FROM achievements WHERE unlocked_at IS NOT NULL ORDER BY unlocked_at DESC LIMIT 4")
-    ach_total = q1("SELECT COUNT(*) total, SUM(unlocked_at IS NOT NULL) unlocked FROM achievements")
+    from ..services import gamification
+    unl = q("SELECT code, icon, unlocked_at FROM achievements WHERE unlocked_at IS NOT NULL ORDER BY unlocked_at DESC, target DESC")
+    unl = [r for r in unl if r["code"] in gamification.BY_CODE]
+    pts = sum(gamification.BY_CODE[r["code"]]["points"] for r in unl)
+    ach = [{**r, "tier": gamification.BY_CODE[r["code"]]["tier"], "series": gamification.BY_CODE[r["code"]]["series"],
+            "level": gamification.BY_CODE[r["code"]]["level"]} for r in unl[:5]]
+    ach_total = {"total": len(gamification.DEFINITIONS), "unlocked": len(unl), "points": pts, "rank": gamification.rank(pts)}
     drafts_hint = q1("SELECT COUNT(*) n FROM spotting WHERE weather_status = 'pending'")["n"]
     return {"totals": totals, "month": month, "year": year, "recent": recent, "on_this_day": on_this_day,
             "hero": hero, "top_types": top_types, "months": months, "flights": flights, "watchlist": watch,
-            "achievements": ach, "achievements_total": ach_total, "pending_weather": drafts_hint}
+            "achievements": ach, "achievements_total": ach_total, "pending_weather": drafts_hint,
+            "year_totals": year_totals, "last_year_same_day": last_year, "today": today.isoformat(),
+            "streak": streaks(q("SELECT DISTINCT substr(date,1,10) d FROM spotting WHERE date IS NOT NULL"), today)}
 
 
 # --------------------------------------------------------------------------- #
@@ -213,3 +237,26 @@ def liveries():
     order = ["retro", "alliance", "commemorative", "logojet", "cause", "special"]
     return [{"category": c, "items": groups[c], "count": len(groups[c]),
              "unique": len({i["registration"] for i in groups[c]})} for c in order if c in groups]
+
+
+def streaks(rows: list[dict], today=None) -> dict:
+    """Plus longue série de jours consécutifs avec au moins un spot, et série en cours."""
+    from datetime import date as _date, timedelta as _td
+    days = sorted({_date.fromisoformat(r["d"]) for r in rows if r.get("d") and len(r["d"]) == 10 and r["d"][4] == "-"})
+    best = cur = 0
+    best_end = None
+    prev = None
+    for d in days:
+        cur = cur + 1 if prev and d - prev == _td(days=1) else 1
+        if cur > best:
+            best, best_end = cur, d
+        prev = d
+    current = 0
+    if today and days:
+        s = set(days)
+        d = today if today in s else today - _td(days=1)
+        while d in s:
+            current += 1
+            d -= _td(days=1)
+    return {"longest": best, "longest_from": (best_end - _td(days=best - 1)).isoformat() if best_end else None,
+            "longest_to": best_end.isoformat() if best_end else None, "current": current, "active_days": len(days)}

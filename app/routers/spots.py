@@ -43,8 +43,8 @@ def build_filters(f: dict) -> tuple[str, list]:
     if f.get("search"):
         like = f"%{f['search'].strip()}%"
         where.append("(s.registration LIKE ? OR s.aircraft LIKE ? OR s.aircraft_icao LIKE ? OR s.owner LIKE ? "
-                     "OR s.airport LIKE ? OR s.livery LIKE ? OR s.description LIKE ? OR s.msn LIKE ?)")
-        params += [like] * 8
+                     "OR s.airport LIKE ? OR s.livery LIKE ? OR s.description LIKE ? OR s.msn LIKE ? OR s.date LIKE ?)")
+        params += [like] * 9
     for key, col in (("registration", "s.registration"), ("airport", "s.airport"), ("country", "s.country"),
                      ("flight_type", "s.flight_type"), ("camera", "s.camera"), ("lens", "s.lens"),
                      ("livery_category", "s.livery_category")):
@@ -140,28 +140,73 @@ def list_spots(
 
 
 @router.get("/map")
-def spots_map(search: str = "", tag: int | None = None, airport: str = "", type: str = "", airline: str = "",
-              year: str = "", special: bool = False, military: int | None = None, favorite: bool = False):
+def spots_map(
+    search: str = "", tag: int | None = None, airport: str = "", type: str = "", airline: str = "",
+    registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
+    special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
+    has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
+    location_id: int | None = None, date_from: str = "", date_to: str = "",
+):
+    """Spots regroupés par lieu (point de vue, coordonnées GPS ou aéroport), puis par appareil."""
     f = dict(locals())
     where, params = build_filters(f)
-    rows = q(f"SELECT s.id_spotting, s.registration, s.aircraft_icao, s.aircraft, s.thumb, s.airport, s.lat, s.lng, "
-             f"s.date FROM spotting s WHERE {where} ORDER BY s.date DESC", params)
-    clusters: dict[tuple, dict] = {}
+    rows = q(f"SELECT s.id_spotting, s.registration, s.aircraft_icao, s.aircraft, s.owner, s.thumb, s.airport, "
+             f"s.lat, s.lng, s.location_id, s.date, s.livery_category, s.military, s.favorite, "
+             f"l.name AS loc_name, l.lat AS loc_lat, l.lng AS loc_lng "
+             f"FROM spotting s LEFT JOIN spot_locations l ON l.id_location = s.location_id "
+             f"WHERE {where} ORDER BY s.date DESC", params)
+    places: dict[tuple, dict] = {}
     for r in rows:
-        lat, lng, label = r["lat"], r["lng"], None
-        if lat is None or lng is None:
-            a = geo.airport(r["airport"])
-            if not a:
-                continue
-            lat, lng, label = a["lat"], a["lng"], a["name"]
-        key = (round(lat, 3), round(lng, 3))
-        c = clusters.setdefault(key, {"lat": lat, "lng": lng, "airport": r["airport"], "label": label,
-                                      "count": 0, "spots": []})
-        c["count"] += 1
-        if len(c["spots"]) < 12:
-            c["spots"].append({k: r[k] for k in ("id_spotting", "registration", "aircraft_icao", "aircraft",
-                                                 "thumb", "date")})
-    return {"clusters": list(clusters.values()), "total": len(rows)}
+        ap = geo.airport(r["airport"]) if r["airport"] else None
+        if r["location_id"] and r["loc_lat"] is not None:
+            lat, lng, kind, name = r["loc_lat"], r["loc_lng"], "location", r["loc_name"]
+            key = ("L", r["location_id"])
+        elif r["lat"] is not None and r["lng"] is not None:
+            lat, lng, kind, name = r["lat"], r["lng"], "gps", None
+            key = ("G", round(r["lat"], 3), round(r["lng"], 3))
+        elif ap:
+            lat, lng, kind, name = ap["lat"], ap["lng"], "airport", ap["name"]
+            key = ("A", ap["icao"])
+        else:
+            continue
+        p = places.setdefault(key, {
+            "id": "-".join(str(k) for k in key), "kind": kind, "lat": lat, "lng": lng, "name": name,
+            "airport": r["airport"], "airport_name": ap["name"] if ap else None,
+            "city": ap["city"] if ap else None, "country": ap["country"] if ap else None,
+            "iata": ap["iata"] if ap else None, "location_id": r["location_id"],
+            "count": 0, "first": None, "last": None, "_regs": {}, "_types": {}, "special": 0, "military": 0,
+        })
+        p["count"] += 1
+        if r["date"]:
+            p["last"] = max(p["last"] or r["date"], r["date"])
+            p["first"] = min(p["first"] or r["date"], r["date"])
+        p["special"] += 1 if r["livery_category"] else 0
+        p["military"] += 1 if r["military"] else 0
+        tkey = r["aircraft_icao"] or r["aircraft"]
+        if tkey:
+            p["_types"][tkey] = p["_types"].get(tkey, 0) + 1
+        a = p["_regs"].get(r["registration"])
+        if a is None:
+            # Les lignes arrivent du plus récent au plus ancien : la première rencontre est la dernière en date
+            a = p["_regs"][r["registration"]] = {
+                "registration": r["registration"], "id_spotting": r["id_spotting"], "aircraft": r["aircraft"],
+                "aircraft_icao": r["aircraft_icao"], "owner": r["owner"], "date": r["date"], "thumb": r["thumb"],
+                "n": 0, "special": bool(r["livery_category"]), "favorite": False}
+        a["n"] += 1
+        a["thumb"] = a["thumb"] or r["thumb"]
+        a["favorite"] = a["favorite"] or bool(r["favorite"])
+    out = []
+    for p in places.values():
+        regs_ = sorted(p.pop("_regs").values(), key=lambda a: (a["date"] or ""), reverse=True)
+        types = sorted(p.pop("_types").items(), key=lambda kv: -kv[1])
+        p["regs"] = len(regs_)
+        p["types"] = [{"k": k, "n": n} for k, n in types[:6]]
+        p["types_count"] = len(types)
+        p["aircraft"] = regs_[:60]
+        p["thumbs"] = [a["thumb"] for a in regs_ if a["thumb"]][:4]
+        out.append(p)
+    out.sort(key=lambda p: -p["count"])
+    return {"places": out, "total": len(rows)}
 
 
 @router.get("/facets")

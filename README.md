@@ -31,31 +31,34 @@
 - **Pays d'immatriculation** déduit du préfixe (≈ 200 préfixes, y compris les cas particuliers B-H… Hong Kong, B-1xxxx Taïwan, VP-B Bermudes…), avec drapeau.
 - **Étiquettes** multiples et colorées, créées à la volée depuis le formulaire.
 - **Audio** joint à l'observation : fichier (mp3, m4a, ogg, wav, webm) **ou enregistrement direct au micro** depuis le terrain.
-- **Trois vues** : liste détaillée, galerie, carte. Sur toutes les cartes de spots, les marqueurs sont **regroupés en clusters** quand on dézoome (le chiffre indique le nombre de spots ; un clic zoome sur le groupe).
+- **Trois vues** : liste détaillée, galerie, carte. La carte regroupe les spots par lieu (point de vue, coordonnées GPS ou aéroport), avec une pastille par lieu (vignette + nombre de spots) et des **clusters** au dézoom ; un **panneau latéral** liste les lieux visibles et se met à jour en déplaçant la carte, puis détaille le lieu choisi (période, types, appareils avec vignette ou silhouette, nombre de rencontres).
 - **Badges dynamiques** : premier modèle, nouvelle compagnie, nouvel aéroport, revu ×N, avion le plus spotté, livrée spéciale, déjà volé dedans, militaire, nuit, heure dorée (calculée d'après la hauteur du soleil au moment du spot).
 - Filtres combinables, tri, recherche plein texte, **sélection multiple** (appui long) et actions groupées, **gestes** : glisser une ligne pour la mettre en favori ou la supprimer, balayer une fiche pour passer au spot suivant.
 
 ### Mes vols
 - Carnet de vols (date, aéroports, horaires, numéro de vol, compagnie, immatriculation, siège, classe, motif).
+- **Fiche détaillée d'un vol** : billet (codes, villes, heures locales et UTC), carte du grand cercle, vitesse moyenne, cabine, appareil (silhouette, spots de cet appareil, photo Planespotters à défaut), mise en perspective (n-ième vol, passages sur la route, premier vol avec la compagnie ou sur le type…), vols précédent et suivant, **vol retour** ou duplication en un clic, **export en carte d'embarquement** (paysage, 4:5, story, couleurs et signature).
 - Distance orthodromique et **durée calculées automatiquement** (fuseaux horaires des aéroports pris en compte).
 - **Carte des trajets en grand cercle** (gestion de l'antiméridien), tours de la Terre, pourcentage de la distance Terre-Lune.
 - **Références croisées** : notification et badge si vous spottez un avion dans lequel vous avez volé, et inversement.
 
 ### Collection & flottes
 - Liste des compagnies observées et **taux de complétion de flotte** (anneau de progression, détail par type, appareils vus / manquants).
-- Flotte récupérée via **AirLabs** (toutes les pages sont parcourues : une clé gratuite est limitée à 50 appareils par requête), **complétée depuis la base de référence locale** ou **importée à la main** (copier-coller depuis un tableur). Regroupement par famille d'appareils (A320 family, 737, 777…), aviation légère écartée par défaut, **exclusion** des appareils retirés ou mal rattachés (les exclusions survivent aux mises à jour).
+- **Flottes complètes sans AirLabs** : construites hors-ligne depuis la base de référence locale, qui fusionne tar1090-db (très à jour) et la base d'appareils d'OpenSky Network (code OACI de l'opérateur). Le code OACI est propagé aux appareils connus seulement par le nom de l'opérateur, et les variantes de nom (« AIR FRANCE S.A. ») sont rapprochées. Une compagnie ou **toutes les compagnies observées** d'un coup, en complément ou en remplacement. AirLabs reste disponible (toutes les pages sont parcourues), ainsi que l'import manuel (copier-coller depuis un tableur). Regroupement par famille d'appareils (A320 family, 737, 777…), aviation légère écartée par défaut, **exclusion** des appareils retirés ou mal rattachés (les exclusions survivent aux mises à jour).
 - **Traqueur de livrées spéciales** : catégorisation automatique (rétro, alliance, commémorative, logojet, engagée…) à partir du champ « Livrée », dans plusieurs langues.
 
 ### Tableau de bord & statistiques
 - **Accueil modulable** : 11 widgets activables et réordonnables (glisser-déposer) — photo à la une, raccourcis, derniers spots, « Ce jour-là », activité sur 12 mois, types favoris, succès, watchlist, vols, carte, lumière du jour.
+- **Calendrier d'activité** (jour par jour, sur l'année ou les 53 dernières semaines) avec jours actifs, plus longue série et série en cours.
 - **Statistiques** par année ou depuis le début, graphiques homogènes (barres fines, grille discrète, valeur au survol) : totaux, top 10 des appareils, aéroports, types, compagnies, pays, constructeurs, étiquettes, répartition par mois / heure / jour de la semaine / année, meilleure journée.
 - **Statistiques matériel (EXIF)** : combo boîtier + objectif le plus productif, boîtiers, objectifs, focales.
 - **Timeline par cellule** : chronologie et carte de toutes les rencontres avec une immatriculation (spots et vols), changements d'opérateur ou de livrée.
 
 ### Gamification & partage
-- **34 succès** répartis en quatre catégories, avec progression.
+- **226 succès** répartis en 51 séries à paliers (bronze, argent, or, platine, diamant), du premier spot aux 5 000 spots, de la première nuit au spot par 25 kt de vent, du premier vol à l'aller-retour Terre-Lune. Chaque palier rapporte des points qui déterminent un **rang** (de Novice à Légende) ; la page met en avant les succès presque débloqués. Les déblocages des versions précédentes sont conservés.
+- **Objectifs de l'année** (spots, types, appareils différents) : progression, repère du rythme attendu, projection de fin d'année, nombre à faire par semaine, comparaison avec l'an dernier à la même date, série de jours en cours.
 - **Générateur de story** : image récapitulative au format story, post 4:5, carré ou paysage, **huit styles** (verre sombre / clair, dégradé, minimal, carte d'embarquement, tableau des départs, magazine, plan technique), **palettes** prédéfinies ou **couleurs libres** (accent, secondaire, fond, texte), police des titres, signature, cadrage de la photo ; téléchargement PNG ou partage natif.
-- **Partage d'un spot en image** (et non en lien) : éditeur avec six modèles (cadre, plein cadre, polaroid, carte de collection, carte d'embarquement, fiche d'observation), formats story / 4:5 / carré / paysage, informations affichées au choix (compagnie, aéroport, date, réglages photo, météo, badges), palettes et couleurs, cadrage ; téléchargement, partage natif ou copie dans le presse-papiers. Un spot sans photo utilise la silhouette de son type d'appareil.
+- **Partage d'un spot en image** (et non en lien) : éditeur avec six modèles (cadre, plein cadre, polaroid, carte de collection, carte d'embarquement, fiche d'observation), format **Auto** (le canevas prend les proportions de la photo, affichée en entier) ou story / 4:5 / carré / paysage, option **photo entière** sur fond flouté pour tous les modèles, informations affichées au choix (compagnie, aéroport, date, réglages photo, météo, badges), palettes et couleurs, cadrage ; téléchargement, partage natif ou copie dans le presse-papiers. Un spot sans photo utilise la silhouette de son type d'appareil.
 - **Liens publics sécurisés** (jeton aléatoire, expiration facultative, révocables, compteur de vues) pour une galerie filtrée, un spot, une cellule, un vol ou l'ensemble de vos vols. Les notes personnelles et les coordonnées GPS précises ne sont jamais publiées.
 
 ### Enrichissement automatique
@@ -131,7 +134,8 @@ Toutes les intégrations sont **facultatives** et **gratuites**. Les clés se sa
 | aviationweather.gov | — | non | METAR / TAF des ~15 derniers jours |
 | Iowa Environmental Mesonet | — | non | Archive METAR au-delà |
 | Planespotters.net | — | non | Photo d'un appareil dans le radar et l'historique d'une cellule, chargée **directement par votre navigateur** (jamais par le serveur), avec le nom du photographe et un lien vers la photo, comme l'exigent ses conditions |
-| tar1090-db (Mictronics) | — | non | Base de référence des appareils, téléchargée à la demande depuis GitHub |
+| tar1090-db (Mictronics) | — | non | Base de référence des appareils (~ 10 Mo), téléchargée à la demande depuis GitHub |
+| OpenSky Network (base d'appareils) | — | non | Code OACI de l'opérateur de chaque appareil (~ 100 Mo), pour construire les flottes complètes ; fusionnée avec tar1090-db |
 | OpenFreeMap | — | non | Fonds de carte vectoriels (MapLibre GL), gratuits et sans limite d'usage annoncée ; choix du style dans Réglages › Apparence |
 | ntfy | `NTFY_URL` | non | Notifications push sur téléphone (ex. `https://ntfy.sh/un-sujet-secret`) |
 | Webhook | `WEBHOOK_URL` | — | POST JSON `{kind, title, body, link}` vers votre domotique, Gotify, etc. |
@@ -227,7 +231,7 @@ Quelques points du cahier des charges ont été interprétés, ou sont bornés p
 - **OCR** : efficace sur une immatriculation bien visible et contrastée (fuselage, dérive) ; la lecture est proposée, jamais imposée.
 - **Fond de carte** : cartes vectorielles **MapLibre GL JS** (embarqué localement) avec les styles gratuits et sans clé d'**OpenFreeMap** (Positron, Liberty, Bright, Dark, Fiord), basés sur les données OpenStreetMap. Le mode automatique suit le thème clair/sombre ; OpenStreetMap raster ou n'importe quelle URL de style MapLibre (serveur de tuiles auto-hébergé, par exemple) sont sélectionnables dans Réglages › Apparence. Les tuiles ne sont pas mises en cache par Contrail : sans réseau, les cartes s'affichent sur un fond uni, avec vos marqueurs et trajets.
 - **Silhouettes du radar** : le type exact n'est connu que si l'appareil figure dans la base de référence ou dans le cache ; sinon la silhouette est déduite de la catégorie ADS-B transmise (souvent absente), et l'appareil apparaît sous une forme générique.
-- **Base de référence** : téléchargée depuis le dépôt GitHub `wiedehopf/tar1090-db` (branche `csv`). Si ce fichier change de format ou d'adresse, importez à la main un CSV tar1090/readsb (séparateur « ; ») ou la base OpenSky (`aircraftDatabase.csv`).
+- **Base de référence** : tar1090-db depuis le dépôt GitHub `wiedehopf/tar1090-db` (branche `csv`) ; base OpenSky : dernière `aircraft-database-complete-AAAA-MM.csv` du compartiment `s3.opensky-network.org/data-samples/metadata/` (repli : `aircraftDatabase.csv`). Si une adresse ou un format change, importez le fichier à la main. Les flottes qui en sont tirées reflètent les déclarations des registres : appareils stockés, en location ou récemment cédés peuvent y figurer ; l'exclusion d'un appareil survit aux mises à jour.
 - **Photos Planespotters** : affichées uniquement en ligne, jamais copiées dans vos données ni utilisées dans les images de partage (droits du photographe).
 - **Mono-utilisateur** : une instance correspond à un carnet.
 

@@ -84,10 +84,10 @@ def fleet_detail(key: str):
     in_ref = 0
     if refdb.available():
         known = {f["registration"] for f in fleet} | {x["registration"] for x in excluded}
-        in_ref = sum(1 for r in refdb.by_operator(name, meta.get("icao")) if r.get("registration") and r["registration"] not in known)
+        in_ref = sum(1 for r in _local_matches(key, meta, name) if r["registration"] not in known)
     return {"key": key, "name": name, "meta": meta, "fleet": fleet, "spotted": spotted, "excluded": excluded,
             "by_type": sorted(by_type.values(), key=lambda b: (-b["total"], b["type"])),
-            "airlabs": bool(get_config("airlabs_api_key")), "refdb_candidates": in_ref}
+            "airlabs": bool(get_config("airlabs_api_key")), "refdb_candidates": in_ref, "refdb": refdb.available()}
 
 
 class FetchOptions(BaseModel):
@@ -176,29 +176,88 @@ def fleet_fetch(key: str, opts: FetchOptions | None = None):
     return {**fleet_detail(key), "fetch": {"received": len(fleet), "kept": kept, "skipped_light": skipped}}
 
 
+def _names_for(key: str, meta: dict, name: str | None) -> list[str]:
+    """Noms sous lesquels la compagnie peut figurer dans la base (nom retenu, propriétaires saisis dans les spots)."""
+    names = {n for n in (meta.get("name"), name) if n}
+    names |= {r["owner"] for r in q("SELECT DISTINCT owner FROM spotting WHERE COALESCE(airline_icao, owner) = ? AND owner IS NOT NULL", (key,))}
+    if not re.fullmatch(r"[A-Z]{3}", key):
+        names.add(key)
+    return sorted(names)
+
+
+def _local_matches(key: str, meta: dict, name: str | None, include_light: bool = False) -> list[dict]:
+    icao = meta.get("icao") or (key if re.fullmatch(r"[A-Z]{3}", key) else None)
+    out = []
+    for r in refdb.by_operator(_names_for(key, meta, name), icao):
+        if not r.get("registration"):
+            continue
+        if not include_light and actypes.classify(r.get("typecode"), None, r.get("description")) in actypes.LIGHT_CLASSES:
+            continue
+        out.append(r)
+    return out
+
+
+class LocalOptions(BaseModel):
+    include_light: bool = False
+    replace: bool = False   # remplace la flotte entière (sinon complète l'existante)
+
+
+def _build_local(key: str, opts: LocalOptions) -> tuple[int, int]:
+    d = fleet_detail(key)
+    conn = db()
+    if opts.replace:
+        conn.execute("DELETE FROM fleets WHERE airline_key = ?", (key,))
+        known = {x["registration"] for x in d["excluded"]}
+    else:
+        known = {f["registration"] for f in d["fleet"]} | {x["registration"] for x in d["excluded"]}
+    matches = _local_matches(key, d["meta"], d["name"], opts.include_light)
+    added = 0
+    for r in matches:
+        reg = r["registration"]
+        if reg in known:
+            continue
+        known.add(reg)
+        conn.execute("INSERT OR IGNORE INTO fleets(airline_key, registration, aircraft, aircraft_icao, icao24, built, source) "
+                     "VALUES(?,?,?,?,?,?,?)",
+                     (key, reg, r.get("description") or actypes.name(r.get("typecode")), r.get("typecode"), r.get("icao24"),
+                      r.get("year"), "refdb"))
+        added += 1
+    if added or opts.replace:
+        src = "refdb" if opts.replace or not d["fleet"] else (d["meta"].get("fleet_source") or "refdb")
+        conn.execute("INSERT INTO airlines(key, icao, name, fleet_source, fleet_fetched_at) VALUES(?,?,?,?,?) "
+                     "ON CONFLICT(key) DO UPDATE SET icao=COALESCE(airlines.icao, excluded.icao), "
+                     "name=COALESCE(airlines.name, excluded.name), fleet_source=excluded.fleet_source, "
+                     "fleet_fetched_at=excluded.fleet_fetched_at",
+                     (key, key if re.fullmatch(r"[A-Z]{3}", key) else None, d["name"], src, now_iso()))
+    conn.commit()
+    return added, len(matches)
+
+
 @router.post("/api/fleets/{key}/complete-local")
-def fleet_complete_local(key: str):
-    """Ajoute les appareils de la base de référence locale dont l'opérateur correspond à la compagnie."""
+def fleet_complete_local(key: str, opts: LocalOptions | None = None):
+    """Flotte depuis la base de référence locale : complète la flotte existante ou la remplace."""
     if not refdb.available():
         raise HTTPException(400, "refdb_missing")
-    d = fleet_detail(key)
-    known = {f["registration"] for f in d["fleet"]} | {x["registration"] for x in d["excluded"]}
-    added = 0
-    conn = db()
-    for r in refdb.by_operator(d["name"], d["meta"].get("icao")):
-        reg = r.get("registration")
-        if not reg or reg in known:
+    added, matched = _build_local(key, opts or LocalOptions())
+    return {**fleet_detail(key), "added": added, "matched": matched}
+
+
+@router.post("/api/fleets/build-local")
+def fleets_build_all_local(opts: LocalOptions | None = None):
+    """Complète, depuis la base locale, la flotte de toutes les compagnies observées."""
+    if not refdb.available():
+        raise HTTPException(400, "refdb_missing")
+    opts = opts or LocalOptions()
+    keys = [g["key"] for g in _airline_groups()] + [r["key"] for r in q("SELECT key FROM airlines")]
+    done, added_total, with_fleet = set(), 0, 0
+    for k in keys:
+        if k in done:
             continue
-        if actypes.classify(r.get("typecode"), None, r.get("description")) in actypes.LIGHT_CLASSES:
-            continue
-        conn.execute("INSERT OR IGNORE INTO fleets(airline_key, registration, aircraft, aircraft_icao, icao24, source) VALUES(?,?,?,?,?,?)",
-                     (key, reg, r.get("description") or actypes.name(r.get("typecode")), r.get("typecode"), r.get("icao24"), "refdb"))
-        added += 1
-    conn.execute("INSERT INTO airlines(key, name, fleet_source, fleet_fetched_at) VALUES(?,?,?,?) "
-                 "ON CONFLICT(key) DO UPDATE SET fleet_source=COALESCE(airlines.fleet_source, excluded.fleet_source), "
-                 "fleet_fetched_at=excluded.fleet_fetched_at", (key, d["name"], "refdb", now_iso()))
-    conn.commit()
-    return {**fleet_detail(key), "added": added}
+        done.add(k)
+        added, matched = _build_local(k, LocalOptions(include_light=opts.include_light, replace=False))
+        added_total += added
+        with_fleet += 1 if matched else 0
+    return {"airlines": len(done), "with_fleet": with_fleet, "added": added_total}
 
 
 class FleetImport(BaseModel):

@@ -44,6 +44,35 @@ export function drawCover(c, img, x, y, w, h, focusY = 0.5, focusX = 0.5) {
   c.restore();
 }
 
+/**
+ * Image entière dans un rectangle (aucun recadrage) : l'espace restant est rempli par la même
+ * photo très floutée et assombrie. Le flou est obtenu par réduction puis agrandissement, ce qui
+ * fonctionne aussi dans les navigateurs sans `ctx.filter` (Safari).
+ */
+export function drawContain(c, img, x, y, w, h, { dim = 0.28 } = {}) {
+  const r = Math.min(w / img.width, h / img.height);
+  const dw = img.width * r, dh = img.height * r;
+  c.save();
+  c.beginPath(); c.rect(x, y, w, h); c.clip();
+  if (Math.abs(dw - w) > 1 || Math.abs(dh - h) > 1) {
+    const small = document.createElement('canvas');
+    const sw = 28, sh = Math.max(1, Math.round((28 * img.height) / img.width));
+    small.width = sw; small.height = sh;
+    const g = small.getContext('2d');
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, sw, sh);
+    const rc = Math.max(w / sw, h / sh) * 1.15;
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = 'high';
+    c.drawImage(small, x + (w - sw * rc) / 2, y + (h - sh * rc) / 2, sw * rc, sh * rc);
+    c.fillStyle = `rgba(0,0,0,${dim})`;
+    c.fillRect(x, y, w, h);
+    c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = Math.min(w, h) * 0.03;
+  }
+  c.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  c.restore();
+}
+
 export function rrect(c, x, y, w, h, r) {
   c.beginPath();
   c.roundRect(x, y, w, h, r);

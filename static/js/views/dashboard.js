@@ -3,9 +3,10 @@ import { api, mediaUrl } from '../api.js';
 import { store } from '../app.js';
 import { t, fmtNum, fmtDate, fmtMonth, fmtRelative } from '../i18n.js';
 import { icon } from '../lib/icons.js';
+import { achName } from '../lib/ach.js';
 import { esc, sheet, spotTile, hbars, vbars, emptyState, toast } from '../ui.js';
 
-export const WIDGETS = ['hero', 'quick', 'recent', 'on_this_day', 'month_chart', 'top_types', 'achievements', 'watchlist', 'flights', 'map', 'sun'];
+export const WIDGETS = ['hero', 'quick', 'goals', 'recent', 'on_this_day', 'month_chart', 'top_types', 'achievements', 'watchlist', 'flights', 'map', 'sun'];
 
 function greeting() {
   const h = new Date().getHours();
@@ -30,6 +31,7 @@ export async function render(root) {
     box.append(node);
     if (w === 'map') cleanups.push(await mountMap(node));
     if (w === 'sun') mountSun(node);
+    if (w === 'goals') node.querySelector('[data-goals]')?.addEventListener('click', (e) => { e.preventDefault(); goalSheet(); });
   }
   if (!d.totals.spots) {
     box.insertAdjacentHTML('afterbegin', `<div class="card">${emptyState('camera', t('dash.empty_title'), t('dash.empty_text'),
@@ -79,6 +81,7 @@ function renderWidget(w, d) {
       if (!d.on_this_day.length) return '';
       return `<div class="section"><h2>${icon('history', '', 20)} ${esc(t('dash.on_this_day'))}</h2></div>
         <div class="hscroll">${d.on_this_day.map((s) => spotTile(s)).join('')}</div>`;
+    case 'goals': return goalsWidget(d);
     case 'month_chart': {
       if (!d.months.length) return '';
       const map = Object.fromEntries(d.months.map((m) => [m.k, m.n]));
@@ -97,12 +100,14 @@ function renderWidget(w, d) {
     case 'achievements': {
       if (!store.mod('gamification')) return '';
       const tot = d.achievements_total || {};
-      const pct = tot.total ? Math.round(((tot.unlocked || 0) / tot.total) * 100) : 0;
+      const R = tot.rank || {};
+      const pct = R.next_min ? Math.round((((tot.points || 0) - R.min) / (R.next_min - R.min)) * 100) : 100;
       return `<a class="card" href="#/achievements" style="display:flex;gap:16px;align-items:center">
-        <div class="ring" style="--p:${pct}"><b>${tot.unlocked || 0}</b></div>
-        <div class="grow"><div class="card-title" style="margin-bottom:6px">${esc(t('nav.achievements'))}</div>
+        <div class="ring" style="--p:${pct}"><b>${R.level || 1}</b></div>
+        <div class="grow" style="min-width:0"><div class="card-title" style="margin-bottom:4px">${esc(t('nav.achievements'))}</div>
+        <div style="font-weight:700">${esc(t(`ach.rank.${R.key || 'novice'}`))} <span class="muted small">· ${fmtNum(tot.points || 0)} ${esc(t('ach.points'))}</span></div>
         <div class="muted small">${esc(t('dash.ach_progress', { n: tot.unlocked || 0, total: tot.total || 0 }))}</div>
-        <div class="row" style="margin-top:8px;font-size:22px">${d.achievements.map((a) => `<span title="${esc(t(`ach.${a.code}.name`))}">${a.icon}</span>`).join('')}</div></div>
+        <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap">${d.achievements.map((a) => `<span class="ach-medal t-${a.tier}" style="width:34px;height:34px;font-size:17px;border-radius:10px" title="${esc(achName(a.code, a.level))}"><span>${a.icon}</span></span>`).join('')}</div></div>
         ${icon('chevron-right')}</a>`;
     }
     case 'watchlist':
@@ -131,9 +136,10 @@ async function mountMap(node) {
   const { createMap } = await import('../lib/map.js');
   const res = await api('/api/spots/map');
   const mp = createMap(node.querySelector('[data-map]'), { scrollZoom: false }).then((m) => {
-    m.clusters('spots', res.clusters.map((c) => ({ lat: c.lat, lng: c.lng, count: c.count, label: c.count > 99 ? '99+' : c.count,
-      popup: `<b>${esc(c.label || c.airport || '')}</b><br><a href="#/spots?airport=${esc(c.airport || '')}">${esc(t('dash.n_spots', { n: c.count }))}</a>` })));
-    m.fit(res.clusters.map((c) => [c.lat, c.lng]), { maxZoom: 8 });
+    m.clusters('spots', res.places.map((c) => ({ lat: c.lat, lng: c.lng, count: c.count, label: c.count > 99 ? '99+' : c.count,
+      onClick: () => (location.hash = c.location_id ? `#/spots?location_id=${c.location_id}` : `#/spots?airport=${encodeURIComponent(c.airport || '')}`),
+      title: `${c.name || c.airport || ''} · ${t('dash.n_spots', { n: c.count })}` })));
+    m.fit(res.places.map((c) => [c.lat, c.lng]), { maxZoom: 8 });
     return m;
   }).catch(() => null);
   return () => mp.then((m) => m?.remove());
@@ -185,4 +191,57 @@ function customize(current) {
     };
   };
   draw();
+}
+
+
+// ------------------------------------------------------------------ objectifs de l'année
+function goalsWidget(d) {
+  const S = store.settings;
+  const Y = d.year_totals || {};
+  const goals = [['spots', S.goal_spots], ['types', S.goal_types], ['regs', S.goal_regs]].filter(([, g]) => g > 0);
+  const today = new Date(d.today || Date.now());
+  const start = new Date(today.getFullYear(), 0, 1), end = new Date(today.getFullYear() + 1, 0, 1);
+  const elapsed = Math.max(1, (today - start) / 86400000 + 1), total = (end - start) / 86400000;
+  const st = d.streak || {};
+  const streak = st.current ? `<span class="badge accent">${icon('flame', '', 12)} ${esc(t('goal.streak', { n: st.current }))}</span>` : '';
+  if (!goals.length) {
+    return `<div class="card goal-empty"><span class="sm-kind">${icon('target', '', 18)}</span><div class="grow"><b>${esc(t('goal.title', { y: today.getFullYear() }))}</b>
+      <div class="small muted">${esc(t('goal.empty'))}</div></div><button class="btn sm" data-goals>${esc(t('goal.set'))}</button></div>`;
+  }
+  const rows = goals.map(([k, g]) => {
+    const v = Y[k] || 0;
+    const pct = Math.min(100, Math.round((v / g) * 100));
+    const expected = (g * elapsed) / total;              // où l'on devrait être aujourd'hui
+    const projected = Math.round((v / elapsed) * total);  // projection au rythme actuel
+    const left = Math.max(0, g - v), weeksLeft = Math.max(1, (total - elapsed) / 7);
+    const ahead = v >= expected;
+    const status = v >= g ? t('goal.reached') : ahead ? t('goal.ahead', { n: fmtNum(Math.round(v - expected)) }) : t('goal.behind', { n: fmtNum(Math.round(expected - v)) });
+    return `<div class="goal-row">
+      <div class="row between" style="gap:8px"><b>${esc(t(`goal.k_${k}`))}</b><span class="num"><b>${fmtNum(v)}</b><span class="muted"> / ${fmtNum(g)}</span></span></div>
+      <div class="goal-bar ${v >= g ? 'done' : ahead ? 'ahead' : 'behind'}"><i style="width:${pct}%"></i><s style="left:${Math.min(100, (expected / g) * 100)}%" title="${esc(t('goal.pace_mark'))}"></s></div>
+      <div class="row between tiny muted wrap" style="gap:6px"><span class="goal-st">${esc(status)}</span>
+        <span>${v >= g ? '' : esc(t('goal.per_week', { n: fmtNum(Math.ceil(left / weeksLeft)) }))} · ${esc(t('goal.projection', { n: fmtNum(projected) }))}</span></div></div>`;
+  }).join('');
+  const vsLast = d.last_year_same_day ? Math.round((((Y.spots || 0) - d.last_year_same_day) / d.last_year_same_day) * 100) : null;
+  return `<div class="card"><div class="card-title">${esc(t('goal.title', { y: today.getFullYear() }))}<a href="#" data-goals>${esc(t('common.edit'))}</a></div>
+    <div class="row wrap" style="gap:6px;margin:-4px 0 10px">${streak}
+      ${vsLast != null ? `<span class="badge ${vsLast >= 0 ? 'green' : ''}">${esc(t('goal.vs_last', { n: `${vsLast >= 0 ? '+' : ''}${vsLast}` }))}</span>` : ''}
+      <span class="badge">${esc(t('goal.days', { n: Y.days || 0 }))}</span></div>
+    <div class="stack" style="gap:14px">${rows}</div></div>`;
+}
+
+function goalSheet() {
+  const S = store.settings;
+  const s = sheet({ title: esc(t('goal.title', { y: new Date().getFullYear() })), body: `
+    <p class="small muted" style="margin-bottom:12px">${esc(t('goal.hint'))}</p>
+    <div class="stack">${['spots', 'types', 'regs'].map((k) => `<label class="field"><span>${esc(t(`goal.k_${k}`))}</span>
+      <input type="number" min="0" step="1" inputmode="numeric" data-g="${k}" value="${S[`goal_${k}`] || ''}" placeholder="0"></label>`).join('')}</div>
+    <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn primary" data-save>${esc(t('common.save'))}</button></div>` });
+  s.body.querySelector('[data-save]').onclick = async () => {
+    const patch = {};
+    s.body.querySelectorAll('[data-g]').forEach((i) => (patch[`goal_${i.dataset.g}`] = Math.max(0, Math.round(Number(i.value) || 0))));
+    await store.saveSettings(patch);
+    s.close();
+    location.reload();
+  };
 }

@@ -68,6 +68,16 @@ function layout(W, H) {
   return { u, pad: 80 * u, land: W > H };
 }
 
+/** Nombre de lignes qu'occuperait un texte (même règle que wrap). */
+function lineCount(c, text, maxW, maxLines = 4) {
+  let n = 1, line = '';
+  for (const w of String(text || '').split(/\s+/)) {
+    const test = line ? `${line} ${w}` : w;
+    if (c.measureText(test).width > maxW && line) { n++; line = w; } else line = test;
+  }
+  return Math.min(n, maxLines);
+}
+
 function brand(c, x, y, size, color, family = FONTS.sans) {
   c.save();
   c.fillStyle = color;
@@ -144,16 +154,30 @@ function drawGlass(light) {
     c.fillStyle = P.ink;
     c.font = `800 ${84 * L.u}px ${F}`;
     const titleY = L.land ? L.pad + 140 * L.u : H * 0.2;
-    wrap(c, titleOf(o), L.pad, titleY, (L.land ? W * 0.6 : W) - L.pad * 2, 92 * L.u, 3);
-    const items = statItems(d, o).slice(0, L.land ? 6 : 8);
-    const cols = L.land ? 3 : 2, gap = 22 * L.u, tileH = 196 * L.u;
-    const rows = Math.ceil(items.length / cols);
-    const topH = o.showTop ? 70 * L.u * Math.min(4, tops(d).length) + 40 * L.u : 0;
+    const titleEnd = wrap(c, titleOf(o), L.pad, titleY, (L.land ? W * 0.6 : W) - L.pad * 2, 92 * L.u, 3);
+    // Tuiles dimensionnées sur la place réellement disponible (titre sur 1 à 3 lignes, footer, bloc « favoris »)
+    let items = statItems(d, o).slice(0, L.land ? 6 : 8);
+    const cols = L.land ? 3 : 2, gap = 22 * L.u;
+    let showTop = o.showTop && tops(d).length > 0;
+    const topBlock = () => (showTop ? 70 * L.u * Math.min(4, tops(d).length) + 40 * L.u : 0);
+    const gridTop = L.land ? titleEnd + 10 * L.u : titleEnd + 30 * L.u;
+    const bottom = H - L.pad * 1.6;
+    let tileH = 196 * L.u, rows = 1, topH = 0;
+    for (let guard = 0; guard < 12; guard++) {
+      rows = Math.max(1, Math.ceil(items.length / cols));
+      topH = L.land ? 0 : topBlock();
+      const avail = bottom - gridTop - topH - (topH ? gap : 0) - gap * (rows - 1);
+      tileH = Math.min(196 * L.u, avail / rows);
+      if (tileH >= 132 * L.u || items.length <= cols) break;
+      if (showTop && !L.land) showTop = false; else items = items.slice(0, items.length - cols);
+    }
+    tileH = Math.max(tileH, 110 * L.u);
+    if (L.land) topH = topBlock();
+    const gy = L.land ? gridTop + 40 * L.u : bottom - topH - (topH ? gap : 0) - rows * (tileH + gap) + gap;
     const gridW = L.land ? W * 0.62 - L.pad : W - L.pad * 2;
-    const gy = L.land ? titleY + 80 * L.u : Math.max(titleY + 120 * L.u, H - L.pad * 1.6 - topH - (topH ? gap : 0) - rows * (tileH + gap) + gap);
     const end = statGrid(c, items, L.pad, gy, gridW, L, { cols, tileH, gap, family: FONTS.sans, valueColor: P.ink, labelColor: sub,
       card: (x, y, w, h) => glassRect(c, x, y, w, h, 32 * L.u, light) });
-    if (o.showTop) {
+    if (showTop) {
       const list = tops(d).slice(0, 4);
       const x = L.land ? W * 0.62 + gap : L.pad, y = L.land ? gy : end + gap, w = L.land ? W - x - L.pad : W - L.pad * 2;
       if (list.length) {
@@ -185,19 +209,22 @@ async function drawGradient(c, W, H, d, o, P, F) {
   c.font = `600 ${40 * L.u}px ${F}`;
   const ty = L.land ? L.pad + 120 * L.u : H * 0.16;
   wrap(c, titleOf(o), L.pad, ty, W - L.pad * 2, 50 * L.u, 2);
+  let heroEnd = ty + 60 * L.u;
   if (hero) {
-    const hs = fitSize(c, hero.v, W * (L.land ? 0.5 : 0.85), 360 * L.u, 900, F);
+    const hs = fitSize(c, hero.v, W * (L.land ? 0.5 : 0.85), Math.min(360 * L.u, H * 0.26), 900, F);
     c.font = `900 ${hs}px ${F}`;
     c.fillText(hero.v, L.pad - 8 * L.u, ty + 70 * L.u + hs * 0.82);
     c.font = `700 ${44 * L.u}px ${F}`;
     c.fillText(hero.label, L.pad, ty + 70 * L.u + hs * 0.82 + 64 * L.u);
+    heroEnd = ty + 70 * L.u + hs * 0.82 + 64 * L.u;
   }
   // liste des autres chiffres, séparés par des filets
   const x0 = L.land ? W * 0.56 : L.pad, w = L.land ? W - x0 - L.pad : W - L.pad * 2;
-  let y = L.land ? L.pad + 140 * L.u : H * 0.55;
+  let y = L.land ? L.pad + 140 * L.u : Math.max(H * 0.55, heroEnd + 44 * L.u);
   const rowH = (L.land ? 92 : 96) * L.u;
   const list = [...items.map((i) => [i.label, i.v]), ...(o.showTop ? tops(d).map(([l, v]) => [l, v]) : [])].slice(0, L.land ? 8 : 9);
   for (const [l, v] of list) {
+    if (y + rowH > H - L.pad * 1.3) break;
     c.strokeStyle = rgba(P.ink, 0.35); c.lineWidth = 2 * L.u;
     c.beginPath(); c.moveTo(x0, y); c.lineTo(x0 + w, y); c.stroke();
     c.fillStyle = rgba(P.ink, 0.85); c.font = `500 ${30 * L.u}px ${FONTS.sans}`; c.textAlign = 'left';
@@ -296,8 +323,10 @@ async function drawBoarding(c, W, H, d, o, P, F) {
   c.fillStyle = sub; c.font = `600 ${22 * L.u}px ${FONTS.sans}`;
   c.fillText(fit(c, titleOf(o), iw), x + 40 * L.u, cy + 10 * L.u);
   cy += 60 * L.u;
-  const items = statItems(d, o).slice(0, L.land ? 6 : 8);
   const cols = L.land ? 3 : 2, cw = iw / cols, ch = 120 * L.u;
+  const limitY = L.land ? y + h - 30 * L.u : stubY - 16 * L.u;
+  const rowsFit = Math.max(1, Math.floor((limitY - cy) / ch));
+  const items = statItems(d, o).slice(0, Math.min(L.land ? 6 : 8, rowsFit * cols));
   items.forEach((it, i) => {
     const fx = x + 40 * L.u + (i % cols) * cw, fy = cy + Math.floor(i / cols) * ch;
     c.fillStyle = sub; c.font = `600 ${21 * L.u}px ${FONTS.sans}`; c.fillText(fit(c, it.label.toUpperCase(), cw - 20 * L.u), fx, fy + 30 * L.u);
@@ -397,12 +426,17 @@ async function drawEditorial(c, W, H, d, o, P, F) {
   c.fillRect(L.pad, L.pad + ms * 0.78 + 66 * L.u, W - L.pad * 2, 3 * L.u);
   // gros titre en italique
   c.font = `italic 500 ${84 * L.u}px ${F}`;
-  const titleY = L.land ? H * 0.55 : H * 0.6;
-  wrap(c, titleOf(o), L.pad, titleY, (L.land ? W * 0.55 : W) - L.pad * 2, 92 * L.u, 3);
-  // « cover lines » : chiffres en marge droite
-  const items = statItems(d, o).slice(0, L.land ? 5 : 4);
-  const cx = L.land ? W * 0.66 : W - L.pad - 330 * L.u;
+  const titleW = (L.land ? W * 0.55 : W) - L.pad * 2;
+  const tLines = lineCount(c, titleOf(o), titleW, 3);
+  const starH = o.showTop && d.top_type ? 70 * L.u : 0;
+  // Le titre est ancré au-dessus de la ligne « en couverture » et du pied de page
+  const titleY = L.land ? H * 0.55 : H - L.pad * 1.3 - starH - 40 * L.u - (tLines - 1) * 92 * L.u;
+  wrap(c, titleOf(o), L.pad, titleY, titleW, 92 * L.u, 3);
+  // « cover lines » : chiffres en marge droite, autant qu'il en tient au-dessus du titre
   let y = L.land ? L.pad + ms + 120 * L.u : L.pad + ms + 150 * L.u;
+  const room = L.land ? H - L.pad * 1.6 - y : titleY - 84 * L.u - y;
+  const items = statItems(d, o).slice(0, Math.max(1, Math.min(L.land ? 5 : 4, Math.floor(room / (128 * L.u)) + 1)));
+  const cx = L.land ? W * 0.66 : W - L.pad - 330 * L.u;
   for (const it of items) {
     c.fillStyle = bg ? '#ffffff' : P.accent; c.font = `800 ${64 * L.u}px ${F}`;
     c.fillText(it.v, cx, y);

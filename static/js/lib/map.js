@@ -149,7 +149,7 @@ class ContrailMap {
    * Les clusters et les points isolés sont des marqueurs HTML (aucune dépendance aux polices du style) ;
    * un clic sur un cluster zoome jusqu'à son éclatement.
    */
-  clusters(id, points, { radius = 46, maxZoom = 13 } = {}) {
+  clusters(id, points, { radius = 46, maxZoom = 13, decorate } = {}) {
     const byId = new Map(points.map((p, i) => [i, p]));
     const data = {
       type: 'FeatureCollection',
@@ -195,7 +195,9 @@ class ContrailMap {
           m = new this.ml.Marker({ element: el, anchor: 'center' }).setLngLat([lng, lat]).addTo(this.map);
         } else {
           const pt = byId.get(p.i);
-          m = this.marker([lat, lng], { label: pt.label ?? '', popup: pt.popup, title: pt.title, onClick: pt.onClick, color: pt.color, group: `__${id}` }).marker;
+          const mk = this.marker([lat, lng], { kind: pt.html ? 'element' : 'pin', html: pt.html, label: pt.label ?? '', popup: pt.popup, title: pt.title, onClick: pt.onClick, color: pt.color, group: `__${id}` });
+          decorate?.(pt, mk.el);
+          m = mk.marker;
         }
         markers.set(key, m);
       }

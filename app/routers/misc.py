@@ -200,10 +200,17 @@ def refdb_status():
     return refdb.status()
 
 
+class RefdbDownload(BaseModel):
+    source: str = "tar1090"
+
+
 @router.post("/api/refdb/download")
-def refdb_download():
+def refdb_download(body: RefdbDownload | None = None):
     from ..services import refdb
-    if not refdb.start_download():
+    src = (body.source if body else "tar1090")
+    if src not in ("tar1090", "opensky"):
+        raise HTTPException(422, "bad_source")
+    if not refdb.start_download(refdb.DEFAULT_URL if src == "tar1090" else "opensky"):
         raise HTTPException(409, "refdb_busy")
     return refdb.status()
 
@@ -315,8 +322,9 @@ def clear_notifications():
 # --------------------------------------------------------------------------- #
 @router.get("/api/achievements")
 def achievements():
-    items = gamification.listing()
-    return {"items": items, "unlocked": sum(1 for i in items if i["unlocked_at"]), "total": len(items)}
+    # Rattrape les paliers atteints sans nouvel enregistrement (import, nouvelle série de succès…)
+    gamification.evaluate()
+    return gamification.listing()
 
 
 @router.post("/api/achievements/evaluate")

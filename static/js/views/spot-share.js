@@ -3,20 +3,28 @@ import { api, mediaUrl } from '../api.js';
 import { t, fmtDate, countryName } from '../i18n.js';
 import { icon } from '../lib/icons.js';
 import { esc, pageHead, toast } from '../ui.js';
-import { FONTS, loadFonts, loadImage, drawCover, rrect, rgba, fit, fitSize, wrap, barcode, dashed, grain, flagEmoji, canvasBlob } from '../lib/canvas.js';
+import { FONTS, loadFonts, loadImage, drawCover, drawContain, rrect, rgba, fit, fitSize, wrap, barcode, dashed, grain, flagEmoji, canvasBlob } from '../lib/canvas.js';
 import { drawAircraft, loadTypes, classify, typeName } from '../lib/shapes.js';
 import { PALETTES } from './story.js';
 
 const FORMATS = { portrait: [1080, 1350], square: [1080, 1080], story: [1080, 1920], landscape: [1920, 1080] };
 const INFOS = ['airline', 'airport', 'date', 'exif', 'weather', 'badges', 'brand'];
 
+// `auto(a, f)` : taille du canevas pour le format Auto, calculée pour que la zone photo ait exactement
+// les proportions de l'image (aucun recadrage). Les modèles sans `auto` (carte de collection, aux
+// proportions fixes) affichent la photo entière sur fond flouté.
 const TEMPLATES = {
-  frame: { palette: { accent: '#2563eb', accent2: '#64748b', bg: '#ffffff', ink: '#111418' }, draw: drawFrame },
-  full: { palette: { accent: '#ffffff', accent2: '#cbd5e1', bg: '#000000', ink: '#ffffff' }, draw: drawFull },
-  polaroid: { palette: { accent: '#1e3a8a', accent2: '#b45309', bg: '#d6cfc2', ink: '#1f2937' }, draw: drawPolaroid },
+  frame: { palette: { accent: '#2563eb', accent2: '#64748b', bg: '#ffffff', ink: '#111418' }, draw: drawFrame,
+    auto: (a, f) => [1080, Math.round(46 + 988 / a + frameCaption(f, 1))] },
+  full: { palette: { accent: '#ffffff', accent2: '#cbd5e1', bg: '#000000', ink: '#ffffff' }, draw: drawFull,
+    auto: (a) => (a >= 1 ? [1600, Math.round(1600 / Math.min(a, 3))] : [Math.round(1600 * Math.max(a, 0.5)), 1600]) },
+  polaroid: { palette: { accent: '#1e3a8a', accent2: '#b45309', bg: '#d6cfc2', ink: '#1f2937' }, draw: drawPolaroid,
+    auto: (a) => { const pw = 1080 * 0.78, b = pw * 0.055; return [1080, Math.round(110 + b + (pw - 2 * b) / a + pw * 0.3 + 470)]; } },
   card: { palette: 'contrail', draw: drawCard },
-  boarding: { palette: { accent: '#1d4ed8', accent2: '#e11d48', bg: '#dbe4f0', ink: '#0f172a' }, draw: drawBoarding },
-  sheet: { palette: { accent: '#c2410c', accent2: '#78716c', bg: '#f6f3ee', ink: '#1c1917' }, draw: drawSheet },
+  boarding: { palette: { accent: '#1d4ed8', accent2: '#e11d48', bg: '#dbe4f0', ink: '#0f172a' }, draw: drawBoarding,
+    auto: (a, f) => [1080, Math.round(140 + 96 + 940 / a + boardingInfoH(f, 1, 3))] },
+  sheet: { palette: { accent: '#c2410c', accent2: '#78716c', bg: '#f6f3ee', ink: '#1c1917' }, draw: drawSheet,
+    auto: (a, f) => [1080, Math.round(70 + 940 / a + sheetTextH(f, 1) + 28)] },
 };
 
 function palette(o) {
@@ -44,7 +52,7 @@ function facts(s, o) {
     date: o.info.date && s.date ? fmtDate(s.date) : '', dateShort: s.date ? fmtDate(s.date, { time: false, short: true }) : '',
     exif: o.info.exif ? ex : '', weather: o.info.weather ? wx : '', badges: o.info.badges ? badges : [],
     livery: s.livery && s.livery !== 'None' ? s.livery : '', special: !!special, msn: s.msn || '', encounters: s.encounters || 1,
-    cls: classify(s.aircraft_icao, s.aircraft), signature: o.signature || '',
+    cls: classify(s.aircraft_icao, s.aircraft), signature: o.signature || '', focal: s.focal || '',
   };
 }
 
@@ -52,7 +60,8 @@ function facts(s, o) {
 function photoOrPlaceholder(c, img, x, y, w, h, o, P, f, { radius = 0 } = {}) {
   c.save();
   if (radius) { rrect(c, x, y, w, h, radius); c.clip(); }
-  if (img) drawCover(c, img, x, y, w, h, o.focusY, o.focusX);
+  if (img && o.fit === 'contain') drawContain(c, img, x, y, w, h);
+  else if (img) drawCover(c, img, x, y, w, h, o.focusY, o.focusX);
   else {
     const g = c.createLinearGradient(x, y, x + w, y + h);
     g.addColorStop(0, P.accent); g.addColorStop(1, rgba(P.accent2, 1));
@@ -82,12 +91,20 @@ function badgeRow(c, list, x, y, maxW, u, bg, ink) {
 }
 
 // ------------------------------------------------------------------ modèles
+/** Hauteur de la légende du modèle « cadre » (format portrait), selon les informations affichées. */
+function frameCaption(f, u) {
+  const lines = [[f.airport, f.date].filter(Boolean).join(' · '), f.weather, f.exif].filter(Boolean).length;
+  return (96 + 70 + 42 + lines * 38 + (f.badges.length ? 54 : 0) + 64) * u;
+}
+
 async function drawFrame(c, W, H, img, f, o, P) {
-  const u = Math.min(W, H) / 1080, land = W > H;
+  const land = !o.auto && W > H;
+  const u = o.auto ? W / 1080 : Math.min(W, H) / 1080;
   c.fillStyle = P.bg; c.fillRect(0, 0, W, H);
   const m = 46 * u;
-  const capH = land ? 0 : Math.max(330 * u, H * 0.27);
-  const pw = land ? W * 0.64 : W - m * 2, ph = land ? H - m * 2 : H - capH - m;
+  const pw = land ? W * 0.64 : W - m * 2;
+  let ph = land ? H - m * 2 : H - Math.max(frameCaption(f, u), H * 0.24) - m;
+  if (o.auto) ph = pw / o.aspect;
   photoOrPlaceholder(c, img, m, m, pw, ph, o, P, f);
   const x = land ? m * 2 + pw : m + 10 * u, w = land ? W - x - m : W - m * 2 - 20 * u;
   let y = land ? m + 90 * u : m + ph + 96 * u;
@@ -151,13 +168,16 @@ async function drawFull(c, W, H, img, f, o, P) {
 }
 
 async function drawPolaroid(c, W, H, img, f, o, P) {
-  const u = Math.min(W, H) / 1080, land = W > H;
+  const land = !o.auto && W > H;
+  const u = o.auto ? W / 1080 : Math.min(W, H) / 1080;
   c.fillStyle = P.bg; c.fillRect(0, 0, W, H);
   grain(c, W, H, 0.06);
-  const pw = land ? H * 0.82 * 0.86 : W * 0.78;
-  const border = pw * 0.055, photoH = pw - border * 2;
+  // Format carré : polaroid réduit pour laisser la place à la légende en dessous
+  const pw = land ? H * 0.82 * 0.86 : W * (o.auto ? 0.78 : Math.min(0.78, (H / W) * 0.56));
+  const border = pw * 0.055, photoH = o.auto ? (pw - border * 2) / o.aspect : pw - border * 2;
   const ph = border + photoH + pw * 0.3;
-  const cx = land ? W * 0.36 : W / 2, cy = land ? H / 2 : H * (H > W * 1.4 ? 0.42 : 0.48);
+  const cx = land ? W * 0.36 : W / 2;
+  const cy = land ? H / 2 : o.auto ? 110 * u + ph / 2 : Math.max(ph / 2 + 50 * u, H * (H > W * 1.4 ? 0.42 : 0.4));
   c.save();
   c.translate(cx, cy); c.rotate(-0.035);
   c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 40 * u; c.shadowOffsetY = 16 * u;
@@ -173,7 +193,7 @@ async function drawPolaroid(c, W, H, img, f, o, P) {
   c.fillText(fit(c, [f.airportCode, f.dateShort].filter(Boolean).join(' · '), pw - border * 2.8), -pw / 2 + border * 1.4, capY + pw * 0.08);
   c.restore();
   // légende à côté / en dessous
-  const tx = land ? W * 0.66 : 80 * u, ty = land ? H * 0.32 : cy + ph / 2 + 110 * u;
+  const tx = land ? W * 0.66 : 80 * u, ty = land ? H * 0.32 : cy + ph / 2 + 100 * u;
   const tw = land ? W - tx - 80 * u : W - 160 * u;
   c.fillStyle = P.ink; c.font = `italic 600 ${46 * u}px ${FONTS.serif}`;
   let y = wrap(c, [f.type, f.airline].filter(Boolean).join(', '), tx, ty, tw, 54 * u, 2);
@@ -239,57 +259,86 @@ async function drawCard(c, W, H, img, f, o, P) {
   }
 }
 
+/** Hauteur du bloc d'informations de la carte d'embarquement (sous la photo). */
+function boardingLines(f) { return [f.type, f.weather, f.signature && `© ${f.signature}`].filter(Boolean); }
+function boardingInfoH(f, u, cols, lines = boardingLines(f).length) {
+  const rows = Math.ceil(6 / cols);
+  return (60 + 130 + rows * 104 + 20 + 34 + 16 + 150) * u + lines * 36 * u;
+}
+
 async function drawBoarding(c, W, H, img, f, o, P) {
-  const u = Math.min(W, H) / 1080, land = W > H;
+  const land = !o.auto && W >= H;
+  const u = o.auto ? W / 1080 : Math.min(W, H) / 1080;
   c.fillStyle = P.bg; c.fillRect(0, 0, W, H);
   grain(c, W, H, 0.03);
   const m = 70 * u;
   const x = m, w = W - m * 2;
-  const tH = land ? H - m * 2 : Math.min(H - m * 2, w * 1.25);
+  const tH = land || o.auto ? H - m * 2 : Math.min(H - m * 2, w * 1.25);
   const y = (H - tH) / 2;
+  const bandH = 96 * u;
+  const phW = land ? w * 0.42 : w;
+  const ix = land ? x + phW + 50 * u : x + 40 * u, iw = land ? w - phW - 90 * u : w - 80 * u;
+  const cols = iw > 700 * u ? 3 : 2;
+  let lines = boardingLines(f);
+  let phH;
+  if (land) phH = tH - bandH;
+  else if (o.auto) phH = w / o.aspect;
+  else {
+    // La photo prend ce qui reste ; en dessous d'un quart du billet, on retire des lignes de texte
+    phH = tH - bandH - boardingInfoH(f, u, cols, lines.length);
+    while (phH < tH * 0.26 && lines.length) { lines = lines.slice(0, -1); phH = tH - bandH - boardingInfoH(f, u, cols, lines.length); }
+    phH = Math.max(phH, tH * 0.2);
+  }
   c.save(); c.shadowColor = 'rgba(0,0,0,.18)'; c.shadowBlur = 50 * u; c.shadowOffsetY = 18 * u;
   rrect(c, x, y, w, tH, 34 * u); c.fillStyle = '#fff'; c.fill(); c.restore();
-  const bandH = 96 * u;
+  const phY = y + bandH;
   c.save(); rrect(c, x, y, w, tH, 34 * u); c.clip();
   c.fillStyle = P.accent; c.fillRect(x, y, w, bandH);
-  const phY = y + bandH, phH = land ? tH - bandH : tH * 0.42;
-  const phW = land ? w * 0.45 : w;
   photoOrPlaceholder(c, img, x, phY, phW, phH, o, P, f);
   c.restore();
   c.fillStyle = '#fff'; c.font = `700 ${28 * u}px ${FONTS.sans}`;
-  c.fillText(`✈  ${f.airline ? f.airline.toUpperCase() : 'CONTRAIL'}`, x + 36 * u, y + 60 * u);
+  c.fillText(fit(c, `✈  ${f.airline ? f.airline.toUpperCase() : 'CONTRAIL'}`, w * 0.55), x + 36 * u, y + 60 * u);
   c.textAlign = 'right'; c.font = `600 ${22 * u}px ${FONTS.mono}`;
   c.fillText(t('story.boarding_pass').toUpperCase(), x + w - 36 * u, y + 60 * u); c.textAlign = 'left';
   const sub = rgba(P.ink, 0.5), ink = P.ink;
-  const ix = land ? x + phW + 50 * u : x + 40 * u, iw = land ? w - phW - 90 * u : w - 80 * u;
-  let yy = land ? phY + 70 * u : phY + phH + 64 * u;
+  let yy = land ? phY + 70 * u : phY + phH + 60 * u;
   const field = (label, value, fx, fy, size = 44, fw = iw) => {
-    c.fillStyle = sub; c.font = `600 ${20 * u}px ${FONTS.sans}`; c.fillText(label.toUpperCase(), fx, fy);
-    c.fillStyle = ink; c.font = `700 ${fitSize(c, value || '—', fw - 10 * u, size * u, 700, FONTS.mono)}px ${FONTS.mono}`; c.fillText(value || '—', fx, fy + (size + 8) * u);
+    c.fillStyle = sub; c.font = `600 ${20 * u}px ${FONTS.sans}`; c.fillText(fit(c, label.toUpperCase(), fw - 10 * u), fx, fy);
+    c.fillStyle = ink; c.font = `700 ${fitSize(c, value || '—', fw - 14 * u, size * u, 700, FONTS.mono, 14 * u)}px ${FONTS.mono}`; c.fillText(value || '—', fx, fy + (size + 8) * u);
   };
-  field(t('share_img.registration'), `${f.reg}`, ix, yy, 72);
+  field(t('share_img.registration'), `${f.reg}`, ix, yy, 72, iw - 80 * u);
   c.font = `${44 * u}px ${FONTS.sans}`; c.textAlign = 'right'; c.fillText(f.flag, ix + iw, yy + 70 * u); c.textAlign = 'left';
   yy += 130 * u;
-  const cols = 3, cw = iw / cols;
+  const cw = iw / cols;
+  const focal = f.focal ? `${f.focal} mm` : '—';
   const cells = [[t('spot.airport'), f.airportCode], [t('share_img.date'), f.dateShort], [t('share_img.type'), f.code],
-    [t('spot.msn'), f.msn], [t('share_img.encounter'), `#${f.encounters}`], [t('share_img.seat'), f.exif ? f.exif.split(' · ')[1] || '—' : '—']];
+    [t('spot.msn'), f.msn], [t('share_img.encounter'), `#${f.encounters}`], [t('share_img.seat'), focal]];
   cells.forEach(([l, v], i) => field(l, v, ix + (i % cols) * cw, yy + Math.floor(i / cols) * 104 * u, 36, cw));
   yy += Math.ceil(cells.length / cols) * 104 * u + 20 * u;
   dashed(c, ix, yy, ix + iw, yy, rgba(P.ink, 0.25), 3 * u, [12 * u, 10 * u]);
   yy += 34 * u;
+  const barY = y + tH - 120 * u;
   c.fillStyle = sub; c.font = `500 ${24 * u}px ${FONTS.sans}`;
-  for (const l of [f.type, f.weather, f.signature && `© ${f.signature}`].filter(Boolean)) {
-    if (yy > y + tH - 150 * u) break;
+  for (const l of lines) {
+    if (yy + 6 * u > barY - 24 * u) break;
     c.fillText(fit(c, l, iw), ix, yy + 6 * u); yy += 36 * u;
   }
-  barcode(c, ix, y + tH - 120 * u, iw, 80 * u, f.reg, ink);
+  barcode(c, ix, barY, iw, 80 * u, f.reg, ink);
 }
 
+function sheetRows(f) {
+  return [[t('spot.country'), `${f.flag} ${f.country}`], [t('spot.msn'), f.msn], [t('spot.airport'), f.airport], [t('share_img.date'), f.date],
+    [t('spot.weather'), f.weather], [t('spot.exif'), f.exif], [t('spot.livery'), f.livery]].filter(([, v]) => v && v.trim());
+}
+function sheetTextH(f, u) { return (60 + 106 + 50 + 84 + 16 + 70) * u + sheetRows(f).length * 58 * u; }
+
 async function drawSheet(c, W, H, img, f, o, P) {
-  const u = Math.min(W, H) / 1080, land = W > H;
+  const land = !o.auto && W > H;
+  const u = o.auto ? W / 1080 : Math.min(W, H) / 1080;
   c.fillStyle = P.bg; c.fillRect(0, 0, W, H);
   const m = 70 * u;
-  const pw = land ? W * 0.55 : W - m * 2, ph = land ? H - m * 2 : (H - m * 2) * 0.5;
+  const pw = land ? W * 0.55 : W - m * 2;
+  const ph = land ? H - m * 2 : o.auto ? pw / o.aspect : Math.max((H - m * 2) * 0.36, Math.min((H - m * 2) * 0.5, H - m - sheetTextH(f, u) - 20 * u));
   photoOrPlaceholder(c, img, m, m, pw, ph, o, P, f, { radius: 22 * u });
   const x = land ? m * 2 + pw : m, w = land ? W - x - m : W - m * 2;
   let y = land ? m + 30 * u : m + ph + 60 * u;
@@ -300,8 +349,7 @@ async function drawSheet(c, W, H, img, f, o, P) {
   y += 86 * u; c.fillText(f.reg, x, y);
   c.font = `italic 400 ${34 * u}px ${FONTS.serif}`; c.fillStyle = rgba(P.ink, 0.75);
   y = wrap(c, [f.type, f.airline].filter(Boolean).join(' — '), x, y + 50 * u, w, 42 * u, 2);
-  const rows = [[t('spot.country'), `${f.flag} ${f.country}`], [t('spot.msn'), f.msn], [t('spot.airport'), f.airport], [t('share_img.date'), f.date],
-    [t('spot.weather'), f.weather], [t('spot.exif'), f.exif], [t('spot.livery'), f.livery]].filter(([, v]) => v && v.trim());
+  const rows = sheetRows(f);
   y += 16 * u;
   const lh = 58 * u;
   for (const [k, v] of rows) {
@@ -322,10 +370,12 @@ export async function render(root, params) {
   const s = await api(`/api/spots/${params.id}`);
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem('contrail.spotshare') || '{}') || {}; } catch { saved = {}; }
-  const o = { template: 'frame', format: 'portrait', palette: 'auto', colors: null, focusX: 0.5, focusY: 0.5,
+  const o = { template: 'frame', format: 'portrait', fit: 'cover', palette: 'auto', colors: null, focusX: 0.5, focusY: 0.5,
     info: { airline: true, airport: true, date: true, exif: true, weather: false, badges: true, brand: true }, signature: '', ...saved };
   o.info = { airline: true, airport: true, date: true, exif: true, weather: false, badges: true, brand: true, ...(saved.info || {}) };
   if (!TEMPLATES[o.template]) o.template = 'frame';
+  if (o.format !== 'auto' && !FORMATS[o.format]) o.format = 'portrait';
+  if (o.format === 'auto' && !s.image) o.format = 'portrait';
   o.focusX = 0.5; o.focusY = 0.5;   // le cadrage dépend de chaque photo
   const [img] = await Promise.all([s.image ? loadImage(mediaUrl('images', s.image)) : Promise.resolve(null), loadFonts(), loadTypes()]);
 
@@ -336,7 +386,10 @@ export async function render(root, params) {
       <div class="stack">
         <div class="card stack">
           <div class="field"><span>${esc(t('share_img.template'))}</span><div class="style-grid" data-tpls>${Object.keys(TEMPLATES).map((k) => `<button type="button" data-tpl="${k}"><canvas width="120" height="150"></canvas><span>${esc(t(`share_img.t_${k}`))}</span></button>`).join('')}</div></div>
-          <div class="field"><span>${esc(t('story.format'))}</span><div class="seg" data-fmt style="flex-wrap:wrap">${Object.keys(FORMATS).map((f) => `<button data-v="${f}">${esc(t(`story.f_${f}`))}</button>`).join('')}</div></div>
+          <div class="field"><span>${esc(t('story.format'))}</span><div class="seg" data-fmt style="flex-wrap:wrap">
+            ${img ? `<button data-v="auto" title="${esc(t('share_img.f_auto_hint'))}">${esc(t('share_img.f_auto'))}</button>` : ''}
+            ${Object.keys(FORMATS).map((f) => `<button data-v="${f}">${esc(t(`story.f_${f}`))}</button>`).join('')}</div>
+            ${img ? `<p class="tiny muted" data-auto-hint style="margin-top:6px"></p>` : ''}</div>
         </div>
         <div class="card stack">
           <div class="field"><span>${esc(t('share_img.infos'))}</span><div class="chips">${INFOS.map((k) => `<button class="chip" data-info="${k}">${esc(t(`share_img.i_${k}`))}</button>`).join('')}</div></div>
@@ -347,7 +400,9 @@ export async function render(root, params) {
             <button type="button" data-pal="auto" class="pal-auto">${esc(t('story.p_auto'))}</button>
             ${Object.entries(PALETTES).map(([k, p]) => `<button type="button" data-pal="${k}" title="${esc(t(`story.p_${k}`))}" style="--a:${p.accent};--b:${p.accent2};--c:${p.bg}"></button>`).join('')}</div></div>
           <div class="color-row">${['accent', 'accent2', 'bg', 'ink'].map((k) => `<label class="color-pick"><input type="color" data-color="${k}"><span>${esc(t(`story.c_${k}`))}</span></label>`).join('')}</div>
-          ${img ? `<div class="field-row"><label class="field"><span>${esc(t('share_img.focus_x'))}</span><input type="range" min="0" max="1" step="0.01" data-fx value="0.5"></label>
+          ${img ? `<label class="toggle-row" data-fit-row><span><span class="t">${esc(t('share_img.fit_contain'))}</span><br><span class="d">${esc(t('share_img.fit_contain_d'))}</span></span>
+            <span class="switch"><input type="checkbox" data-fit><span></span></span></label>
+            <div class="field-row" data-focus-row><label class="field"><span>${esc(t('share_img.focus_x'))}</span><input type="range" min="0" max="1" step="0.01" data-fx value="0.5"></label>
             <label class="field"><span>${esc(t('share_img.focus_y'))}</span><input type="range" min="0" max="1" step="0.01" data-fy value="0.5"></label></div>`
             : `<p class="small muted">${icon('info', '', 15)} ${esc(t('share_img.no_photo'))}</p>`}
         </div>
@@ -360,13 +415,26 @@ export async function render(root, params) {
     </div>`;
   const canvas = root.querySelector('[data-canvas]');
 
+  const aspect = img ? img.width / img.height : null;
+  /** Options effectives : le format Auto adapte le canevas à la photo, ou bascule en « photo entière ». */
+  function effective(opts) {
+    const tp = TEMPLATES[opts.template] || TEMPLATES.frame;
+    const f = facts(s, opts);
+    if (opts.format === 'auto' && img) {
+      const size = tp.auto?.(aspect, f);
+      if (size) return { tp, f, W: size[0], H: size[1], opts: { ...opts, auto: true, aspect, fit: 'cover' } };
+      const [W, H] = FORMATS.portrait;
+      return { tp, f, W, H, opts: { ...opts, auto: false, fit: 'contain' } };
+    }
+    const [W, H] = FORMATS[opts.format] || FORMATS.portrait;
+    return { tp, f, W, H, opts: { ...opts, auto: false } };
+  }
   async function paint(cv, opts, scale = 1) {
-    const [W, H] = FORMATS[opts.format];
-    cv.width = W * scale; cv.height = H * scale;
+    const e = effective(opts);
+    cv.width = Math.round(e.W * scale); cv.height = Math.round(e.H * scale);
     const c = cv.getContext('2d');
     c.setTransform(scale, 0, 0, scale, 0, 0);
-    const tp = TEMPLATES[opts.template] || TEMPLATES.frame;
-    await tp.draw(c, W, H, img, facts(s, opts), opts, palette(opts));
+    await e.tp.draw(c, e.W, e.H, img, e.f, e.opts, palette(opts));
   }
   let pending = 0;
   async function draw() {
@@ -392,6 +460,15 @@ export async function render(root, params) {
     root.querySelectorAll('[data-fmt] button').forEach((b) => b.classList.toggle('on', b.dataset.v === o.format));
     root.querySelectorAll('[data-info]').forEach((b) => b.classList.toggle('on', !!o.info[b.dataset.info]));
     root.querySelectorAll('[data-pal]').forEach((b) => b.classList.toggle('on', b.dataset.pal === o.palette));
+    if (img) {
+      const e = effective(o);
+      const autoFmt = o.format === 'auto';
+      root.querySelector('[data-fit]').checked = e.opts.fit === 'contain';
+      root.querySelector('[data-fit]').disabled = autoFmt;
+      root.querySelector('[data-focus-row]').hidden = e.opts.fit === 'contain' || e.opts.auto;
+      root.querySelector('[data-auto-hint]').textContent = autoFmt
+        ? (e.opts.auto ? t('share_img.auto_size', { w: e.W, h: e.H }) : t('share_img.auto_fixed')) : '';
+    }
     const P = palette(o);
     root.querySelectorAll('[data-color]').forEach((i) => (i.value = P[i.dataset.color]));
     try { const { focusX, focusY, ...keep } = o; localStorage.setItem('contrail.spotshare', JSON.stringify(keep)); } catch { /* stockage indisponible */ }
@@ -408,6 +485,7 @@ export async function render(root, params) {
     redraw();
   }));
   root.querySelector('[data-sign]').oninput = (e) => { o.signature = e.target.value; redraw(); };
+  root.querySelector('[data-fit]')?.addEventListener('change', (e) => { o.fit = e.target.checked ? 'contain' : 'cover'; redraw(); });
   root.querySelector('[data-fx]')?.addEventListener('input', (e) => { o.focusX = Number(e.target.value); redraw(); });
   root.querySelector('[data-fy]')?.addEventListener('input', (e) => { o.focusY = Number(e.target.value); redraw(); });
   const fname = () => `${s.registration}-${o.template}-${o.format}.png`;

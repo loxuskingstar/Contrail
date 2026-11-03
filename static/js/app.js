@@ -70,6 +70,7 @@ const ROUTES = [
   [/^flights$/, 'flights'],
   [/^flights\/new$/, 'flight-form'],
   [/^flights\/(\d+)\/edit$/, 'flight-form', ['id']],
+  [/^flights\/(\d+)$/, 'flight-detail', ['id']],
   [/^fleets$/, 'fleets'],
   [/^fleets\/(.+)$/, 'fleet-detail', ['key']],
   [/^liveries$/, 'liveries'],
@@ -331,7 +332,7 @@ function openPalette() {
     results.innerHTML = [
       grp(t('search.airframes'), r.airframes.map((a) => `<a href="#/airframe/${encodeURIComponent(a.registration)}">${icon('plane')}<span class="mono"><b>${esc(a.registration)}</b></span><span class="muted small ellipsis grow">${esc(a.aircraft || '')}</span><span class="badge">${a.n}×</span></a>`)),
       grp(t('search.spots'), r.spots.map((s) => `<a href="#/spots/${s.id_spotting}">${s.thumb ? `<img src="${mediaUrl('thumbs', s.thumb)}" alt="">` : icon('camera')}<span class="grow ellipsis"><b class="mono">${esc(s.registration)}</b> <span class="muted small">${esc(s.owner || '')} · ${esc(s.airport || '')}</span></span></a>`)),
-      grp(t('search.flights'), r.flights.map((f) => `<a href="#/flights/${f.id_flight}/edit">${icon('ticket')}<span class="grow"><b>${esc(f.dep_icao)} → ${esc(f.arr_icao)}</b> <span class="muted small">${esc(f.flight_number || '')} · ${esc(f.date)}</span></span></a>`)),
+      grp(t('search.flights'), r.flights.map((f) => `<a href="#/flights/${f.id_flight}">${icon('ticket')}<span class="grow"><b>${esc(f.dep_icao)} → ${esc(f.arr_icao)}</b> <span class="muted small">${esc(f.flight_number || '')} · ${esc(f.date)}</span></span></a>`)),
       grp(t('search.airports'), r.airports.map((a) => `<a href="#/spots?airport=${a.icao}">${icon('map-pin')}<span class="grow"><b class="mono">${a.icao}</b> <span class="muted small">${esc(a.name)}</span></span></a>`)),
       grp(t('search.tags'), r.tags.map((tg) => `<a href="#/spots?tag=${tg.id_tag}">${icon('tag')}<span>${esc(tg.name)}</span></a>`)),
     ].join('') || `<p class="muted small" style="padding:12px">${esc(t('search.none'))}</p>`;

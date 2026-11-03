@@ -8,7 +8,8 @@ export async function render(root, params) {
   const key = params.key;
   let d = await api(`/api/fleets/${encodeURIComponent(key)}`);
   let filter = 'all';
-  const canFetch = () => d.airlabs && /^[A-Z]{3}$/.test(key);
+  const canAirlabs = () => d.airlabs && /^[A-Z]{3}$/.test(key);
+  const canFetch = () => d.refdb || canAirlabs();
 
   const draw = () => {
     const total = d.fleet.length;
@@ -24,13 +25,13 @@ export async function render(root, params) {
         <div><h1>${esc(d.name)}</h1><div class="sub">${esc(key)}${d.meta.iata ? ' · ' + esc(d.meta.iata) : ''}${total ? ` · ${esc(t('fleet.completion', { seen, total }))}` : ''}</div>
         ${d.meta.fleet_fetched_at ? `<div class="tiny muted">${esc(t('fleet.updated', { date: fmtDate(d.meta.fleet_fetched_at, { time: false }), src: src[d.meta.fleet_source] || d.meta.fleet_source || '' }))}</div>` : ''}</div></div>
         <div class="actions">
-          ${canFetch() ? `<button class="btn" data-fetch>${icon('refresh-cw', '', 18)} ${esc(t('fleet.fetch'))}</button>` : ''}
+          <button class="btn ${canFetch() ? '' : 'ghost'}" data-fetch>${icon('refresh-cw', '', 18)} <span class="hide-sm">${esc(t('fleet.fetch'))}</span></button>
           <button class="btn-icon glassy" data-menu>${icon('ellipsis')}</button></div></header>
       ${d.refdb_candidates ? `<div class="ocr-strip" style="margin-bottom:14px">${icon('database', '', 18)}
         <span class="grow small">${esc(t('fleet.refdb_hint', { n: d.refdb_candidates }))}</span>
         <button class="btn sm" data-local>${esc(t('fleet.refdb_add'))}</button></div>` : ''}
       ${!total ? `<div class="card" style="margin-bottom:14px">${emptyState('building-2', t('fleet.no_fleet'), d.airlabs ? t('fleet.no_fleet_text_api') : t('fleet.no_fleet_text'),
-        `<div class="row wrap" style="justify-content:center">${canFetch() ? `<button class="btn primary" data-fetch>${esc(t('fleet.fetch'))}</button>` : ''}<button class="btn" data-import2>${icon('upload', '', 18)} ${esc(t('fleet.import'))}</button></div>`)}</div>` : ''}
+        `<div class="row wrap" style="justify-content:center">${canFetch() ? `<button class="btn primary" data-fetch>${esc(t('fleet.fetch'))}</button>` : `<a class="btn primary" href="#/settings/integrations">${icon('database', '', 18)} ${esc(t('fleet.install_refdb'))}</a>`}<button class="btn" data-import2>${icon('upload', '', 18)} ${esc(t('fleet.import'))}</button></div>`)}</div>` : ''}
       ${d.by_type.length ? `<div class="card" style="margin-bottom:14px"><div class="card-title">${esc(t('fleet.by_type'))}</div>
         <div class="hbars">${d.by_type.map((b) => `<div class="hbar"><span class="k" title="${esc(b.code || '')}">${esc(b.type)}</span><div class="track"><div class="fill" style="width:${(b.seen / b.total) * 100}%"></div></div><span class="n">${b.seen}/${b.total}</span></div>`).join('')}</div></div>` : ''}
       ${total ? `<div class="row between wrap" style="margin-bottom:10px"><h2 style="font-size:18px">${esc(t('fleet.fleet'))}</h2>
@@ -87,21 +88,50 @@ export async function render(root, params) {
     ]);
   };
 
-  function fetchFleet(btn) {
+  function fetchFleet() {
+    const local = d.refdb, air = canAirlabs();
+    let src = local ? 'local' : 'airlabs';
     const s = sheet({ title: esc(t('fleet.fetch')), body: `
-      <p class="small muted" style="margin-bottom:10px">${esc(t('fleet.fetch_hint'))}</p>
+      <div class="src-choice">
+        <label class="src-opt ${local ? '' : 'disabled'}"><input type="radio" name="src" value="local" ${src === 'local' ? 'checked' : ''} ${local ? '' : 'disabled'}>
+          <span class="grow"><b>${icon('database', '', 16)} ${esc(t('fleet.src_local'))} <span class="badge green">${esc(t('fleet.recommended'))}</span></b>
+          <span class="small muted">${esc(t(local ? 'fleet.src_local_d' : 'fleet.src_local_missing'))}</span></span></label>
+        <label class="src-opt ${air ? '' : 'disabled'}"><input type="radio" name="src" value="airlabs" ${src === 'airlabs' ? 'checked' : ''} ${air ? '' : 'disabled'}>
+          <span class="grow"><b>${icon('cloud', '', 16)} AirLabs</b>
+          <span class="small muted">${esc(t(air ? 'fleet.fetch_hint' : (d.airlabs ? 'fleet.airlabs_icao_only' : 'fleet.airlabs_no_key')))}</span></span></label>
+      </div>
+      ${!local ? `<p class="small" style="margin-top:8px"><a href="#/settings/integrations">${icon('database', '', 14)} ${esc(t('fleet.install_refdb'))} →</a></p>` : ''}
+      <div data-local-opts ${src === 'local' ? '' : 'hidden'}>
+        <div class="seg" style="margin-top:12px" data-mode><button data-v="complete" class="on">${esc(t('fleet.mode_complete'))}</button><button data-v="replace">${esc(t('fleet.mode_replace'))}</button></div>
+        <p class="tiny muted" style="margin-top:6px" data-mode-hint>${esc(t('fleet.mode_complete_d'))}</p>
+      </div>
       <label class="toggle-row"><span><span class="t">${esc(t('fleet.include_light'))}</span><br><span class="d">${esc(t('fleet.include_light_d'))}</span></span>
         <span class="switch"><input type="checkbox" data-light><span></span></span></label>
-      <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn primary" data-go>${icon('refresh-cw', '', 18)} ${esc(t('fleet.fetch'))}</button></div>` });
+      <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn primary" data-go ${local || air ? '' : 'disabled'}>${icon('refresh-cw', '', 18)} ${esc(t('fleet.fetch'))}</button></div>` });
+    let mode = 'complete';
+    s.body.querySelectorAll('input[name=src]').forEach((r) => (r.onchange = () => { src = r.value; s.body.querySelector('[data-local-opts]').hidden = src !== 'local'; }));
+    s.body.querySelectorAll('[data-mode] button').forEach((b) => (b.onclick = () => {
+      mode = b.dataset.v;
+      s.body.querySelectorAll('[data-mode] button').forEach((x) => x.classList.toggle('on', x === b));
+      s.body.querySelector('[data-mode-hint]').textContent = t(`fleet.mode_${mode}_d`);
+    }));
     s.body.querySelector('[data-go]').onclick = async (e) => {
       const go = e.currentTarget;
       go.disabled = true;
       go.innerHTML = `${icon('refresh-cw', '', 18)} ${esc(t('fleet.fetching'))}`;
+      const light = s.body.querySelector('[data-light]').checked;
       try {
-        const r = await api(`/api/fleets/${encodeURIComponent(key)}/fetch`, { method: 'POST', body: { include_light: s.body.querySelector('[data-light]').checked } });
-        d = r;
-        s.close();
-        toast(esc(t('fleet.fetched_detail', { n: r.fetch.kept, r: r.fetch.received, s: r.fetch.skipped_light })), { type: 'success', duration: 6000 });
+        if (src === 'local') {
+          const r = await api(`/api/fleets/${encodeURIComponent(key)}/complete-local`, { method: 'POST', body: { include_light: light, replace: mode === 'replace' } });
+          d = r;
+          s.close();
+          toast(esc(r.matched ? t('fleet.local_done', { n: r.matched, a: r.added }) : t('fleet.local_none')), { type: r.matched ? 'success' : 'warn', duration: 7000 });
+        } else {
+          const r = await api(`/api/fleets/${encodeURIComponent(key)}/fetch`, { method: 'POST', body: { include_light: light } });
+          d = r;
+          s.close();
+          toast(esc(t('fleet.fetched_detail', { n: r.fetch.kept, r: r.fetch.received, s: r.fetch.skipped_light })), { type: 'success', duration: 6000 });
+        }
         draw();
       } catch (err) { errorToast(err); go.disabled = false; }
     };

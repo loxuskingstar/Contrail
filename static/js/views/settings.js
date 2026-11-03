@@ -88,6 +88,10 @@ export async function render(root, params) {
         ${toggle('keep_originals', t('settings.keep_originals'), t('settings.keep_originals_d'), S.keep_originals)}
         ${toggle('share_include_notes', t('settings.share_notes'), t('settings.share_notes_d'), S.share_include_notes)}
       </div>
+      <div class="card stack"><div class="card-title">${esc(t('goal.title', { y: new Date().getFullYear() }))}</div>
+        <p class="small muted">${esc(t('goal.hint'))}</p>
+        <div class="field-row">${['spots', 'types', 'regs'].map((k) => `<label class="field"><span>${esc(t(`goal.k_${k}`))}</span><input type="number" min="0" step="1" inputmode="numeric" data-goal="${k}" value="${S[`goal_${k}`] || ''}" placeholder="0"></label>`).join('')}</div>
+      </div>
       <div class="card stack"><div class="card-title">${esc(t('nav.watchlist'))}</div>
         <label class="field"><span>${esc(t('settings.watch_interval'))}</span><select data-watchint>${[2, 5, 10, 15, 30, 60].map((v) => `<option value="${v}" ${S.watch_interval_min === v ? 'selected' : ''}>${v} min</option>`).join('')}</select></label>
       </div></div>`;
@@ -97,6 +101,7 @@ export async function render(root, params) {
     body.querySelector('[data-imgmax]').onchange = (e) => save({ image_max_px: Number(e.target.value) });
     body.querySelector('[data-imgq]').onchange = (e) => save({ image_quality: Number(e.target.value) });
     body.querySelector('[data-watchint]').onchange = (e) => save({ watch_interval_min: Number(e.target.value) });
+    body.querySelectorAll('[data-goal]').forEach((i) => (i.onchange = () => save({ [`goal_${i.dataset.goal}`]: Math.max(0, Math.round(Number(i.value) || 0)) })));
     body.querySelectorAll('[data-k]').forEach((c) => (c.onchange = () => save({ [c.dataset.k]: c.checked })));
   }
 
@@ -288,20 +293,30 @@ async function refdbCard(box) {
     if (!box.isConnected) { clearTimeout(timer); return; }
     const st = await api('/api/refdb').catch(() => null);
     if (!st) return;
-    const phase = st.running ? t(`refdb.phase_${st.phase || 'import'}`) + (st.rows ? ` · ${fmtNum(st.rows)}` : '') : '';
+    const pct = st.phase === 'download' && st.total_bytes ? Math.round((st.bytes / st.total_bytes) * 100) : (st.phase === 'download' ? 30 : st.phase === 'index' ? 90 : 70);
+    const phase = st.running ? t(`refdb.phase_${st.phase || 'import'}`) + (st.phase === 'download' && st.bytes ? ` · ${fmtNum(Math.round(st.bytes / 1048576))} Mo` : st.rows ? ` · ${fmtNum(st.rows)}` : '') : '';
     box.innerHTML = `<div class="card-title">${icon('database', '', 15)} ${esc(t('refdb.title'))}</div>
       <p class="small muted">${esc(t('refdb.desc'))}</p>
       <div class="row wrap small">${st.available
-        ? `<span class="badge green">${icon('circle-check', '', 12)} ${esc(t('refdb.count', { n: fmtNum(st.count || 0) }))}</span><span class="muted">${esc(t('refdb.imported', { date: fmtDate(st.imported_at, { time: false }), src: st.source || '' }))}</span>`
+        ? `<span class="badge green">${icon('circle-check', '', 12)} ${esc(t('refdb.count', { n: fmtNum(st.count || 0) }))}</span>
+           <span class="badge ${st.with_operator_icao ? 'accent' : ''}" title="${esc(t('refdb.op_icao_hint'))}">${icon('building-2', '', 12)} ${esc(t('refdb.op_icao', { n: fmtNum(st.with_operator_icao || 0) }))}</span>
+           <span class="muted">${esc(t('refdb.imported', { date: fmtDate(st.imported_at, { time: false }), src: st.source || '' }))}</span>`
         : `<span class="badge">${esc(t('refdb.none'))}</span>`}</div>
-      ${st.running ? `<div class="row small">${icon('refresh-cw', '', 15)} ${esc(phase)}</div><div class="progress"><i style="width:${st.phase === 'download' ? 35 : 75}%"></i></div>` : ''}
+      ${st.running ? `<div class="row small">${icon('refresh-cw', '', 15)} ${esc(phase)}</div><div class="progress"><i style="width:${pct}%"></i></div>` : ''}
       ${st.error ? `<p class="small" style="color:var(--danger)">${esc(t(`err.${st.error}`) === `err.${st.error}` ? st.error : t(`err.${st.error}`))}</p>` : ''}
+      <div class="refdb-sources">
+        <div class="refdb-src"><div class="grow"><b>tar1090-db</b><span class="tiny muted">${esc(t('refdb.src_tar1090'))}</span></div>
+          <button class="btn sm ${st.available ? '' : 'primary'}" data-dl="tar1090" ${st.running ? 'disabled' : ''}>${icon('download', '', 16)} ${esc(t(st.available ? 'refdb.update' : 'refdb.download_short'))}</button></div>
+        <div class="refdb-src"><div class="grow"><b>OpenSky Network</b><span class="tiny muted">${esc(t('refdb.src_opensky'))}</span></div>
+          <button class="btn sm" data-dl="opensky" ${st.running ? 'disabled' : ''}>${icon('download', '', 16)} ${esc(t('refdb.download_short'))}</button></div>
+      </div>
       <div class="row wrap">
-        <button class="btn ${st.available ? '' : 'primary'}" data-dl ${st.running ? 'disabled' : ''}>${icon('download', '', 18)} ${esc(t(st.available ? 'refdb.update' : 'refdb.download'))}</button>
-        <label class="btn ${st.running ? 'disabled' : ''}">${icon('upload', '', 18)} ${esc(t('refdb.upload'))}<input type="file" accept=".csv,.gz,text/csv,application/gzip" hidden data-up></label>
-        ${st.available && !st.running ? `<button class="btn ghost danger" data-del>${icon('trash-2', '', 18)}</button>` : ''}</div>
+        <label class="btn sm ${st.running ? 'disabled' : ''}">${icon('upload', '', 16)} ${esc(t('refdb.upload'))}<input type="file" accept=".csv,.gz,text/csv,application/gzip" hidden data-up></label>
+        ${st.available && !st.running ? `<button class="btn sm ghost danger" data-del>${icon('trash-2', '', 16)} ${esc(t('common.delete'))}</button>` : ''}</div>
       <p class="tiny muted">${esc(t('refdb.credits'))}</p>`;
-    box.querySelector('[data-dl]').onclick = async () => { await api('/api/refdb/download', { method: 'POST' }).catch(errorToast); draw(); };
+    box.querySelectorAll('[data-dl]').forEach((b) => (b.onclick = async () => {
+      await api('/api/refdb/download', { method: 'POST', body: { source: b.dataset.dl } }).catch(errorToast); draw();
+    }));
     box.querySelector('[data-up]').onchange = async (e) => {
       const f = e.target.files[0];
       if (!f) return;

@@ -7,9 +7,19 @@ import { airportInput } from '../lib/fields.js';
 import { esc, pageHead, confirmDialog, errorToast, toast } from '../ui.js';
 import { afterSave } from './spot-form.js';
 
-export async function render(root, params) {
+export async function render(root, params, query = {}) {
   const editing = !!params.id;
-  const f = editing ? await api(`/api/flights/${params.id}`) : { date: new Date().toISOString().slice(0, 10) };
+  let f = editing ? await api(`/api/flights/${params.id}`) : { date: new Date().toISOString().slice(0, 10) };
+  // Pré-remplissage : copie d'un vol ou vol retour (départ et arrivée inversés)
+  if (!editing && query.from) {
+    const src = await api(`/api/flights/${encodeURIComponent(query.from)}`).catch(() => null);
+    if (src) {
+      const keep = ['airline', 'airline_icao', 'cabin_class', 'reason'];
+      const copy = query.return ? keep : [...keep, 'dep_icao', 'arr_icao', 'flight_number', 'registration', 'aircraft', 'aircraft_icao', 'seat_type', 'dep_time', 'arr_time'];
+      f = { date: f.date, ...Object.fromEntries(copy.map((k) => [k, src[k]])) };
+      if (query.return) { f.dep_icao = src.arr_icao; f.arr_icao = src.dep_icao; }
+    }
+  }
   const sel = (name, values, cur) => `<select name="${name}"><option value="">—</option>${values.map((v) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${esc(t(`${name}.${v}`))}</option>`).join('')}</select>`;
   root.innerHTML = `
     ${pageHead(esc(editing ? t('flight.edit') : t('flight.new')), { sub: editing ? `${esc(f.dep_icao)} → ${esc(f.arr_icao)} · ${fmtDate(f.date, { time: false })}` : esc(t('flight.new_sub')) })}
@@ -114,7 +124,7 @@ export async function render(root, params) {
     try {
       const res = await api(editing ? `/api/flights/${f.id_flight}` : '/api/flights', { method: editing ? 'PUT' : 'POST', body });
       afterSave(res);
-      navigate('#/flights');
+      navigate(`#/flights/${res.flight?.id_flight || ''}`);
     } catch (err) { errorToast(err); }
   };
   root.querySelector('[data-del]')?.addEventListener('click', async () => {

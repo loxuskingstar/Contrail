@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -230,7 +230,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "home_airports": [],           # ex. ["LFBO"]
     "default_airport": "",
     "dashboard_widgets": [
-        "hero", "quick", "recent", "on_this_day", "top_types",
+        "hero", "quick", "goals", "recent", "on_this_day", "top_types",
         "achievements", "month_chart", "watchlist",
     ],
     "modules": {
@@ -244,6 +244,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "backup_keep": 7,
     "backup_include_media": False,
     "watch_interval_min": 5,
+    "goal_spots": 0,               # objectifs de l'année (0 = aucun)
+    "goal_types": 0,
+    "goal_regs": 0,
     "share_include_notes": False,
     "radar_center": None,          # [lat, lng] ou None -> géolocalisation
     "map_tiles": "auto",           # auto | positron | liberty | bright | dark | fiord (OpenFreeMap) | osm | custom

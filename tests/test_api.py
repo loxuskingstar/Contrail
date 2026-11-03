@@ -86,7 +86,7 @@ def test_spot_crud_duplicates_crossref(client):
     codes = {b["code"] for b in s["badges"]}
     assert {"first_type", "special_livery", "flown"} <= codes
     assert len(s["tags"]) == 2
-    assert "first_spot" in body["achievements"]
+    assert "spots_1" in body["achievements"] and "photos_1" in body["achievements"]
 
     r = client.post("/api/spots", data={"data": json.dumps(data)})
     assert r.status_code == 409 and r.json()["detail"]["code"] == "duplicate"
@@ -105,7 +105,7 @@ def test_spot_crud_duplicates_crossref(client):
 
     lst = client.get("/api/spots", params={"tag": s["tags"][0]["id_tag"]}).json()
     assert lst["total"] == 1
-    assert client.get("/api/spots/map").json()["clusters"][0]["count"] == 1
+    assert client.get("/api/spots/map").json()["places"][0]["count"] == 1
 
 
 def test_offline_draft_idempotence(client):
@@ -294,3 +294,58 @@ def test_fleet_airlabs_pagination_and_exclusions(client, monkeypatch):
     assert d["added"] == 1  # F-HBXC (base locale) ; F-GCQJ, avion léger, est ignoré
     assert any(f["registration"] == "F-HBXC" and f["source"] == "refdb" for f in d["fleet"])
     save_config({"airlabs_api_key": ""})
+
+
+def test_achievements_tiers_and_legacy_migration(client):
+    """Séries à paliers, rang, et reprise des déblocages des anciens codes (≤ v1.3)."""
+    from app.core import db
+    from app.services import gamification
+    conn = db()
+    conn.execute("INSERT OR REPLACE INTO achievements(code, criteria, icon, category, target, unlocked_at) "
+                 "VALUES('km_earth', '{}', '🌏', 'flights', 40075, '2024-05-01T10:00:00Z')")
+    conn.commit()
+    gamification.sync_definitions()
+    r = client.get("/api/achievements").json()
+    by = {i["code"]: i for i in r["items"]}
+    assert "km_earth" not in by and by["flight_km_40075"]["unlocked_at"] == "2024-05-01T10:00:00Z"
+    assert r["total"] > 200 and r["points"] >= by["flight_km_40075"]["points"]
+    assert {i["tier"] for i in r["items"]} == set(gamification.TIERS)
+    assert r["rank"]["key"] in {k for _, k in gamification.RANKS}
+    # Une même série va du plus simple au plus difficile
+    spots = [i for i in r["items"] if i["series"] == "spots"]
+    assert [i["target"] for i in spots] == sorted(i["target"] for i in spots) and spots[0]["tier"] == "bronze" and spots[-1]["tier"] == "diamond"
+
+
+def test_refdb_merge_opensky_and_local_fleet(client, tmp_path):
+    """tar1090 + OpenSky fusionnées : le code OACI d'opérateur est propagé, la flotte se construit sans AirLabs."""
+    from app.services import refdb
+    refdb.delete()
+    tar = ["39e700;F-HEPA;A20N;00;AIRBUS A-320neo;2021;Air France;",
+           "39e701;F-HEPB;A20N;00;AIRBUS A-320neo;2021;Air France;",
+           "39e702;F-HEPC;A20N;00;AIRBUS A-320neo;2021;Air France;",
+           "39e703;F-HEPD;A20N;00;AIRBUS A-320neo;2022;AIR FRANCE S.A.;",
+           "39e704;F-HTYZ;A359;00;AIRBUS A-350-900;2023;Air France;",
+           "3a9999;F-GZZZ;C172;00;CESSNA 172;1979;Aeroclub;"]
+    f = tmp_path / "tar.csv"
+    f.write_text("\n".join(tar))
+    assert refdb.import_file(f, "tar1090") == 6
+    osk = tmp_path / "os.csv"
+    osk.write_text("'icao24','registration','typecode','model','operator','operatorIcao','built'\n"
+                   "'39e700','F-HEPA','A20N','A320-251N','Air France','AFR','2021-01-01'\n"
+                   "'39e701','F-HEPB','A20N','A320-251N','Air France','AFR','2021-01-01'\n"
+                   "'39e702','','A20N','A320-251N','Air France','AFR','2021-01-01'\n"
+                   "'4ca777','EI-NEW','B38M','737-8200','Ryanair','RYR','2022-01-01'\n")
+    assert refdb.import_file(osk, "opensky") == 4
+    st = refdb.status()
+    assert st["count"] == 7 and "opensky" in st["source"] and "tar1090" in st["source"]
+    # tar1090 garde la priorité sur l'immatriculation, OpenSky apporte le code OACI…
+    assert refdb.by_reg("F-HEPC")["operator_icao"] == "AFR"
+    # …qui est propagé aux appareils connus seulement par le nom (« AIR FRANCE S.A. » ≈ « Air France »)
+    assert refdb.by_reg("F-HEPD")["operator_icao"] == "AFR" and refdb.by_reg("F-HTYZ")["operator_icao"] == "AFR"
+    d = client.post("/api/fleets/AFR/complete-local", json={"replace": True}).json()
+    regs_ = {x["registration"] for x in d["fleet"]}
+    assert {"F-HEPA", "F-HEPB", "F-HEPC", "F-HEPD", "F-HTYZ"} <= regs_ and "F-GZZZ" not in regs_
+    assert d["meta"]["fleet_source"] == "refdb"
+    r = client.post("/api/fleets/build-local", json={}).json()
+    assert r["airlines"] >= 1
+    refdb.delete()

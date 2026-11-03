@@ -341,7 +341,7 @@ export async function render(root, params, query) {
   return () => { document.removeEventListener('paste', onPaste); recorder?.stop(); };
 }
 
-export function afterSave(res) {
+export async function afterSave(res) {
   window.dispatchEvent(new Event('contrail-local-action'));
   toast(esc(t('common.saved')), { type: 'success', duration: 2000 });
   if (res.crossref?.length) {
@@ -349,7 +349,14 @@ export function afterSave(res) {
     const key = res.spot ? 'crossref.spot' : 'crossref.flight';
     toast(`<b>${esc(t(key, { reg, n: res.crossref.length }))}</b>`, { type: 'star', duration: 7000, action: t('nav.airframe'), onAction: () => (location.hash = `#/airframe/${encodeURIComponent(reg)}`) });
   }
-  for (const code of res.achievements || []) {
-    toast(`<b>${esc(t('ach.unlocked'))}</b><br>${esc(t(`ach.${code}.name`))}`, { type: 'star', duration: 6000, action: t('common.open'), onAction: () => (location.hash = '#/achievements') });
+  if (res.achievements?.length) {
+    const { achName, achDesc, parseCode } = await import('../lib/ach.js');
+    // Un toast par série (palier le plus haut), trois au maximum
+    const best = new Map();
+    for (const code of res.achievements) best.set(parseCode(code).series, code);
+    const list = [...best.values()];
+    list.slice(0, 3).forEach((code) => toast(`<b>${esc(t('ach.unlocked'))}</b><br>${esc(achName(code))} · ${esc(achDesc(code))}`,
+      { type: 'star', duration: 6000, action: t('common.open'), onAction: () => (location.hash = '#/achievements') }));
+    if (list.length > 3) toast(esc(t('ach.more_unlocked', { n: list.length - 3 })), { type: 'star', duration: 6000, action: t('common.open'), onAction: () => (location.hash = '#/achievements') });
   }
 }

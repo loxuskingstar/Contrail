@@ -109,7 +109,51 @@ def get_flight(flight_id: int):
         raise HTTPException(404, "not_found")
     enrich([r])
     r["spots"] = collection.crossref_for_flight(r["registration"]) if r.get("registration") else []
+    r["context"] = _context(r)
     return r
+
+
+def _context(r: dict) -> dict:
+    """Mise en perspective d'un vol : rang chronologique, route, compagnie, type, appareil, voisins."""
+    key = (r["date"], r.get("dep_time") or "", r["id_flight"])
+    order = "(date < ? OR (date = ? AND COALESCE(dep_time,'') < ?) OR (date = ? AND COALESCE(dep_time,'') = ? AND id_flight < ?))"
+    before = (key[0], key[0], key[1], key[0], key[1], key[2])
+
+    def nth(extra: str = "", params: tuple = ()) -> dict:
+        n = q1(f"SELECT COUNT(*) n FROM flights WHERE {order}{extra}", before + params)["n"] + 1
+        tot = q1(f"SELECT COUNT(*) n FROM flights WHERE 1=1{extra}", params)["n"]
+        return {"n": n, "total": tot}
+
+    ctx = {"overall": nth(),
+           "route": nth(" AND ((dep_icao = ? AND arr_icao = ?) OR (dep_icao = ? AND arr_icao = ?))",
+                        (r["dep_icao"], r["arr_icao"], r["arr_icao"], r["dep_icao"])),
+           "year": nth(" AND substr(date,1,4) = ?", (r["date"][:4],))}
+    if r.get("airline_icao") or r.get("airline"):
+        ctx["airline"] = nth(" AND COALESCE(airline_icao, airline) = ?", (r.get("airline_icao") or r.get("airline"),))
+    if r.get("aircraft_icao") or r.get("aircraft"):
+        ctx["type"] = nth(" AND COALESCE(aircraft_icao, aircraft) = ?", (r.get("aircraft_icao") or r.get("aircraft"),))
+    if r.get("registration"):
+        ctx["airframe"] = nth(" AND registration = ?", (r["registration"],))
+    prev = q1(f"SELECT id_flight, dep_icao, arr_icao, date FROM flights WHERE {order} "
+              "ORDER BY date DESC, COALESCE(dep_time,'') DESC, id_flight DESC LIMIT 1", before)
+    after = (key[0], key[0], key[1], key[0], key[1], key[2])
+    nxt = q1("SELECT id_flight, dep_icao, arr_icao, date FROM flights WHERE (date > ? OR (date = ? AND COALESCE(dep_time,'') > ?) "
+             "OR (date = ? AND COALESCE(dep_time,'') = ? AND id_flight > ?)) ORDER BY date, COALESCE(dep_time,''), id_flight LIMIT 1", after)
+    ctx["prev"], ctx["next"] = prev, nxt
+    # Heures UTC et vitesse moyenne
+    if r.get("dep_time"):
+        ctx["dep_utc"] = geo.local_to_utc(f"{r['date'][:10]}T{r['dep_time'][:5]}", r["dep_icao"])
+    if r.get("arr_time"):
+        ctx["arr_utc"] = geo.local_to_utc(f"{r['date'][:10]}T{r['arr_time'][:5]}", r["arr_icao"])
+    if r.get("distance_km") and r.get("duration_min"):
+        ctx["speed_kmh"] = round(r["distance_km"] / (r["duration_min"] / 60))
+    for side in ("dep", "arr"):
+        a = geo.airport(r[f"{side}_icao"])
+        if a and r.get(f"{side}_info") is not None:
+            r[f"{side}_info"]["tz"] = a.get("tz")
+    # Déjà spotté à l'un des deux aéroports ?
+    ctx["spots_at"] = {c: q1("SELECT COUNT(*) n FROM spotting WHERE airport = ?", (c,))["n"] for c in {r["dep_icao"], r["arr_icao"]}}
+    return ctx
 
 
 def _after(reg: str | None, flight_id: int, is_new: bool) -> dict:

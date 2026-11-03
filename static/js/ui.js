@@ -58,11 +58,14 @@ export function sheet({ title = '', body = '', wide = false, onClose } = {}) {
     closed = true;
     node.classList.add('closing');
     document.removeEventListener('keydown', onKey);
+    window.removeEventListener('hashchange', close);
     setTimeout(() => node.remove(), 200);
     onClose?.();
   };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
+  // Un lien suivi depuis la feuille change de page : la feuille ne doit pas rester ouverte
+  window.addEventListener('hashchange', close);
   node.querySelector('.sheet-backdrop').onclick = close;
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = close));
   // Glisser vers le bas pour fermer (mobile)

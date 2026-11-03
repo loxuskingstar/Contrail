@@ -83,7 +83,7 @@ export async function render(root, params) {
 function evHtml(e) {
   if (e.kind === 'flight') {
     return `<div class="tl-item flight"><div class="tl-date">${fmtDate(e.date)}</div>
-      <a href="#/flights/${e.id}/edit" style="display:block"><b>${icon('ticket', '', 15)} ${esc(e.dep)} → ${esc(e.arr)}</b>
+      <a href="#/flights/${e.id}" style="display:block"><b>${icon('ticket', '', 15)} ${esc(e.dep)} → ${esc(e.arr)}</b>
       <span class="muted small">${esc(e.flight_number || '')}${e.seat ? ` · ${esc(t('flight.seat'))} ${esc(e.seat)}` : ''}</span></a></div>`;
   }
   return `<div class="tl-item"><div class="tl-date">${fmtDate(e.date)}</div>

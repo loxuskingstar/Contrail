@@ -23,7 +23,7 @@ export function t(key, vars) {
   let s = dict[key] ?? fallback[key];
   if (s === undefined) return key;
   if (vars) {
-    if (typeof s === 'object') s = vars.n === 1 ? s.one : s.other;
+    if (typeof s === 'object') s = (vars.count ?? vars.n) === 1 ? s.one : s.other;
     s = s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
   } else if (typeof s === 'object') s = s.other;
   return s;
@@ -37,11 +37,12 @@ export function fmtNum(n, opts) {
   return new Intl.NumberFormat(locale(), opts).format(n);
 }
 
-export function fmtDate(iso, { time = true, short = false } = {}) {
+export function fmtDate(iso, { time = true, short = false, weekday = false } = {}) {
   if (!iso) return '—';
   const d = new Date(iso.length <= 10 ? iso + 'T00:00' : iso.replace('Z', ''));
   if (Number.isNaN(d.getTime())) return iso;
   const opts = short ? { day: 'numeric', month: 'short', year: '2-digit' } : { day: 'numeric', month: 'short', year: 'numeric' };
+  if (weekday) opts.weekday = short ? 'short' : 'long';
   if (time && iso.length > 10) Object.assign(opts, { hour: '2-digit', minute: '2-digit' });
   return new Intl.DateTimeFormat(locale(), opts).format(d);
 }
