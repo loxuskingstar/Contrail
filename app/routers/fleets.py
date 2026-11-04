@@ -31,6 +31,15 @@ def _active_fleet(key: str) -> str:
             "WHERE x.airline_key = f.airline_key AND x.registration = f.registration)")
 
 
+@router.get("/api/fleets-reference/{icao}")
+def fleet_reference(icao: str):
+    """Diagnostic : noms de référence retenus pour un code OACI et groupes obtenus."""
+    icao = icao.upper()
+    operators.reset_cache()
+    return {"icao": icao, "sources": operators.sources(icao), "used": sorted(operators._refs(icao)),
+            "groups": q("SELECT opg(airline_icao, owner) k, owner, COUNT(*) n FROM spotting WHERE airline_icao = ? GROUP BY k, owner", (icao,))}
+
+
 @router.get("/api/fleets")
 def fleets_overview():
     groups = {g["key"]: g for g in _airline_groups()}
@@ -46,7 +55,10 @@ def fleets_overview():
         m = meta.get(k, {})
         st = stats.get(k) or {}
         size, seen = st.get("n"), st.get("seen") or 0
-        out.append({**g, "name": m.get("name") or g.get("name") or k, "iata": m.get("iata"), "fleet_size": size,
+        reg_name = m.get("name")
+        if reg_name and g.get("name") and re.fullmatch(r"[A-Z]{3}", k) and not operators.same_operator(reg_name, k, k):
+            reg_name = None   # nom enregistré par une ancienne version (libellé d'un groupe fusionné)
+        out.append({**g, "name": reg_name or g.get("name") or k, "iata": m.get("iata"), "fleet_size": size,
                     "fleet_seen": seen, "completion": round(seen / size, 4) if size else None,
                     "fleet_source": m.get("fleet_source"), "fleet_fetched_at": m.get("fleet_fetched_at")})
     return out

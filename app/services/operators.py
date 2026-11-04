@@ -39,33 +39,42 @@ def compatible(a: str, refs) -> bool:
     return False
 
 
+def sources(icao: str) -> dict[str, list[str]]:
+    """Noms de référence par source (diagnostic) : base de référence, spots, nom enregistré."""
+    out: dict[str, list[str]] = {"refdb": [], "spots": [], "registered": []}
+    try:
+        from app.services import refdb
+        out["refdb"] = sorted({_key(n) for n in refdb.dominant_operators(icao)} - {""})
+        c = sqlite3.connect(f"file:{db_path()}?mode=ro", uri=True, timeout=5)
+        try:
+            rows = c.execute("SELECT owner, COUNT(*) n FROM spotting WHERE airline_icao = ? AND owner IS NOT NULL "
+                             "GROUP BY owner", (icao,)).fetchall()
+            tally: dict[str, int] = {}
+            for o, n in rows:
+                if _key(o):
+                    tally[_key(o)] = tally.get(_key(o), 0) + n
+            if tally:
+                top = max(tally.values())
+                out["spots"] = sorted(k for k, v in tally.items() if v == top)
+            out["registered"] = sorted({_key(n) for (n,) in c.execute(
+                "SELECT name FROM airlines WHERE (key = ? OR icao = ?) AND name IS NOT NULL", (icao, icao))} - {""})
+        finally:
+            c.close()
+    except sqlite3.Error:
+        pass
+    return out
+
+
 def _refs(icao: str) -> frozenset[str]:
-    """Noms de référence d'un code OACI : nom enregistré, opérateur dominant de la base de référence, sinon spots."""
+    """Référence d'un code OACI. Une seule source fait foi, dans l'ordre : base de référence, propriétaire
+    majoritaire des spots, nom enregistré (qui peut avoir été fixé à tort par une ancienne version)."""
     path = str(db_path())
     hit = _cache.get((path, icao))
     now = time.monotonic()
     if hit and now - hit[0] < TTL:
         return hit[1]
-    refs: set[str] = set()
-    try:
-        c = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
-        try:
-            for (n,) in c.execute("SELECT name FROM airlines WHERE (key = ? OR icao = ?) AND name IS NOT NULL", (icao, icao)):
-                refs.add(_key(n))
-            from app.services import refdb
-            for n in refdb.dominant_operators(icao):
-                refs.add(_key(n))
-            if not refs:
-                rows = c.execute("SELECT owner, COUNT(*) n FROM spotting WHERE airline_icao = ? AND owner IS NOT NULL "
-                                 "GROUP BY owner ORDER BY n DESC", (icao,)).fetchall()
-                if rows:
-                    refs |= {_key(o) for o, n in rows if n == rows[0][1]}
-        finally:
-            c.close()
-    except sqlite3.Error:
-        refs = set()
-    refs.discard("")
-    out = frozenset(refs)
+    src = sources(icao)
+    out = frozenset(src["refdb"] or src["spots"] or src["registered"])
     _cache[(path, icao)] = (now, out)
     return out
 

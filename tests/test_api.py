@@ -368,3 +368,15 @@ def test_subsidiary_not_merged_with_parent_airline(client):
     assert len(client.get("/api/spots", params={"airline": "AFR"}).json()["items"]) == 2
     top = {a["k"]: a["n"] for a in client.get("/api/stats").json()["top_airlines"]}
     assert top["AFR"] == 2 and top["Hop!"] == 1
+
+
+def test_polluted_registered_name_does_not_merge_subsidiary(client):
+    """Un nom enregistré à tort (« Hop! » pour AFR) ne doit plus fusionner les deux compagnies."""
+    from app.core import execute
+    from app.services import operators
+    execute("INSERT INTO airlines(key, icao, name) VALUES('AFR','AFR','Hop!') ON CONFLICT(key) DO UPDATE SET name='Hop!'")
+    operators.reset_cache()
+    groups = {g["key"]: g for g in client.get("/api/fleets").json()}
+    assert groups["AFR"]["regs"] == 2 and groups["Hop!"]["regs"] == 1
+    d = client.get("/api/fleets-reference/AFR").json()
+    assert d["used"] == ["air france"]
