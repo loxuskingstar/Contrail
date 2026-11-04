@@ -135,6 +135,19 @@ def by_operator(name: str | list[str] | None, icao: str | None = None, limit: in
     return list(found.values())[:limit]
 
 
+def dominant_operators(icao: str) -> list[str]:
+    """Noms d'opérateur dominants pour un code OACI (au moins 30 % du plus fréquent)."""
+    c = _conn()
+    if not c or not re.fullmatch(r"[A-Za-z]{3}", icao or ""):
+        return []
+    rows = c.execute("SELECT ownop, COUNT(*) n FROM aircraft WHERE operator_icao = ? AND ownop IS NOT NULL AND ownop <> '' "
+                     "GROUP BY ownop ORDER BY n DESC LIMIT 20", (icao.upper(),)).fetchall()
+    if not rows:
+        return []
+    top = rows[0]["n"]
+    return [r["ownop"] for r in rows if r["n"] >= 0.3 * top]
+
+
 def operators(prefix: str = "", limit: int = 30) -> list[dict]:
     """Opérateurs connus de la base (pour l'autocomplétion des flottes)."""
     c = _conn()

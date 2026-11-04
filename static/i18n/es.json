@@ -1210,7 +1210,7 @@
 "flight_d.nth": "{n}.º",
 "flight_d.f_overall": "Tu {n} vuelo de {total}",
 "flight_d.f_route_once": "Única vez en esta ruta (en cualquier sentido)",
-"flight_d.f_route": "{n} vez en esta ruta ({total} en total)",
+"flight_d.f_route": "Vuelo {n} en esta ruta ({total} en total)",
 "flight_d.f_airline_first": "Primer vuelo con {a}",
 "flight_d.f_airline": "{n} vuelo con {a}",
 "flight_d.f_type_first": "Primer vuelo en {a}",

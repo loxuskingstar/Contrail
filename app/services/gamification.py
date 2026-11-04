@@ -149,7 +149,7 @@ def metrics() -> dict[str, float]:
     r = q1(
         "SELECT COUNT(*) spots, COUNT(DISTINCT registration) regs, "
         "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
-        "COUNT(DISTINCT CASE WHEN military = 0 THEN COALESCE(airline_icao, owner) END) airlines, "
+        "COUNT(DISTINCT CASE WHEN military = 0 THEN opg(airline_icao, owner) END) airlines, "
         "COUNT(DISTINCT NULLIF(airport,'')) airports, COUNT(DISTINCT country) countries, "
         "COUNT(DISTINCT NULLIF(manufacturer,'')) manufacturers, "
         "SUM(CASE WHEN livery_category IS NOT NULL THEN 1 ELSE 0 END) special_liveries, "

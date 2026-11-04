@@ -46,9 +46,9 @@ def badge_context() -> dict:
         f"ORDER BY {order} LIMIT 1) AS id FROM (SELECT DISTINCT COALESCE(aircraft_icao, aircraft) AS k "
         f"FROM spotting WHERE COALESCE(aircraft_icao, aircraft) IS NOT NULL) g")}
     ctx["first_airline"] = {r["id"] for r in q(
-        f"SELECT (SELECT id_spotting FROM spotting s2 WHERE COALESCE(s2.airline_icao, s2.owner) = g.k "
-        f"ORDER BY {order} LIMIT 1) AS id FROM (SELECT DISTINCT COALESCE(airline_icao, owner) AS k "
-        f"FROM spotting WHERE COALESCE(airline_icao, owner) IS NOT NULL) g")}
+        f"SELECT (SELECT id_spotting FROM spotting s2 WHERE opg(s2.airline_icao, s2.owner) = g.k "
+        f"ORDER BY {order} LIMIT 1) AS id FROM (SELECT DISTINCT opg(airline_icao, owner) AS k "
+        f"FROM spotting WHERE opg(airline_icao, owner) IS NOT NULL) g")}
     ctx["first_airport"] = {r["id"] for r in q(
         f"SELECT (SELECT id_spotting FROM spotting s2 WHERE s2.airport = g.k ORDER BY {order} LIMIT 1) AS id "
         f"FROM (SELECT DISTINCT airport AS k FROM spotting WHERE airport IS NOT NULL AND airport <> '') g")}

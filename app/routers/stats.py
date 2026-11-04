@@ -29,7 +29,7 @@ def stats(year: str = ""):
     totals = q1(
         f"SELECT COUNT(*) spots, COUNT(DISTINCT registration) registrations, "
         f"COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
-        f"COUNT(DISTINCT COALESCE(airline_icao, owner)) airlines, COUNT(DISTINCT NULLIF(airport,'')) airports, "
+        f"COUNT(DISTINCT opg(airline_icao, owner)) airlines, COUNT(DISTINCT NULLIF(airport,'')) airports, "
         f"COUNT(DISTINCT country) countries, SUM(CASE WHEN image IS NOT NULL THEN 1 ELSE 0 END) photos, "
         f"SUM(CASE WHEN livery_category IS NOT NULL THEN 1 ELSE 0 END) special_liveries, "
         f"SUM(military) military, COUNT(DISTINCT substr(date,1,10)) days, "
@@ -78,7 +78,7 @@ def stats(year: str = ""):
     return {
         "year": year, "totals": totals, "top_registrations": top_regs, "top_airports": top_airports,
         "top_types": top("COALESCE(aircraft_icao, aircraft)", ", MAX(aircraft) label"),
-        "top_airlines": top("COALESCE(airline_icao, owner)", ", MAX(owner) label"),
+        "top_airlines": top("opg(airline_icao, owner)", ", MAX(owner) label"),
         "top_countries": top("country"), "top_tags": q(
             f"SELECT t.name k, t.color, COUNT(*) n FROM spotting_tags st JOIN tags t USING(id_tag) "
             f"JOIN spotting s USING(id_spotting) WHERE {w.replace('date', 's.date')} GROUP BY t.id_tag ORDER BY n DESC LIMIT 10", p),
@@ -141,7 +141,7 @@ def dashboard():
 
     today = date.today()
     totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT registration) regs, "
-                "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, COUNT(DISTINCT COALESCE(airline_icao, owner)) airlines, "
+                "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, COUNT(DISTINCT opg(airline_icao, owner)) airlines, "
                 "COUNT(DISTINCT NULLIF(airport,'')) airports, COUNT(DISTINCT country) countries FROM spotting")
     month = q1("SELECT COUNT(*) n FROM spotting WHERE substr(date,1,7) = ?", (today.strftime("%Y-%m"),))["n"]
     year_totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "

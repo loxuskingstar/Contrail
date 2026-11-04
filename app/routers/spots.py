@@ -55,8 +55,8 @@ def build_filters(f: dict) -> tuple[str, list]:
         where.append("COALESCE(s.aircraft_icao, s.aircraft) = ?")
         params.append(f["type"])
     if f.get("airline"):
-        where.append("(s.airline_icao = ? OR s.owner = ?)")
-        params += [f["airline"], f["airline"]]
+        where.append("opg(s.airline_icao, s.owner) = ?")
+        params.append(f["airline"])
     if f.get("tag"):
         where.append("EXISTS (SELECT 1 FROM spotting_tags st WHERE st.id_spotting = s.id_spotting AND st.id_tag = ?)")
         params.append(int(f["tag"]))
@@ -217,8 +217,8 @@ def facets():
     return {
         "airports": col("SELECT airport v, COUNT(*) n FROM spotting GROUP BY airport ORDER BY n DESC"),
         "types": col("SELECT COALESCE(aircraft_icao, aircraft) v, COUNT(*) n FROM spotting GROUP BY v ORDER BY n DESC"),
-        "airlines": q("SELECT COALESCE(airline_icao, owner) v, MAX(owner) name, COUNT(*) n FROM spotting "
-                      "WHERE COALESCE(airline_icao, owner) IS NOT NULL GROUP BY v ORDER BY n DESC"),
+        "airlines": q("SELECT opg(airline_icao, owner) v, MAX(owner) name, COUNT(*) n FROM spotting "
+                      "WHERE opg(airline_icao, owner) IS NOT NULL GROUP BY v ORDER BY n DESC"),
         "years": col("SELECT DISTINCT substr(date,1,4) v FROM spotting WHERE date IS NOT NULL ORDER BY v DESC"),
         "countries": col("SELECT country v, COUNT(*) n FROM spotting GROUP BY country ORDER BY n DESC"),
         "flight_types": FLIGHT_TYPES,
