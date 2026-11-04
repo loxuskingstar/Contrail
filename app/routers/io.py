@@ -306,7 +306,7 @@ def export_flights():
 @router.get("/api/export/full.json")
 def export_full():
     tables = ["spotting", "tags", "spotting_tags", "flights", "spot_locations", "achievements", "user_settings",
-              "watchlist", "airlines", "fleets", "shares"]
+              "wishes", "airlines", "fleets", "shares"]
     payload = {"app": "contrail", "version": APP_VERSION, "exported_at": now_iso(),
                "tables": {t: q(f"SELECT * FROM {t}") for t in tables}}
     data = json.dumps(payload, ensure_ascii=False, indent=1)

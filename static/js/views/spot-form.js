@@ -349,6 +349,8 @@ export async function afterSave(res) {
     const key = res.spot ? 'crossref.spot' : 'crossref.flight';
     toast(`<b>${esc(t(key, { reg, n: res.crossref.length }))}</b>`, { type: 'star', duration: 7000, action: t('nav.airframe'), onAction: () => (location.hash = `#/airframe/${encodeURIComponent(reg)}`) });
   }
+  (res.wishes || []).slice(0, 3).forEach((w) => toast(`<b>${esc(t('wish.done_head'))}</b><br>${esc(w.title)}`,
+    { type: 'star', duration: 6500, action: t('common.open'), onAction: () => (location.hash = '#/wishlist') }));
   if (res.achievements?.length) {
     const { achName, achDesc, parseCode } = await import('../lib/ach.js');
     // Un toast par série (palier le plus haut), trois au maximum

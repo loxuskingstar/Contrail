@@ -51,7 +51,7 @@ const NAV = [
   { group: 'nav.g.field' },
   { href: '#/radar', icon: 'radar', key: 'nav.radar', match: /^radar/, mod: 'radar' },
   { href: '#/locations', icon: 'binoculars', key: 'nav.locations', match: /^locations/, mod: 'locations' },
-  { href: '#/watchlist', icon: 'eye', key: 'nav.watchlist', match: /^watchlist/, mod: 'watchlist' },
+  { href: '#/wishlist', icon: 'star', key: 'nav.watchlist', match: /^(wishlist|watchlist)/, mod: 'watchlist' },
   { group: 'nav.g.more' },
   { href: '#/achievements', icon: 'trophy', key: 'nav.achievements', match: /^achievements/, mod: 'gamification' },
   { href: '#/story', icon: 'wand-sparkles', key: 'nav.story', match: /^story/, mod: 'gamification' },
@@ -77,7 +77,7 @@ const ROUTES = [
   [/^stats$/, 'stats'],
   [/^locations$/, 'locations'],
   [/^radar$/, 'radar'],
-  [/^watchlist$/, 'watchlist'],
+  [/^(?:wishlist|watchlist)$/, 'wishlist'],
   [/^achievements$/, 'achievements'],
   [/^story$/, 'story'],
   [/^shares$/, 'shares'],
@@ -143,7 +143,7 @@ function updateNav(path) {
     a.classList.toggle('active', !!item?.match?.test(path));
   });
   const more = $('.bottomnav [data-more]');
-  if (more) more.classList.toggle('active', /^(more|fleets|liveries|stats|locations|watchlist|achievements|story|shares|settings|drafts)/.test(path));
+  if (more) more.classList.toggle('active', /^(more|fleets|liveries|stats|locations|wishlist|watchlist|achievements|story|shares|settings|drafts)/.test(path));
 }
 
 // Le grand titre (One UI) se replie dans la barre supérieure au défilement
@@ -287,7 +287,7 @@ function systemNotify(n) {
 async function openNotifications() {
   const s = sheet({ title: esc(t('notif.title')), body: `<div class="skeleton" style="height:120px"></div>` });
   const res = await api('/api/notifications', { query: { limit: 60 } });
-  const ic = { crossref: 'ticket', achievement: 'trophy', watchlist: 'eye', backup: 'archive' };
+  const ic = { crossref: 'ticket', achievement: 'trophy', watchlist: 'eye', wishlist: 'star', backup: 'archive' };
   s.body.innerHTML = res.items.length ? `
     <div class="row" style="justify-content:flex-end;margin-bottom:8px">
       ${'Notification' in window && Notification.permission === 'default' ? `<button class="btn sm" data-perm>${icon('bell', '', 16)} ${esc(t('notif.enable_system'))}</button>` : ''}

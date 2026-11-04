@@ -2099,5 +2099,80 @@
    "registration": "F-GXLG",
    "note": "Beluga XL"
   }
+ ],
+ "wishes": [
+  {
+   "kind": "aircraft",
+   "title": "F-WWCF",
+   "value": "F-WWCF",
+   "note": "Premier A350-1000 d'essai",
+   "priority": 3
+  },
+  {
+   "kind": "type",
+   "title": "Airbus A380",
+   "value": "A388",
+   "priority": 3,
+   "family": 0,
+   "note": "Un A380 avant qu'ils disparaissent"
+  },
+  {
+   "kind": "type",
+   "title": "Famille Boeing 747",
+   "value": "B744",
+   "family": 1,
+   "priority": 2,
+   "goal_count": 2
+  },
+  {
+   "kind": "airline",
+   "title": "Air France",
+   "value": "AFR",
+   "goal_count": 10,
+   "priority": 2
+  },
+  {
+   "kind": "airline",
+   "title": "Emirates",
+   "value": "UAE",
+   "priority": 1
+  },
+  {
+   "kind": "livery",
+   "title": "Livrée spéciale",
+   "value": "Star Alliance",
+   "priority": 2
+  },
+  {
+   "kind": "airport",
+   "title": "Toulouse-Blagnac (LFBO)",
+   "value": "LFBO",
+   "goal_count": 5,
+   "priority": 1
+  },
+  {
+   "kind": "event",
+   "title": "Meeting aérien de Cerny – La Ferté-Alais",
+   "start_in": 12,
+   "length": 2,
+   "place": "Cerny (91)",
+   "airport": "LFFQ",
+   "priority": 3,
+   "note": "Patrouille de France, warbirds"
+  },
+  {
+   "kind": "event",
+   "title": "Salon du Bourget",
+   "start_in": 210,
+   "length": 6,
+   "place": "Le Bourget",
+   "airport": "LFPB",
+   "priority": 2
+  },
+  {
+   "kind": "other",
+   "title": "Photographier un décollage de nuit au phare",
+   "priority": 1
+  }
  ]
 }

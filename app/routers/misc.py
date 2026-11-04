@@ -164,7 +164,7 @@ def rank_candidates(cands: list[dict], airport: str | None) -> list[dict]:
     for c in cands:
         reg = c["registration"]
         if q1("SELECT 1 FROM spotting WHERE registration = ? UNION SELECT 1 FROM aircraft_cache WHERE registration = ? "
-              "UNION SELECT 1 FROM fleets WHERE registration = ? UNION SELECT 1 FROM watchlist WHERE registration = ?",
+              "UNION SELECT 1 FROM fleets WHERE registration = ? UNION SELECT 1 FROM wishes WHERE kind = 'aircraft' AND value = ?",
               (reg, reg, reg, reg)):
             c["score"] = round(c["score"] + 0.5, 2)
             c["known"] = True

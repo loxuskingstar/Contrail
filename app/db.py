@@ -194,7 +194,52 @@ CREATE TABLE IF NOT EXISTS fleet_exclusions (
 );
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2]
+SCHEMA_V3 = """
+-- Wishlist : fusion de la watchlist et des souhaits (appareil, modèle, compagnie, livrée, événement, aéroport…)
+CREATE TABLE IF NOT EXISTS wishes (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind          TEXT NOT NULL,                 -- aircraft | type | airline | livery | event | airport | other
+    title         TEXT NOT NULL,
+    value         TEXT,                          -- immatriculation, code type OACI, clé compagnie, texte de livrée, aéroport
+    airline_key   TEXT,                          -- restreint une livrée à une compagnie
+    family        INTEGER NOT NULL DEFAULT 0,    -- type : toute la famille (A320 → A319/A320/A321)
+    note          TEXT,
+    priority      INTEGER NOT NULL DEFAULT 2,    -- 1 faible · 2 normale · 3 prioritaire
+    status        TEXT NOT NULL DEFAULT 'open',  -- open | done
+    goal_count    INTEGER NOT NULL DEFAULT 1,    -- nombre d'appareils distincts à observer
+    progress      INTEGER NOT NULL DEFAULT 0,
+    since         TEXT,                          -- ne compte que les spots à partir de cette date (NULL : tout l'historique)
+    start_date    TEXT,
+    end_date      TEXT,
+    place         TEXT,
+    airport       TEXT,
+    lat           REAL,
+    lng           REAL,
+    url           TEXT,
+    parent_id     INTEGER,                       -- objectif rattaché à un événement
+    auto_complete INTEGER NOT NULL DEFAULT 1,
+    track         INTEGER NOT NULL DEFAULT 0,    -- appareil : alerte quand il est détecté en vol
+    notify        INTEGER NOT NULL DEFAULT 1,
+    remind_days   INTEGER NOT NULL DEFAULT 7,
+    reminded      INTEGER,
+    icao24        TEXT,
+    last_seen_at  TEXT,
+    last_status   TEXT,
+    airborne      INTEGER NOT NULL DEFAULT 0,
+    done_at       TEXT,
+    done_spot_id  INTEGER,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_wish_kind ON wishes(kind, status);
+CREATE INDEX IF NOT EXISTS idx_wish_parent ON wishes(parent_id);
+INSERT INTO wishes(kind, title, value, note, priority, status, auto_complete, track, notify, icao24, last_seen_at,
+                   last_status, airborne, created_at, updated_at)
+    SELECT 'aircraft', registration, registration, note, 2, 'open', 0, 1, notify, icao24, last_seen_at,
+           last_status, airborne, created_at, created_at FROM watchlist;
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3]
 
 
 def init_db() -> None:

@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from ..core import db, execute, get_config, now_iso, q, q1
 from ..services import aircraft as ac
-from ..services import collection, geo
+from ..services import collection, geo, wishes
 from ..services import registration as regs
 from .spots import decorate, LIST_COLS
 
@@ -161,7 +161,7 @@ def dashboard():
     months = q("SELECT substr(date,1,7) k, COUNT(*) n FROM spotting WHERE date >= date('now','-11 months','start of month') "
                "GROUP BY k ORDER BY k")
     flights = q1("SELECT COUNT(*) n, COALESCE(SUM(distance_km),0) km FROM flights")
-    watch = q("SELECT registration, airborne, last_status, last_seen_at FROM watchlist ORDER BY airborne DESC, registration LIMIT 6")
+    watch = q("SELECT value registration, airborne, last_status, last_seen_at FROM wishes WHERE kind='aircraft' AND status='open' AND track=1 ORDER BY airborne DESC, value LIMIT 6")
     for wr in watch:
         wr["last_status"] = json.loads(wr["last_status"] or "null")
     from ..services import gamification
@@ -173,7 +173,7 @@ def dashboard():
     ach_total = {"total": len(gamification.DEFINITIONS), "unlocked": len(unl), "points": pts, "rank": gamification.rank(pts)}
     drafts_hint = q1("SELECT COUNT(*) n FROM spotting WHERE weather_status = 'pending'")["n"]
     return {"totals": totals, "month": month, "year": year, "recent": recent, "on_this_day": on_this_day,
-            "hero": hero, "top_types": top_types, "months": months, "flights": flights, "watchlist": watch,
+            "hero": hero, "top_types": top_types, "months": months, "flights": flights, "watchlist": watch, "wishlist": wishes.summary(),
             "achievements": ach, "achievements_total": ach_total, "pending_weather": drafts_hint,
             "year_totals": year_totals, "last_year_same_day": last_year, "today": today.isoformat(),
             "streak": streaks(q("SELECT DISTINCT substr(date,1,10) d FROM spotting WHERE date IS NOT NULL"), today)}
@@ -220,7 +220,7 @@ def airframe(reg: str):
             changes.append({"date": s["date"], "owner": cur[0], "livery": cur[1]})
         prev = cur
     airports = sorted({s["airport"] for s in spots if s["airport"]})
-    in_watch = q1("SELECT id FROM watchlist WHERE registration = ?", (r,))
+    in_watch = q1("SELECT id FROM wishes WHERE kind='aircraft' AND status='open' AND UPPER(value) = ?", (r,))
     return {"info": info, "events": events, "spots": len(spots), "flights": len(flights),
             "first_seen": spots[0]["date"] if spots else None, "last_seen": spots[-1]["date"] if spots else None,
             "airports": airports, "changes": changes, "watch_id": in_watch["id"] if in_watch else None,

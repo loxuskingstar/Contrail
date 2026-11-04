@@ -13,7 +13,7 @@ import time
 import httpx
 
 from ..core import get_config, get_setting, now_iso, q, execute
-from . import actypes, refdb
+from . import actypes, refdb, wishes
 from . import aircraft as ac
 from .notify import notify, texts
 
@@ -82,7 +82,8 @@ def radar(lamin: float, lomin: float, lamax: float, lomax: float) -> dict:
         _cache[key] = (time.time(), raw)
     # Copie : l'enrichissement dépend du profil (données réelles ou session de test)
     res = {"time": raw.get("time"), "error": raw.get("error"), "states": [dict(s) for s in raw["states"]]}
-    watch = {r["icao24"]: r["registration"] for r in q("SELECT icao24, registration FROM watchlist WHERE icao24 IS NOT NULL")}
+    watch = {r["icao24"]: r["registration"] for r in q("SELECT icao24, value registration FROM wishes WHERE kind='aircraft' AND status='open' AND icao24 IS NOT NULL")}
+    wish_match = wishes.radar_matcher()
     spotted = {r["icao24"]: r["registration"] for r in q(
         "SELECT DISTINCT icao24, registration FROM spotting WHERE icao24 IS NOT NULL")}
     cached = {r["hx"]: r for r in q(
@@ -102,6 +103,8 @@ def radar(lamin: float, lomin: float, lamax: float, lomax: float) -> dict:
         s["cls"] = actypes.classify(typ, s.get("category"), r.get("description"))
         s["military"] = bool(r.get("military"))
         s["watch"] = hx in watch
+        w = wish_match(hx, reg, typ, s.get("callsign"))
+        s["wish"] = {"id": w["id"], "title": w["title"], "kind": w["kind"]} if w else None
         s["spotted"] = hx in spotted or (reg in seen_regs if reg else False)
     return res
 
@@ -123,7 +126,7 @@ def _airlabs_live(reg: str) -> dict | None:
 
 
 def check_watchlist() -> int:
-    items = q("SELECT * FROM watchlist")
+    items = [dict(w, registration=w["value"]) for w in wishes.tracked()]
     if not items:
         return 0
     # Résolution des hex Mode-S manquants
@@ -133,7 +136,7 @@ def check_watchlist() -> int:
                 info = ac.lookup(it["registration"])
                 if info.get("icao24"):
                     it["icao24"] = info["icao24"]
-                    execute("UPDATE watchlist SET icao24=? WHERE id=?", (info["icao24"], it["id"]))
+                    execute("UPDATE wishes SET icao24=? WHERE id=?", (info["icao24"], it["id"]))
             except Exception as e:  # noqa: BLE001
                 log.info("Résolution hex impossible pour %s : %s", it["registration"], e)
     hexes = [it["icao24"] for it in items if it["icao24"]]
@@ -159,7 +162,7 @@ def check_watchlist() -> int:
         if flight:
             status.update({"dep": flight.get("dep_icao"), "arr": flight.get("arr_icao"),
                            "flight": flight.get("flight_icao") or flight.get("flight_iata")})
-        execute("UPDATE watchlist SET last_status=?, airborne=?, last_seen_at=COALESCE(?, last_seen_at) WHERE id=?",
+        execute("UPDATE wishes SET last_status=?, airborne=?, last_seen_at=COALESCE(?, last_seen_at) WHERE id=?",
                 (json.dumps(status), int(airborne), now_iso() if st else None, it["id"]))
         if airborne and not it["airborne"] and it["notify"]:
             route = status.get("route") or (f"{status.get('dep')}-{status.get('arr')}" if status.get("dep") else "")

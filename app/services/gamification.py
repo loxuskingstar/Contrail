@@ -54,6 +54,7 @@ SERIES: list[tuple[str, str, list[int], str, str, list[str] | None]] = [
     ("fleet_half", "fleet_half", [1, 5], "📊", "collection", ["gold", "platinum"]),
     ("fleet_complete", "fleet_complete", [1, 3, 10], "🧩", "collection", ["gold", "platinum", "diamond"]),
     # --- Terrain
+    ("wishes", "wishes_done", [1, 5, 10, 25, 50], "🎯", "field", None),
     ("airports", "airports", [1, 5, 10, 25, 50, 100], "📍", "field", None),
     ("abroad", "airport_countries", [2, 5, 10, 20, 40], "🧳", "field", None),
     ("globe", "airport_span", [500, 2000, 5000, 10000, 18000], "🌐", "field", None),
@@ -229,6 +230,7 @@ def metrics() -> dict[str, float]:
                "FROM fleets f WHERE NOT EXISTS (SELECT 1 FROM fleet_exclusions x WHERE x.airline_key = f.airline_key "
                "AND x.registration = f.registration) GROUP BY f.airline_key")
     m["fleet_complete"] = sum(1 for f in fleets if f["total"] >= 5 and f["seen"] == f["total"])
+    m["wishes_done"] = (q1("SELECT COUNT(*) n FROM wishes WHERE status = 'done'") or {}).get("n", 0)
     m["fleet_half"] = sum(1 for f in fleets if f["total"] >= 10 and f["seen"] * 2 >= f["total"])
 
     # Vols

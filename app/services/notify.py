@@ -21,6 +21,9 @@ SERVER_I18N = {
         "watch_airborne": ("{reg} est en vol", "{detail}"),
         "watch_home": ("{reg} se dirige vers {airport}", "{detail}"),
         "backup_failed": ("Échec de la sauvegarde automatique", "{error}"),
+        "wish_done": ("Souhait réalisé !", "{title}"),
+        "wish_event": ("{title} approche", "Dans {n} jour(s) · {where}"),
+        "wish_event_today": ("{title} : c'est aujourd'hui", "{where}"),
     },
     "en": {
         "crossref_spot": ("You've already flown on {reg}!", "{n} flight(s) logged on this airframe."),
@@ -29,6 +32,9 @@ SERVER_I18N = {
         "watch_airborne": ("{reg} is airborne", "{detail}"),
         "watch_home": ("{reg} is heading to {airport}", "{detail}"),
         "backup_failed": ("Automatic backup failed", "{error}"),
+        "wish_done": ("Wish fulfilled!", "{title}"),
+        "wish_event": ("{title} is coming up", "In {n} day(s) · {where}"),
+        "wish_event_today": ("{title}: it's today", "{where}"),
     },
     "es": {
         "crossref_spot": ("¡Ya has volado en {reg}!", "{n} vuelo(s) registrado(s) en este avión."),
@@ -37,6 +43,9 @@ SERVER_I18N = {
         "watch_airborne": ("{reg} está en vuelo", "{detail}"),
         "watch_home": ("{reg} se dirige a {airport}", "{detail}"),
         "backup_failed": ("Fallo de la copia automática", "{error}"),
+        "wish_done": ("¡Deseo cumplido!", "{title}"),
+        "wish_event": ("Se acerca {title}", "Dentro de {n} día(s) · {where}"),
+        "wish_event_today": ("{title}: es hoy", "{where}"),
     },
     "ja": {
         "crossref_spot": ("{reg} には搭乗済みです！", "この機体での搭乗記録：{n}件"),
@@ -45,6 +54,9 @@ SERVER_I18N = {
         "watch_airborne": ("{reg} が飛行中です", "{detail}"),
         "watch_home": ("{reg} が {airport} に向かっています", "{detail}"),
         "backup_failed": ("自動バックアップに失敗しました", "{error}"),
+        "wish_done": ("ウィッシュを達成しました！", "{title}"),
+        "wish_event": ("{title} が近づいています", "あと{n}日 · {where}"),
+        "wish_event_today": ("{title}：今日です", "{where}"),
     },
 }
 

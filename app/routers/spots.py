@@ -9,7 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query
 from pydantic import BaseModel
 
 from ..core import db, execute, get_settings, now_iso, q, q1
-from ..services import collection, gamification, geo, media, weather
+from ..services import collection, gamification, geo, media, weather, wishes
 from ..services import registration as regs
 from ..services.notify import notify, texts
 
@@ -383,7 +383,7 @@ def _apply_image(out: dict, image: UploadFile | None, data: dict) -> None:
 
 
 def _post_save(spot_id: int, reg: str, is_new: bool, weather_needed: bool, bg: BackgroundTasks) -> dict:
-    extra: dict = {"crossref": [], "achievements": []}
+    extra: dict = {"crossref": [], "achievements": [], "wishes": []}
     settings = get_settings()
     if weather_needed and settings["modules"].get("weather", True):
         execute("UPDATE spotting SET weather_status='pending' WHERE id_spotting=?", (spot_id,))
@@ -394,6 +394,8 @@ def _post_save(spot_id: int, reg: str, is_new: bool, weather_needed: bool, bg: B
             extra["crossref"] = flights
             title, body = texts("crossref_spot", reg=reg, n=len(flights))
             notify("crossref", title, body, f"#/airframe/{reg}", {"registration": reg, "spot": spot_id})
+    if settings["modules"].get("watchlist", True):
+        extra["wishes"] = [{"id": w["id"], "title": w["title"], "kind": w["kind"]} for w in wishes.sync()]
     if settings["modules"].get("gamification", True):
         extra["achievements"] = gamification.evaluate()
     return extra

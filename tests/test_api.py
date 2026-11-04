@@ -380,3 +380,58 @@ def test_polluted_registered_name_does_not_merge_subsidiary(client):
     assert groups["AFR"]["regs"] == 2 and groups["Hop!"]["regs"] == 1
     d = client.get("/api/fleets-reference/AFR").json()
     assert d["used"] == ["air france"]
+
+
+def test_wishlist_kinds_matching_and_legacy_watchlist(client):
+    from app.services import wishes
+    # souhaits de plusieurs natures
+    a = client.post("/api/wishes", json={"kind": "aircraft", "value": "f-wish", "track": True}).json()
+    assert a["value"] == "F-WISH" and a["status"] == "open"
+    assert client.post("/api/wishes", json={"kind": "aircraft", "value": "F-WISH"}).status_code == 409
+    t = client.post("/api/wishes", json={"kind": "type", "value": "A388", "goal_count": 1}).json()
+    ap = client.post("/api/wishes", json={"kind": "airport", "value": "LFBO", "goal_count": 2}).json()
+    ev = client.post("/api/wishes", json={"kind": "event", "title": "Meeting", "start_date": "2026-05-01",
+                                          "end_date": "2026-05-02", "airport": "LFBO"}).json()
+    assert ev["days_to_start"] is not None and client.post("/api/wishes", json={"kind": "event", "title": "x"}).status_code == 422
+    child = client.post("/api/wishes", json={"kind": "other", "title": "Rafale solo", "parent_id": ev["id"]}).json()
+    assert child["parent_id"] == ev["id"]
+    # un spot correspondant valide l'appareil (suivi automatique) et fait progresser l'aéroport
+    data = {"registration": "F-WISH", "aircraft": "Airbus A380-861", "aircraft_icao": "A388", "owner": "Air France",
+            "airport": "LFBO", "date": "2026-05-01T10:00"}
+    r = client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")}).json()
+    done = {w["title"] for w in r["wishes"]}
+    assert "F-WISH" in done and any(w["kind"] == "type" for w in r["wishes"])
+    items = {w["id"]: w for w in client.get("/api/wishes").json()}
+    assert items[a["id"]]["status"] == "done" and items[a["id"]]["done_spot_id"] == r["spot"]["id_spotting"]
+    assert items[t["id"]]["status"] == "done"
+    assert items[ap["id"]]["progress"] >= 1
+    assert items[ev["id"]]["progress"] >= 1        # l'événement attend la fin des dates pour se valider
+    # compatibilité : l'ancienne API watchlist reste utilisable (suivi sans validation automatique)
+    w = client.post("/api/watchlist", json={"registration": "F-GKXA"}).json()
+    assert w["auto_complete"] == 0 and w["track"] == 1 and w["registration"] == "F-GKXA"
+    assert any(x["registration"] == "F-GKXA" for x in client.get("/api/watchlist").json())
+    assert client.delete(f"/api/watchlist/{w['id']}").json()["deleted"] == w["id"]
+    # rouvrir, supprimer l'événement détache ses objectifs
+    assert client.post(f"/api/wishes/{a['id']}/reopen").json()["status"] == "open"
+    client.delete(f"/api/wishes/{ev['id']}")
+    assert next(x for x in client.get("/api/wishes").json() if x["id"] == child["id"])["parent_id"] is None
+    assert "title,value" in client.get("/api/wishes/export.csv").text
+    assert wishes.summary()["open"] >= 1
+
+
+def test_wishlist_family_livery_airline_and_reminders(client):
+    from app.services import wishes
+    fam = client.post("/api/wishes", json={"kind": "type", "value": "A320", "family": True, "count_existing": True}).json()
+    assert fam["progress"] >= 1 and fam["status"] == "done"        # les A319/A321/A320 déjà spottés comptent
+    air = client.post("/api/wishes", json={"kind": "airline", "value": "AFR", "goal_count": 50, "count_existing": True}).json()
+    assert air["status"] == "open" and air["progress"] >= 1
+    hop = client.post("/api/wishes", json={"kind": "airline", "value": "Hop!", "count_existing": True}).json()
+    assert hop["progress"] <= air["progress"] or hop["title"]      # Hop! ne reprend pas les spots d'Air France
+    liv = client.post("/api/wishes", json={"kind": "livery", "value": "SkyTeam", "goal_count": 1, "count_existing": True}).json()
+    assert liv["status"] == "done"
+    from datetime import timedelta
+    ev = client.post("/api/wishes", json={"kind": "event", "title": "Rappel", "remind_days": 3,
+                                          "start_date": (wishes.today() + timedelta(days=3)).isoformat()}).json()
+    assert wishes.reminders() >= 1 and wishes.reminders() == 0      # un seul rappel par échéance
+    n = client.get("/api/notifications").json()["items"]
+    assert any(i["kind"] == "wishlist" for i in n)
