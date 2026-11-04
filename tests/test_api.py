@@ -349,3 +349,34 @@ def test_refdb_merge_opensky_and_local_fleet(client, tmp_path):
     r = client.post("/api/fleets/build-local", json={}).json()
     assert r["airlines"] >= 1
     refdb.delete()
+
+
+def test_subsidiary_not_merged_with_parent_airline(client):
+    """Hop! (code AFR hérité de la maison mère) ne doit pas être compté comme Air France."""
+    for reg, owner in (("F-GKXA", "Air France"), ("F-GKXB", "AIR FRANCE S.A."), ("F-HBXC", "Hop!")):
+        data = {"registration": reg, "aircraft": "Airbus A320", "aircraft_icao": "A320", "owner": owner,
+                "airline_icao": "AFR", "date": "2026-05-01T10:00"}
+        r = client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")})
+        assert r.status_code == 200, r.text
+    from app.services import operators
+    operators.reset_cache()
+    groups = {g["key"]: g for g in client.get("/api/fleets").json()}
+    assert groups["AFR"]["regs"] == 2 and groups["Hop!"]["regs"] == 1
+    airlines = {a["v"]: a["n"] for a in client.get("/api/spots/facets").json()["airlines"]}
+    assert airlines["AFR"] == 2 and airlines["Hop!"] == 1
+    assert len(client.get("/api/spots", params={"airline": "Hop!"}).json()["items"]) == 1
+    assert len(client.get("/api/spots", params={"airline": "AFR"}).json()["items"]) == 2
+    top = {a["k"]: a["n"] for a in client.get("/api/stats").json()["top_airlines"]}
+    assert top["AFR"] == 2 and top["Hop!"] == 1
+
+
+def test_polluted_registered_name_does_not_merge_subsidiary(client):
+    """Un nom enregistré à tort (« Hop! » pour AFR) ne doit plus fusionner les deux compagnies."""
+    from app.core import execute
+    from app.services import operators
+    execute("INSERT INTO airlines(key, icao, name) VALUES('AFR','AFR','Hop!') ON CONFLICT(key) DO UPDATE SET name='Hop!'")
+    operators.reset_cache()
+    groups = {g["key"]: g for g in client.get("/api/fleets").json()}
+    assert groups["AFR"]["regs"] == 2 and groups["Hop!"]["regs"] == 1
+    d = client.get("/api/fleets-reference/AFR").json()
+    assert d["used"] == ["air france"]

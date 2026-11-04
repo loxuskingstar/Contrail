@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..core import db, execute, get_config, now_iso, q, q1
-from ..services import actypes, refdb
+from ..services import actypes, operators, refdb
 from ..services import aircraft as ac
 from ..services import registration as regs
 
@@ -21,14 +21,23 @@ MAX_PAGES = 80             # garde-fou : 4 000 appareils avec une clé gratuite
 
 
 def _airline_groups() -> list[dict]:
-    return q("SELECT COALESCE(airline_icao, owner) AS key, MAX(airline_icao) icao, MAX(owner) name, COUNT(*) spots, "
+    return q("SELECT opg(airline_icao, owner) AS key, MAX(airline_icao) icao, MAX(owner) name, COUNT(*) spots, "
              "COUNT(DISTINCT registration) regs, MAX(date) last FROM spotting "
-             "WHERE COALESCE(airline_icao, owner) IS NOT NULL AND military = 0 GROUP BY key ORDER BY regs DESC")
+             "WHERE opg(airline_icao, owner) IS NOT NULL AND military = 0 GROUP BY key ORDER BY regs DESC")
 
 
 def _active_fleet(key: str) -> str:
     return ("FROM fleets f WHERE f.airline_key = ? AND NOT EXISTS (SELECT 1 FROM fleet_exclusions x "
             "WHERE x.airline_key = f.airline_key AND x.registration = f.registration)")
+
+
+@router.get("/api/fleets-reference/{icao}")
+def fleet_reference(icao: str):
+    """Diagnostic : noms de référence retenus pour un code OACI et groupes obtenus."""
+    icao = icao.upper()
+    operators.reset_cache()
+    return {"icao": icao, "sources": operators.sources(icao), "used": sorted(operators._refs(icao)),
+            "groups": q("SELECT opg(airline_icao, owner) k, owner, COUNT(*) n FROM spotting WHERE airline_icao = ? GROUP BY k, owner", (icao,))}
 
 
 @router.get("/api/fleets")
@@ -46,7 +55,10 @@ def fleets_overview():
         m = meta.get(k, {})
         st = stats.get(k) or {}
         size, seen = st.get("n"), st.get("seen") or 0
-        out.append({**g, "name": m.get("name") or g.get("name") or k, "iata": m.get("iata"), "fleet_size": size,
+        reg_name = m.get("name")
+        if reg_name and g.get("name") and re.fullmatch(r"[A-Z]{3}", k) and not operators.same_operator(reg_name, k, k):
+            reg_name = None   # nom enregistré par une ancienne version (libellé d'un groupe fusionné)
+        out.append({**g, "name": reg_name or g.get("name") or k, "iata": m.get("iata"), "fleet_size": size,
                     "fleet_seen": seen, "completion": round(seen / size, 4) if size else None,
                     "fleet_source": m.get("fleet_source"), "fleet_fetched_at": m.get("fleet_fetched_at")})
     return out
@@ -73,14 +85,14 @@ def fleet_detail(key: str):
                  "ORDER BY f.registration", (key,))
     spotted = q("SELECT registration, MAX(aircraft) aircraft, MAX(aircraft_icao) aircraft_icao, COUNT(*) n, MAX(date) last, "
                 "(SELECT thumb FROM spotting s2 WHERE s2.registration = s.registration AND thumb IS NOT NULL ORDER BY date DESC LIMIT 1) thumb "
-                "FROM spotting s WHERE COALESCE(airline_icao, owner) = ? GROUP BY registration ORDER BY aircraft, registration", (key,))
+                "FROM spotting s WHERE opg(airline_icao, owner) = ? GROUP BY registration ORDER BY aircraft, registration", (key,))
     by_type: dict = {}
     for f in fleet:
         b = by_type.setdefault(f["family"], {"type": f["family"], "code": f.get("aircraft_icao"), "total": 0, "seen": 0})
         b["total"] += 1
         b["seen"] += 1 if f["spotted"] else 0
     name = (meta.get("name")
-            or (q1("SELECT MAX(owner) n FROM spotting WHERE COALESCE(airline_icao, owner) = ?", (key,)) or {}).get("n") or key)
+            or (q1("SELECT MAX(owner) n FROM spotting WHERE opg(airline_icao, owner) = ?", (key,)) or {}).get("n") or key)
     in_ref = 0
     if refdb.available():
         known = {f["registration"] for f in fleet} | {x["registration"] for x in excluded}
@@ -179,7 +191,7 @@ def fleet_fetch(key: str, opts: FetchOptions | None = None):
 def _names_for(key: str, meta: dict, name: str | None) -> list[str]:
     """Noms sous lesquels la compagnie peut figurer dans la base (nom retenu, propriétaires saisis dans les spots)."""
     names = {n for n in (meta.get("name"), name) if n}
-    names |= {r["owner"] for r in q("SELECT DISTINCT owner FROM spotting WHERE COALESCE(airline_icao, owner) = ? AND owner IS NOT NULL", (key,))}
+    names |= {r["owner"] for r in q("SELECT DISTINCT owner FROM spotting WHERE opg(airline_icao, owner) = ? AND owner IS NOT NULL", (key,))}
     if not re.fullmatch(r"[A-Z]{3}", key):
         names.add(key)
     return sorted(names)
@@ -190,6 +202,9 @@ def _local_matches(key: str, meta: dict, name: str | None, include_light: bool =
     out = []
     for r in refdb.by_operator(_names_for(key, meta, name), icao):
         if not r.get("registration"):
+            continue
+        # Une filiale rattachée au même code (Hop! sous AFR) n'entre pas dans la flotte de la maison mère
+        if icao and not operators.same_operator(r.get("ownop"), key, icao):
             continue
         if not include_light and actypes.classify(r.get("typecode"), None, r.get("description")) in actypes.LIGHT_CLASSES:
             continue
