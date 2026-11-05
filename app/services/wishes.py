@@ -42,7 +42,7 @@ class Spots:
     """Spots chargés une fois par évaluation, avec les clés dérivées mises en cache."""
 
     def __init__(self) -> None:
-        self.rows = q("SELECT id_spotting id, registration, aircraft, aircraft_icao, owner, airline_icao, livery, airport, "
+        self.rows = q("SELECT id_spotting id, registration, test_registration, aircraft, aircraft_icao, owner, airline_icao, livery, airport, "
                       "thumb, COALESCE(date, created_at) d, created_at c FROM spotting")
         self._airline: dict[int, str | None] = {}
         self._family: dict[int, str | None] = {}
@@ -69,7 +69,7 @@ def matches(w: dict, s: dict, ctx: Spots) -> bool:
     if w.get("since") and (s["c"] or s["d"] or "")[:10] < w["since"][:10]:   # « enregistrés depuis » : date de saisie
         return False
     if kind == "aircraft":
-        return (s["registration"] or "").upper() == val.upper()
+        return val.upper() in ((s["registration"] or "").upper(), (s.get("test_registration") or "").upper())
     if kind == "type":
         code = (s["aircraft_icao"] or "").upper()
         if w.get("family"):

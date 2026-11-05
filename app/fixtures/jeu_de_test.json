@@ -487,6 +487,7 @@
    "airline_icao": null,
    "livery": "Primer",
    "flight_type": "test",
+   "test_registration": "F-WWCF",
    "military": 0,
    "airport": "LFBO",
    "days_ago": 104,

@@ -22,7 +22,7 @@ FLIGHT_TYPES = ["commercial", "cargo", "test", "delivery", "ferry", "military", 
                 "helicopter", "medical", "training", "airshow", "government", "other"]
 
 EDITABLE = ("registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner", "airline_icao",
-            "livery", "military", "flight_type", "date", "airport", "location_id", "lat", "lng",
+            "livery", "military", "flight_type", "test_registration", "date", "airport", "location_id", "lat", "lng",
             "description", "icao24", "favorite", "rating", "camera", "lens", "focal", "aperture", "iso",
             "shutter")
 
@@ -43,8 +43,9 @@ def build_filters(f: dict) -> tuple[str, list]:
     if f.get("search"):
         like = f"%{f['search'].strip()}%"
         where.append("(s.registration LIKE ? OR s.aircraft LIKE ? OR s.aircraft_icao LIKE ? OR s.owner LIKE ? "
-                     "OR s.airport LIKE ? OR s.livery LIKE ? OR s.description LIKE ? OR s.msn LIKE ? OR s.date LIKE ?)")
-        params += [like] * 9
+                     "OR s.airport LIKE ? OR s.livery LIKE ? OR s.description LIKE ? OR s.msn LIKE ? OR s.date LIKE ? "
+                     "OR s.test_registration LIKE ?)")
+        params += [like] * 10
     for key, col in (("registration", "s.registration"), ("airport", "s.airport"), ("country", "s.country"),
                      ("flight_type", "s.flight_type"), ("camera", "s.camera"), ("lens", "s.lens"),
                      ("livery_category", "s.livery_category")):
@@ -73,7 +74,7 @@ def build_filters(f: dict) -> tuple[str, list]:
         where.append("s.date <= ?")
         params.append(f["date_to"] + "T23:59")
     if f.get("special"):
-        where.append("s.livery_category IS NOT NULL AND s.livery_category <> 'primer'")
+        where.append("s.livery_category IS NOT NULL AND s.livery_category NOT IN ('primer', 'white')")
     if f.get("military") is not None and f.get("military") != "":
         where.append("s.military = ?")
         params.append(int(f["military"]))
@@ -180,7 +181,7 @@ def spots_map(
         if r["date"]:
             p["last"] = max(p["last"] or r["date"], r["date"])
             p["first"] = min(p["first"] or r["date"], r["date"])
-        p["special"] += 1 if r["livery_category"] not in (None, "primer") else 0
+        p["special"] += 1 if r["livery_category"] not in (None, "primer", "white") else 0
         p["military"] += 1 if r["military"] else 0
         tkey = r["aircraft_icao"] or r["aircraft"]
         if tkey:
@@ -191,7 +192,7 @@ def spots_map(
             a = p["_regs"][r["registration"]] = {
                 "registration": r["registration"], "id_spotting": r["id_spotting"], "aircraft": r["aircraft"],
                 "aircraft_icao": r["aircraft_icao"], "owner": r["owner"], "date": r["date"], "thumb": r["thumb"],
-                "n": 0, "special": r["livery_category"] not in (None, "primer"), "favorite": False}
+                "n": 0, "special": r["livery_category"] not in (None, "primer", "white"), "favorite": False}
         a["n"] += 1
         a["thumb"] = a["thumb"] or r["thumb"]
         a["favorite"] = a["favorite"] or bool(r["favorite"])
@@ -314,6 +315,11 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
                 out[k] = None
     if "msn" in out and out["msn"] is not None:
         out["msn"] = str(out["msn"])
+    # Immatriculation d'essai : normalisée, et conservée seulement pour un « Vol d'essai »
+    if "test_registration" in out:
+        out["test_registration"] = regs.normalize(out["test_registration"]) or None if out["test_registration"] else None
+    if out.get("flight_type") and out["flight_type"] != "test":
+        out["test_registration"] = None
     if "livery" in out:
         out["livery_category"] = collection.livery_category(out["livery"])
         # Un avion en primer est un avion d'essai : le type de vol « Vol d'essai » est proposé s'il n'est pas renseigné

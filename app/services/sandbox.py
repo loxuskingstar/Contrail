@@ -50,7 +50,7 @@ def load_fixture() -> dict:
 
     for s in data.get("spots", []):
         payload = {k: s.get(k) for k in ("registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner",
-                                         "airline_icao", "livery", "flight_type", "military", "airport", "description",
+                                         "airline_icao", "livery", "flight_type", "test_registration", "military", "airport", "description",
                                          "camera", "lens", "focal", "aperture", "iso", "shutter", "favorite", "rating")}
         payload["date"] = _local_iso(s.get("days_ago", 0), s.get("time", "12:00"))
         if s.get("location") in loc_ids:

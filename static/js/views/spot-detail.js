@@ -61,7 +61,7 @@ export async function render(root, params) {
           <dl class="kv" style="margin:0">
             ${kv(t('spot.type_code'), s.aircraft_icao)}${kv(t('spot.manufacturer'), s.manufacturer)}${kv(t('spot.msn'), s.msn)}
             ${kv(t('spot.airline_icao'), s.airline_icao)}${kv(t('spot.country'), s.country ? `${flag(s.country)} ${countryName(s.country)}` : '')}
-            ${kv('Mode-S', s.icao24 ? s.icao24.toUpperCase() : '')}${kv(t('spot.flight_type'), s.flight_type ? t(`ftype.${s.flight_type}`) : '')}
+            ${kv('Mode-S', s.icao24 ? s.icao24.toUpperCase() : '')}${kv(t('spot.flight_type'), s.flight_type ? t(`ftype.${s.flight_type}`) : '')}${kv(t('spot.test_registration'), s.test_registration)}
             ${kv(t('spot.livery'), s.livery && s.livery !== 'None' ? s.livery : '')}${kv(t('spot.military'), s.military ? t('common.yes') : '')}
             ${kv(t('spot.rating'), s.rating ? '★'.repeat(s.rating) : '')}
           </dl>

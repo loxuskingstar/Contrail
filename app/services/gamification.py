@@ -41,6 +41,7 @@ SERIES: list[tuple[str, str, list[int], str, str, list[str] | None]] = [
     ("liveries", "special_liveries", [1, 5, 10, 25, 50, 100], "✨", "collection", None),
     ("livery_kinds", "livery_kinds", [3, 5], "🎭", "collection", ["silver", "gold"]),
     ("primer", "primers", [1, 3, 5, 10, 20], "🟩", "collection", None),
+    ("white", "whites", [1, 3, 5, 10, 20], "⬜", "collection", None),
     ("military", "military", [1, 10, 50, 100, 250], "🎖️", "collection", None),
     ("heavies", "heavies", [1, 10, 50, 100, 250], "🐋", "collection", None),
     ("queens", "queens", [1, 5, 25], "👑", "collection", ["silver", "gold", "platinum"]),
@@ -154,9 +155,10 @@ def metrics() -> dict[str, float]:
         "COUNT(DISTINCT CASE WHEN military = 0 THEN opg(airline_icao, owner) END) airlines, "
         "COUNT(DISTINCT NULLIF(airport,'')) airports, COUNT(DISTINCT country) countries, "
         "COUNT(DISTINCT NULLIF(manufacturer,'')) manufacturers, "
-        "SUM(CASE WHEN livery_category IS NOT NULL AND livery_category <> 'primer' THEN 1 ELSE 0 END) special_liveries, "
-        "COUNT(DISTINCT CASE WHEN livery_category <> 'primer' THEN livery_category END) livery_kinds, "
+        "SUM(CASE WHEN livery_category IS NOT NULL AND livery_category NOT IN ('primer', 'white') THEN 1 ELSE 0 END) special_liveries, "
+        "COUNT(DISTINCT CASE WHEN livery_category NOT IN ('primer', 'white') THEN livery_category END) livery_kinds, "
         "COUNT(DISTINCT CASE WHEN livery_category = 'primer' THEN registration END) primers, "
+        "COUNT(DISTINCT CASE WHEN livery_category = 'white' THEN registration END) whites, "
         "COUNT(DISTINCT CASE WHEN military = 1 THEN registration END) military, "
         "SUM(CASE WHEN sun_elevation < -6 THEN 1 ELSE 0 END) night, "
         "SUM(CASE WHEN sun_elevation BETWEEN -4 AND 8 THEN 1 ELSE 0 END) golden, "

@@ -12,7 +12,7 @@
 "nav.shares": "Sharing",
 "nav.settings": "Settings",
 "nav.more": "More",
-"nav.liveries": "Special liveries",
+"nav.liveries": "Liveries",
 "nav.drafts": "Drafts",
 "nav.airframe": "Airframe page",
 "nav.g.collection": "Collection",
@@ -1364,5 +1364,33 @@
 "ach.s.primer.desc": {
 "one": "One primer aircraft spotted",
 "other": "{n} different primer aircraft"
-}
+},
+"livery.white": "White",
+"livery.white_chip": "White",
+"livery.white_hint": "Aircraft delivered all white (white tails, lessor aircraft). Counted separately from special liveries.",
+"badge.white": "White",
+"ach.s.white.name": "White out",
+"ach.s.white.desc": {
+"one": "One all-white aircraft spotted",
+"other": "{n} different all-white aircraft"
+},
+"spot.test_registration": "Test registration",
+"spot.test_registration_ph": "e.g. F-WWCF",
+"spot.test_registration_hint": "Temporary registration worn during test flights. The final registration, if known, stays in the “Registration” field.",
+"import.f_test_registration": "Test registration",
+"storage.title": "Storage",
+"storage.database": "Database",
+"storage.refdb": "Reference database",
+"storage.images": "Photos",
+"storage.thumbs": "Thumbnails",
+"storage.originals": "Originals",
+"storage.audio": "Audio",
+"storage.backups": "Backups",
+"storage.avg": "Average photo: {n} ({spots} photos).",
+"storage.refdb_hint": "The aircraft reference database takes up most of the space; it can be deleted and downloaded again at any time.",
+"storage.optimize": "Check and optimise the database",
+"storage.purge": "Delete {n} orphan files ({size})",
+"storage.purge_confirm": "Permanently delete {n} files that are not attached to any spot?",
+"storage.done": "Database checked: {before} → {after}. Orphan files removed: {n}.",
+"storage.corrupt": "The database failed its integrity check: nothing was changed. Restore a backup."
 }

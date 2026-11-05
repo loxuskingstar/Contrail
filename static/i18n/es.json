@@ -12,7 +12,7 @@
 "nav.shares": "Compartir",
 "nav.settings": "Ajustes",
 "nav.more": "Más",
-"nav.liveries": "Libreas especiales",
+"nav.liveries": "Libreas",
 "nav.drafts": "Borradores",
 "nav.airframe": "Ficha del avión",
 "nav.g.collection": "Colección",
@@ -1364,5 +1364,33 @@
 "ach.s.primer.desc": {
 "one": "Un avión en primer avistado",
 "other": "{n} aviones en primer distintos"
-}
+},
+"livery.white": "Blanca",
+"livery.white_chip": "Blanca",
+"livery.white_hint": "Aviones entregados totalmente blancos (white tail, aviones de arrendadores). Se cuentan aparte de las libreas especiales.",
+"badge.white": "Blanca",
+"ach.s.white.name": "Todo blanco",
+"ach.s.white.desc": {
+"one": "Un avión con librea blanca avistado",
+"other": "{n} aviones con librea blanca distintos"
+},
+"spot.test_registration": "Matrícula de prueba",
+"spot.test_registration_ph": "p. ej. F-WWCF",
+"spot.test_registration_hint": "Matrícula temporal que lleva durante los vuelos de prueba. La matrícula definitiva, si se conoce, queda en el campo «Matrícula».",
+"import.f_test_registration": "Matrícula de prueba",
+"storage.title": "Almacenamiento",
+"storage.database": "Base de datos",
+"storage.refdb": "Base de referencia",
+"storage.images": "Fotos",
+"storage.thumbs": "Miniaturas",
+"storage.originals": "Originales",
+"storage.audio": "Audio",
+"storage.backups": "Copias de seguridad",
+"storage.avg": "Foto media: {n} ({spots} fotos).",
+"storage.refdb_hint": "La base de referencia de aeronaves ocupa casi todo el espacio; puede borrarse y volver a descargarse en cualquier momento.",
+"storage.optimize": "Comprobar y optimizar la base",
+"storage.purge": "Eliminar {n} archivos huérfanos ({size})",
+"storage.purge_confirm": "¿Eliminar definitivamente {n} archivos que no pertenecen a ningún avistamiento?",
+"storage.done": "Base comprobada: {before} → {after}. Archivos huérfanos eliminados: {n}.",
+"storage.corrupt": "La base no superó la comprobación de integridad: no se ha modificado nada. Restaure una copia."
 }

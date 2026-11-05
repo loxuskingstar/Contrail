@@ -31,8 +31,9 @@ def stats(year: str = ""):
         f"COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
         f"COUNT(DISTINCT opg(airline_icao, owner)) airlines, COUNT(DISTINCT NULLIF(airport,'')) airports, "
         f"COUNT(DISTINCT country) countries, SUM(CASE WHEN image IS NOT NULL THEN 1 ELSE 0 END) photos, "
-        f"SUM(CASE WHEN livery_category IS NOT NULL AND livery_category <> 'primer' THEN 1 ELSE 0 END) special_liveries, "
+        f"SUM(CASE WHEN livery_category IS NOT NULL AND livery_category NOT IN ('primer', 'white') THEN 1 ELSE 0 END) special_liveries, "
         f"COUNT(DISTINCT CASE WHEN livery_category = 'primer' THEN registration END) primers, "
+        f"COUNT(DISTINCT CASE WHEN livery_category = 'white' THEN registration END) whites, "
         f"SUM(military) military, COUNT(DISTINCT substr(date,1,10)) days, "
         f"SUM(CASE WHEN atc_audio IS NOT NULL THEN 1 ELSE 0 END) audio FROM spotting WHERE {w}", p)
 
@@ -235,7 +236,7 @@ def liveries():
     groups: dict = {}
     for r in rows:
         groups.setdefault(r["livery_category"], []).append(r)
-    order = ["retro", "alliance", "commemorative", "logojet", "cause", "special", "primer"]
+    order = ["retro", "alliance", "commemorative", "logojet", "cause", "special", "primer", "white"]
     return [{"category": c, "items": groups[c], "count": len(groups[c]),
              "unique": len({i["registration"] for i in groups[c]})} for c in order if c in groups]
 

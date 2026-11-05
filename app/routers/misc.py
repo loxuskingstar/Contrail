@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from ..core import (APP_VERSION, ENV_KEYS, config_source, db, execute, get_config, get_settings, q, q1,
                     safe_media_path, save_config, set_settings)
-from ..services import aircraft, gamification, geo, media
+from ..services import aircraft, gamification, geo, media, storage
 from ..services import registration as regs
 
 router = APIRouter(tags=["misc"])
@@ -16,6 +16,20 @@ router = APIRouter(tags=["misc"])
 @router.get("/api/health")
 def health():
     return {"ok": True, "version": APP_VERSION}
+
+
+class MaintenanceIn(BaseModel):
+    purge_orphans: bool = False
+
+
+@router.get("/api/storage")
+def storage_report():
+    return storage.report()
+
+
+@router.post("/api/maintenance")
+def maintenance(body: MaintenanceIn | None = None):
+    return storage.maintain(bool(body and body.purge_orphans))
 
 
 # --------------------------------------------------------------------------- #

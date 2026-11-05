@@ -40,6 +40,7 @@ SPOT_SYNONYMS = {
     "tags": ["tags", "étiquettes", "etiquettes", "keywords", "labels", "etiquetas", "タグ"],
     "military": ["military", "militaire", "militar"],
     "flight_type": ["flight type", "type de vol", "tipo de vuelo"],
+    "test_registration": ["test registration", "test reg", "immat d'essai", "immatriculation d'essai", "matrícula de prueba"],
 }
 
 FLIGHT_SYNONYMS = {
@@ -206,6 +207,7 @@ def import_commit(bg: BackgroundTasks, token: str = Form(...), kind: str = Form(
                     "date": parse_date(get(row, "date"), get(row, "time"), dayfirst),
                     "description": get(row, "description") or None,
                     "flight_type": get(row, "flight_type") or None,
+                    "test_registration": get(row, "test_registration") or None,
                     "military": get(row, "military").lower() in ("1", "true", "yes", "oui", "x", "sí", "si"),
                 }
                 out = prepare(data)
@@ -272,7 +274,7 @@ def import_commit(bg: BackgroundTasks, token: str = Form(...), kind: str = Form(
 # Export
 # --------------------------------------------------------------------------- #
 SPOT_EXPORT = ["id_spotting", "registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner",
-               "airline_icao", "livery", "livery_category", "military", "flight_type", "date", "date_utc", "airport",
+               "airline_icao", "livery", "livery_category", "military", "flight_type", "test_registration", "date", "date_utc", "airport",
                "lat", "lng", "country", "description", "favorite", "rating", "camera", "lens", "focal", "aperture",
                "iso", "shutter", "metar", "image", "atc_audio", "created_at"]
 

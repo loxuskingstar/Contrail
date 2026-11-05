@@ -466,3 +466,68 @@ def test_primer_defaults_flight_type_to_test(client):
     data.update(registration="F-WZZX", flight_type="delivery")       # une valeur saisie n'est jamais écrasée
     s = client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")}).json()["spot"]
     assert s["flight_type"] == "delivery"
+
+
+def _post_spot(client, **data):
+    base = {"aircraft": "Airbus A350-900", "aircraft_icao": "A359", "date": "2026-06-03T10:00", **data}
+    return client.post("/api/spots", data={"data": json.dumps(base)}, files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")}).json()["spot"]
+
+
+def test_white_livery_is_separate_from_special_liveries(client):
+    base = client.get("/api/stats").json()["totals"]["special_liveries"]
+    for reg, liv in (("F-WHT1", "Blanche"), ("F-WHT2", "White"), ("F-WHT3", "Livrée blanche")):
+        assert _post_spot(client, registration=reg, livery=liv)["livery_category"] == "white"
+    assert _post_spot(client, registration="F-WHT4", livery="Blanche et rouge")["livery_category"] != "white"   # pas un simple « blanc »
+    assert client.get("/api/stats").json()["totals"]["special_liveries"] == base + 1                              # seule la 4e compte
+    ids = {s["registration"] for s in client.get("/api/spots", params={"livery_category": "white"}).json()["items"]}
+    assert {"F-WHT1", "F-WHT2", "F-WHT3"} <= ids
+    assert "white" in {g["category"] for g in client.get("/api/liveries").json()}
+
+
+def test_test_registration_only_for_test_flights(client):
+    s = _post_spot(client, registration="F-WTR1", flight_type="test", test_registration=" f-wwcf ")
+    assert s["test_registration"] == "F-WWCF"
+    assert client.get(f"/api/spots/{s['id_spotting']}").json()["test_registration"] == "F-WWCF"
+    assert s["id_spotting"] in {x["id_spotting"] for x in client.get("/api/spots", params={"search": "WWCF"}).json()["items"]}
+    assert "F-WWCF" in client.get("/api/export/spots.csv").text
+    # le type de vol change : l'immat d'essai disparaît ; vide : elle est effacée
+    upd = client.put(f"/api/spots/{s['id_spotting']}", data={"data": json.dumps({"flight_type": "delivery", "test_registration": "F-WWCF"})}).json()
+    assert (upd.get("spot") or upd)["test_registration"] is None
+    s2 = _post_spot(client, registration="F-WTR2", flight_type="test", test_registration="F-WWDD")
+    upd = client.put(f"/api/spots/{s2['id_spotting']}", data={"data": json.dumps({"test_registration": ""})}).json()
+    assert (upd.get("spot") or upd)["test_registration"] is None
+
+
+def test_wish_on_aircraft_matches_its_test_registration(client):
+    w = client.post("/api/wishes", json={"kind": "aircraft", "value": "F-WWXY", "goal_count": 1}).json()
+    _post_spot(client, registration="F-WTR3", flight_type="test", test_registration="F-WWXY")
+    got = next(x for x in client.get("/api/wishes").json() if x["id"] == w["id"])
+    assert got["status"] == "done"
+
+
+def test_storage_report_and_maintenance(client):
+    from app.core import DIRS
+    r = client.get("/api/storage").json()
+    assert r["total"] > 0 and r["parts"]["images"]["files"] >= 1 and r["spots"] >= 1
+    assert r["orphans"]["files"] == 0
+    import os as _os, time as _t
+    stray = DIRS["images"] / "orphelin-test.webp"
+    stray.write_bytes(b"x" * 2048)
+    fresh = DIRS["images"] / "envoi-en-cours.webp"
+    fresh.write_bytes(b"y" * 10)
+    _os.utime(stray, (_t.time() - 7200, _t.time() - 7200))
+    assert client.get("/api/storage").json()["orphans"]["files"] == 1          # le fichier récent n'est pas signalé
+    m = client.post("/api/maintenance", json={"purge_orphans": True}).json()
+    assert m["integrity"] is True and m["orphans_removed"] == 1
+    assert not stray.exists() and fresh.exists()
+    assert client.get("/api/storage").json()["parts"]["images"]["files"] >= 1   # les photos des spots sont intactes
+    fresh.unlink()
+
+
+def test_security_headers_and_upload_cap(client, monkeypatch):
+    h = client.get("/api/health").headers
+    assert h["x-frame-options"] == "SAMEORIGIN" and "geolocation" in h["permissions-policy"]
+    import app.main as m
+    monkeypatch.setattr(m, "_MAX_UPLOAD", 50)
+    r = client.post("/api/analyze-photo", files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")})
+    assert r.status_code == 413

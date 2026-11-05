@@ -24,12 +24,23 @@ LIVERY_RULES: list[tuple[str, re.Pattern]] = [
 ]
 
 
+# Livrée entièrement blanche (avion livré « en blanc », white tail, avion de loueur) : à côté du primer, hors livrées spéciales
+WHITE_RX = re.compile(r"^\s*(livr[ée]e\s+)?((full|all|toute|totalement|enti[èe]rement)[\s-]+)?"
+                      r"(blanche?s?|white|wei(ss|ß)|blanc[ao]|白|ホワイト)(\s+(tail|livery|aircraft|queue|livr[ée]e))?\s*$|"
+                      r"\b(white[\s-]?tail|queue\s+blanche|livr[ée]e\s+blanche|all[\s-]?white|full[\s-]?white)\b", re.I)
+PLAIN = ("primer", "white")   # catégories « sans livrée » : comptées à part des livrées spéciales
+
+
 def is_primer(livery: str | None) -> bool:
     return bool(livery and PRIMER_RX.search(livery))
 
 
+def is_white(livery: str | None) -> bool:
+    return bool(livery and not is_primer(livery) and WHITE_RX.search(livery))
+
+
 def is_special_livery(livery: str | None) -> bool:
-    if not livery or is_primer(livery):
+    if not livery or is_primer(livery) or is_white(livery):
         return False
     return livery.strip().lower() not in ("", "none", "standard", "classique", "classic livery", "normal", "-")
 
@@ -37,6 +48,8 @@ def is_special_livery(livery: str | None) -> bool:
 def livery_category(livery: str | None) -> str | None:
     if is_primer(livery):
         return "primer"
+    if is_white(livery):
+        return "white"
     if not is_special_livery(livery):
         return None
     for cat, rx in LIVERY_RULES:
@@ -94,6 +107,8 @@ def badges_for(spot: dict, ctx: dict) -> list[dict]:
         b.append({"code": "most_spotted", "n": n})
     if is_primer(spot.get("livery")):
         b.append({"code": "primer"})
+    elif is_white(spot.get("livery")):
+        b.append({"code": "white"})
     elif is_special_livery(spot.get("livery")):
         b.append({"code": "special_livery", "cat": spot.get("livery_category") or "special"})
     if reg in ctx["flown"]:

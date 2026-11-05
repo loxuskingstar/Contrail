@@ -239,7 +239,13 @@ INSERT INTO wishes(kind, title, value, note, priority, status, auto_complete, tr
            last_status, airborne, created_at, created_at FROM watchlist;
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3]
+SCHEMA_V4 = """
+-- Immatriculation d'essai (ex. F-WWCF) portée par un avion pendant ses vols d'essai, avant son immatriculation définitive
+ALTER TABLE spotting ADD COLUMN test_registration TEXT;
+CREATE INDEX IF NOT EXISTS idx_spot_testreg ON spotting(test_registration);
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4]
 
 
 def init_db() -> None:

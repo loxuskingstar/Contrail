@@ -166,6 +166,7 @@ export async function render(root, params) {
             <td style="text-align:right"><a class="btn-icon" href="/api/backups/${encodeURIComponent(x.name)}" download>${icon('download', '', 18)}</a><button class="btn-icon" data-delb="${esc(x.name)}">${icon('trash-2', '', 18)}</button></td></tr>`).join('')}</tbody></table>`
             : `<p class="small muted">${esc(t('settings.no_backup'))}</p>`}
         </div>
+        <div class="card stack" data-storage><div class="card-title">${icon('hard-drive', '', 15)} ${esc(t('storage.title'))}</div><div class="skeleton" style="height:90px"></div></div>
         <div class="card stack"><div class="card-title">${esc(t('settings.import'))}</div>
           <p class="small muted">${esc(t('settings.import_d'))}</p>
           <div class="row wrap"><button class="btn" data-imp="spots">${icon('camera', '', 18)} ${esc(t('settings.import_spots'))}</button>
@@ -177,6 +178,7 @@ export async function render(root, params) {
           <p class="tiny muted">${esc(t('settings.export_d'))}</p></div>
         <div class="card"><a class="row" href="#/drafts">${icon('cloud-upload', '', 20)}<span class="grow">${esc(t('nav.drafts'))}</span>${icon('chevron-right')}</a></div>
       </div>`;
+      storageCard(body.querySelector('[data-storage]'));
       body.querySelector('[data-tenter]')?.addEventListener('click', (e) => { e.currentTarget.disabled = true; switchSession('test'); });
       body.querySelector('[data-tquit]')?.addEventListener('click', () => switchSession('main'));
       body.querySelector('[data-treset]')?.addEventListener('click', resetTestSession);
@@ -329,6 +331,41 @@ async function refdbCard(box) {
     });
     clearTimeout(timer);
     if (st.running) timer = setTimeout(draw, 1500);
+  };
+  draw();
+}
+
+
+// ------------------------------------------------------------------ occupation disque et maintenance
+const mo = (n) => (n >= 1e9 ? `${fmtNum(Math.round(n / 1e8) / 10)} Go` : n >= 1e5 ? `${fmtNum(Math.round(n / 1e5) / 10)} Mo` : `${fmtNum(Math.max(0, Math.round(n / 1e3)))} Ko`);
+
+async function storageCard(box) {
+  const draw = async () => {
+    const r = await api('/api/storage').catch(() => null);
+    if (!r || !box.isConnected) return;
+    const rows = ['database', 'refdb', 'images', 'thumbs', 'originals', 'audio', 'backups']
+      .map((k) => [k, r.parts[k]]).filter(([k, v]) => v && (v.bytes || ['database', 'images'].includes(k)))
+      .sort((a, b) => b[1].bytes - a[1].bytes);
+    const max = Math.max(1, ...rows.map(([, v]) => v.bytes));
+    box.innerHTML = `<div class="card-title">${icon('hard-drive', '', 15)} ${esc(t('storage.title'))}<span class="muted">${esc(mo(r.total))}</span></div>
+      ${rows.map(([k, v]) => `<div class="row" style="gap:10px"><span class="small" style="width:118px">${esc(t(`storage.${k}`))}</span>
+        <span class="grow" style="height:8px;border-radius:4px;background:var(--surface-2,#8881);overflow:hidden"><i style="display:block;height:100%;width:${Math.max(2, Math.round((v.bytes / max) * 100))}%;background:var(--accent)"></i></span>
+        <span class="small" style="width:70px;text-align:right">${esc(mo(v.bytes))}</span></div>`).join('')}
+      <p class="tiny muted">${esc(t('storage.avg', { n: mo(r.avg_image), spots: fmtNum(r.with_image) }))}${r.parts.refdb.bytes > r.total / 2 ? ` ${esc(t('storage.refdb_hint'))}` : ''}</p>
+      <div class="row wrap"><button class="btn" data-opt>${icon('wand-sparkles', '', 18)} ${esc(t('storage.optimize'))}</button>
+        ${r.orphans.files ? `<button class="btn" data-purge>${icon('trash-2', '', 18)} ${esc(t('storage.purge', { n: fmtNum(r.orphans.files), size: mo(r.orphans.bytes) }))}</button>` : ''}</div>`;
+    const run = async (purge, btn) => {
+      btn.disabled = true;
+      try {
+        const m = await api('/api/maintenance', { method: 'POST', body: { purge_orphans: purge } });
+        toast(esc(m.integrity ? t('storage.done', { before: mo(m.db_before), after: mo(m.db_after), n: fmtNum(m.orphans_removed) }) : t('storage.corrupt')), { type: m.integrity ? 'success' : 'error', duration: 7000 });
+      } catch (e) { errorToast(e); }
+      draw();
+    };
+    box.querySelector('[data-opt]').onclick = (e) => run(false, e.currentTarget);
+    box.querySelector('[data-purge]')?.addEventListener('click', async (e) => {
+      if (await confirmDialog(esc(t('storage.purge_confirm', { n: fmtNum(r.orphans.files) })), { danger: true })) run(true, e.currentTarget);
+    });
   };
   draw();
 }

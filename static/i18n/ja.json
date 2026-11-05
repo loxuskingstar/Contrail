@@ -12,7 +12,7 @@
 "nav.shares": "共有",
 "nav.settings": "設定",
 "nav.more": "その他",
-"nav.liveries": "特別塗装",
+"nav.liveries": "塗装",
 "nav.drafts": "下書き",
 "nav.airframe": "機体ページ",
 "nav.g.collection": "コレクション",
@@ -1193,5 +1193,33 @@
 "ach.s.primer.desc": {
 "one": "プライマー機を1機撮影",
 "other": "異なるプライマー機を {n} 機撮影"
-}
+},
+"livery.white": "ホワイト",
+"livery.white_chip": "ホワイト",
+"livery.white_hint": "全面白で納入された機体（ホワイトテール、リース機）。特別塗装とは別に集計されます。",
+"badge.white": "ホワイト",
+"ach.s.white.name": "真っ白",
+"ach.s.white.desc": {
+"one": "白塗装の機体を1機記録",
+"other": "白塗装の機体{n}機"
+},
+"spot.test_registration": "試験用登録記号",
+"spot.test_registration_ph": "例: F-WWCF",
+"spot.test_registration_hint": "試験飛行中に付けられる仮の登録記号です。正式な登録記号が分かっている場合は「登録記号」欄に入力してください。",
+"import.f_test_registration": "試験用登録記号",
+"storage.title": "ストレージ",
+"storage.database": "データベース",
+"storage.refdb": "参照データベース",
+"storage.images": "写真",
+"storage.thumbs": "サムネイル",
+"storage.originals": "オリジナル",
+"storage.audio": "音声",
+"storage.backups": "バックアップ",
+"storage.avg": "写真の平均サイズ: {n}（{spots} 枚）。",
+"storage.refdb_hint": "機体の参照データベースが容量の大半を占めています。いつでも削除して再ダウンロードできます。",
+"storage.optimize": "データベースを検査して最適化",
+"storage.purge": "孤立ファイル {n} 件を削除（{size}）",
+"storage.purge_confirm": "どの記録にも紐づいていないファイル {n} 件を完全に削除しますか？",
+"storage.done": "データベースを検査しました: {before} → {after}。削除した孤立ファイル: {n} 件。",
+"storage.corrupt": "データベースの整合性検査に失敗しました。変更はありません。バックアップから復元してください。"
 }

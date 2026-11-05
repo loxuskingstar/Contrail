@@ -12,7 +12,7 @@
 "nav.shares": "Partages",
 "nav.settings": "Réglages",
 "nav.more": "Plus",
-"nav.liveries": "Livrées spéciales",
+"nav.liveries": "Livrées",
 "nav.drafts": "Brouillons",
 "nav.airframe": "Fiche cellule",
 "nav.g.collection": "Collection",
@@ -1364,5 +1364,33 @@
 "ach.s.primer.desc": {
 "one": "Un avion en primer repéré",
 "other": "{n} avions en primer différents"
-}
+},
+"livery.white": "Blanche",
+"livery.white_chip": "Blanche",
+"livery.white_hint": "Avions livrés tout blancs (white tail, avions de loueurs). Catégorie comptée à part des livrées spéciales.",
+"badge.white": "Blanche",
+"ach.s.white.name": "Tout en blanc",
+"ach.s.white.desc": {
+"one": "Un avion en livrée blanche repéré",
+"other": "{n} avions en livrée blanche différents"
+},
+"spot.test_registration": "Immatriculation d'essai",
+"spot.test_registration_ph": "ex. F-WWCF",
+"spot.test_registration_hint": "Immatriculation temporaire portée pendant les essais. L'immatriculation définitive, si elle est connue, reste dans le champ « Immatriculation ».",
+"import.f_test_registration": "Immatriculation d'essai",
+"storage.title": "Stockage",
+"storage.database": "Base de données",
+"storage.refdb": "Base de référence",
+"storage.images": "Photos",
+"storage.thumbs": "Miniatures",
+"storage.originals": "Originaux",
+"storage.audio": "Audio",
+"storage.backups": "Sauvegardes",
+"storage.avg": "Photo moyenne : {n} ({spots} photos).",
+"storage.refdb_hint": "La base de référence des appareils occupe l'essentiel de l'espace ; elle peut être supprimée et retéléchargée à tout moment.",
+"storage.optimize": "Vérifier et optimiser la base",
+"storage.purge": "Supprimer {n} fichiers orphelins ({size})",
+"storage.purge_confirm": "Supprimer définitivement {n} fichiers qui ne sont rattachés à aucun spot ?",
+"storage.done": "Base vérifiée : {before} → {after}. Fichiers orphelins supprimés : {n}.",
+"storage.corrupt": "L'intégrité de la base est en défaut : rien n'a été modifié. Restaurez une sauvegarde."
 }

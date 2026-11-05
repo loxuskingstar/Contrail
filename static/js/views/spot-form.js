@@ -71,11 +71,14 @@ export async function render(root, params, query) {
         <summary>${icon('sliders-horizontal', '', 18)} ${esc(t('spot.more_details'))} ${icon('chevron-down', 'chev', 18)}</summary>
         <div class="fold-body stack">
           <label class="field"><span>${esc(t('spot.livery'))}</span><input name="livery" value="${esc(s.livery && s.livery !== 'None' ? s.livery : '')}" placeholder="${esc(t('spot.livery_ph'))}">
-            <span class="row" style="gap:6px;margin-top:6px"><button type="button" class="chip" data-primer style="height:28px;font-size:12.5px">${icon('paint-bucket', '', 14)} ${esc(t('livery.primer_chip'))}</button></span></label>
+            <span class="row" style="gap:6px;margin-top:6px"><button type="button" class="chip" data-primer style="height:28px;font-size:12.5px">${icon('paint-bucket', '', 14)} ${esc(t('livery.primer_chip'))}</button><button type="button" class="chip" data-white style="height:28px;font-size:12.5px">${icon('paint-bucket', '', 14)} ${esc(t('livery.white_chip'))}</button></span></label>
           <div class="field-row">
             <label class="field"><span>${esc(t('spot.flight_type'))}</span><select name="flight_type"><option value="">—</option>${FLIGHT_TYPES.map((f) => `<option value="${f}" ${s.flight_type === f ? 'selected' : ''}>${esc(t(`ftype.${f}`))}</option>`).join('')}</select></label>
             ${locations.length ? `<label class="field"><span>${esc(t('spot.location'))}</span><select name="location_id"><option value="">—</option>${locations.map((l) => `<option value="${l.id_location}" ${s.location_id === l.id_location ? 'selected' : ''}>${esc(l.name)}${l.airport ? ` (${esc(l.airport)})` : ''}</option>`).join('')}</select></label>` : ''}
           </div>
+          <label class="field" data-testreg style="${s.flight_type === 'test' ? '' : 'display:none'}"><span>${esc(t('spot.test_registration'))}</span>
+            <input name="test_registration" value="${esc(s.test_registration)}" placeholder="${esc(t('spot.test_registration_ph'))}" autocapitalize="characters" autocomplete="off" spellcheck="false">
+            <span class="tiny muted">${esc(t('spot.test_registration_hint'))}</span></label>
           <div class="card" style="padding:2px 14px;background:transparent;box-shadow:none">
             <label class="toggle-row"><span class="t">${esc(t('spot.military'))}</span><span class="switch"><input type="checkbox" name="military" ${s.military ? 'checked' : ''}><span></span></span></label>
             <label class="toggle-row"><span class="t">${esc(t('spot.favorite'))}</span><span class="switch"><input type="checkbox" name="favorite" ${s.favorite ? 'checked' : ''}><span></span></span></label>
@@ -225,9 +228,12 @@ export async function render(root, params, query) {
   F('registration').addEventListener('blur', () => lookup());
   F('registration').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lookup(true); } });
   const PRIMER = /\bprimers?\b|appr[eê]ts?\b|non\s?peint|unpainted|bare\s?metal|sin\s?pintar|未塗装|プライマー/i;
-  const primerFlight = () => { if (PRIMER.test(F('livery').value) && !F('flight_type').value) F('flight_type').value = 'test'; };   // « Vol d'essai »
+  const testReg = () => { form.querySelector('[data-testreg]').style.display = F('flight_type').value === 'test' ? '' : 'none'; };
+  const primerFlight = () => { if (PRIMER.test(F('livery').value) && !F('flight_type').value) F('flight_type').value = 'test'; testReg(); };   // « Vol d'essai »
+  F('flight_type').addEventListener('change', testReg);
   F('livery').addEventListener('input', primerFlight);
   form.querySelector('[data-primer]')?.addEventListener('click', () => { F('livery').value = 'Primer'; primerFlight(); });
+  form.querySelector('[data-white]')?.addEventListener('click', () => { F('livery').value = t('livery.white'); });
   F('registration').addEventListener('input', (e) => { const p = e.target.selectionStart; e.target.value = e.target.value.toUpperCase(); e.target.setSelectionRange(p, p); });
   root.querySelector('[data-lookup]').onclick = () => lookup(true);
 
@@ -283,7 +289,8 @@ export async function render(root, params, query) {
     const reg = F('registration').value.trim();
     if (!reg) { F('registration').focus(); toast(esc(t('err.registration_required')), { type: 'error' }); return; }
     const data = {};
-    for (const k of ['registration', 'aircraft', 'aircraft_icao', 'owner', 'airline_icao', 'msn', 'manufacturer', 'airport', 'date', 'livery', 'flight_type', 'description', 'camera', 'lens', 'focal', 'aperture', 'iso', 'shutter', 'icao24', 'lat', 'lng']) data[k] = F(k).value.trim();
+    for (const k of ['registration', 'aircraft', 'aircraft_icao', 'owner', 'airline_icao', 'msn', 'manufacturer', 'airport', 'date', 'livery', 'flight_type', 'description', 'camera', 'lens', 'focal', 'aperture', 'iso', 'shutter', 'icao24', 'lat', 'lng', 'test_registration']) data[k] = F(k).value.trim();
+    if (data.flight_type !== 'test') data.test_registration = '';   // l'immat d'essai n'a de sens que pour un vol d'essai
     data.location_id = F('location_id')?.value || null;
     data.military = F('military').checked;
     data.favorite = F('favorite').checked;
