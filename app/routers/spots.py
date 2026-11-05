@@ -352,11 +352,10 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
                 out[k] = None
     if "msn" in out and out["msn"] is not None:
         out["msn"] = str(out["msn"])
-    # Immatriculation d'essai : normalisée, et conservée seulement pour un « Vol d'essai »
+    # Immatriculation d'essai (facultative, tout type de vol) : normalisée
     if "test_registration" in out:
         out["test_registration"] = regs.normalize(out["test_registration"]) or None if out["test_registration"] else None
-    if out.get("flight_type") and out["flight_type"] != "test":
-        out["test_registration"] = None
+
     if "livery" in out:
         out["livery_category"] = collection.livery_category(out["livery"])
         # Un avion en primer est un avion d'essai : le type de vol « Vol d'essai » est proposé s'il n'est pas renseigné

@@ -1376,7 +1376,7 @@
 },
 "spot.test_registration": "Immatriculation d'essai",
 "spot.test_registration_ph": "ex. F-WWCF",
-"spot.test_registration_hint": "Immatriculation temporaire portée pendant les essais. L'immatriculation définitive, si elle est connue, reste dans le champ « Immatriculation ».",
+"spot.test_registration_hint": "Immatriculation temporaire portée avant la livraison (ex. F-WWxx), pour relier l'avion à sa future immatriculation définitive. Laisser vide si inconnue.",
 "import.f_test_registration": "Immatriculation d'essai",
 "storage.title": "Stockage",
 "storage.database": "Base de données",
@@ -1412,5 +1412,6 @@
 "backup.remote_ok": "Destination joignable : un fichier de test a été écrit puis supprimé.",
 "backup.remote_fail": "Destination injoignable : {err}",
 "backup.remote_last_ok": "Dernière copie réussie : {date}",
-"backup.remote_last_fail": "Dernière copie en échec : {date}"
+"backup.remote_last_fail": "Dernière copie en échec : {date}",
+"common.optional": "facultatif"
 }

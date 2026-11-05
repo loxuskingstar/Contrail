@@ -485,16 +485,19 @@ def test_white_livery_is_separate_from_special_liveries(client):
     assert "white" in {g["category"] for g in client.get("/api/liveries").json()}
 
 
-def test_test_registration_only_for_test_flights(client):
+def test_test_registration_is_optional_for_any_flight_type(client):
     s = _post_spot(client, registration="F-WTR1", flight_type="test", test_registration=" f-wwcf ")
     assert s["test_registration"] == "F-WWCF"
     assert client.get(f"/api/spots/{s['id_spotting']}").json()["test_registration"] == "F-WWCF"
     assert s["id_spotting"] in {x["id_spotting"] for x in client.get("/api/spots", params={"search": "WWCF"}).json()["items"]}
     assert "F-WWCF" in client.get("/api/export/spots.csv").text
-    # le type de vol change : l'immat d'essai disparaît ; vide : elle est effacée
-    upd = client.put(f"/api/spots/{s['id_spotting']}", data={"data": json.dumps({"flight_type": "delivery", "test_registration": "F-WWCF"})}).json()
-    assert (upd.get("spot") or upd)["test_registration"] is None
-    s2 = _post_spot(client, registration="F-WTR2", flight_type="test", test_registration="F-WWDD")
+    # indépendante du type de vol : conservée si le type change ou n'est pas renseigné ; effacée seulement si on la vide
+    upd = client.put(f"/api/spots/{s['id_spotting']}", data={"data": json.dumps({"flight_type": "delivery"})}).json()
+    assert (upd.get("spot") or upd)["test_registration"] == "F-WWCF"
+    s2 = _post_spot(client, registration="F-WTR2", test_registration="F-WWDD")                  # aucun type de vol
+    assert s2["test_registration"] == "F-WWDD"
+    s3 = _post_spot(client, registration="F-WTR2B", flight_type="commercial", test_registration="F-WWDE")
+    assert s3["test_registration"] == "F-WWDE"
     upd = client.put(f"/api/spots/{s2['id_spotting']}", data={"data": json.dumps({"test_registration": ""})}).json()
     assert (upd.get("spot") or upd)["test_registration"] is None
 

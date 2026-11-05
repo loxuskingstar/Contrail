@@ -1376,7 +1376,7 @@
 },
 "spot.test_registration": "Matrícula de prueba",
 "spot.test_registration_ph": "p. ej. F-WWCF",
-"spot.test_registration_hint": "Matrícula temporal que lleva durante los vuelos de prueba. La matrícula definitiva, si se conoce, queda en el campo «Matrícula».",
+"spot.test_registration_hint": "Matrícula temporal que lleva antes de la entrega (p. ej. F-WWxx), para vincular el avión con su futura matrícula definitiva. Déjelo vacío si no se conoce.",
 "import.f_test_registration": "Matrícula de prueba",
 "storage.title": "Almacenamiento",
 "storage.database": "Base de datos",
@@ -1412,5 +1412,6 @@
 "backup.remote_ok": "Destino accesible: se escribió y borró un archivo de prueba.",
 "backup.remote_fail": "Destino inaccesible: {err}",
 "backup.remote_last_ok": "Última copia correcta: {date}",
-"backup.remote_last_fail": "Última copia fallida: {date}"
+"backup.remote_last_fail": "Última copia fallida: {date}",
+"common.optional": "opcional"
 }

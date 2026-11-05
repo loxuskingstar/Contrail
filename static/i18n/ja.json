@@ -1205,7 +1205,7 @@
 },
 "spot.test_registration": "試験用登録記号",
 "spot.test_registration_ph": "例: F-WWCF",
-"spot.test_registration_hint": "試験飛行中に付けられる仮の登録記号です。正式な登録記号が分かっている場合は「登録記号」欄に入力してください。",
+"spot.test_registration_hint": "納入前に付けられる仮の登録記号（例: F-WWxx）。将来の正式な登録記号と機体を結び付けるために使います。不明なら空欄のままにしてください。",
 "import.f_test_registration": "試験用登録記号",
 "storage.title": "ストレージ",
 "storage.database": "データベース",
@@ -1241,5 +1241,6 @@
 "backup.remote_ok": "接続できました。テスト用ファイルを書き込んで削除しました。",
 "backup.remote_fail": "接続できません: {err}",
 "backup.remote_last_ok": "前回のコピーは成功: {date}",
-"backup.remote_last_fail": "前回のコピーは失敗: {date}"
+"backup.remote_last_fail": "前回のコピーは失敗: {date}",
+"common.optional": "任意"
 }

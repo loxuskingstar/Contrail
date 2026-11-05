@@ -1376,7 +1376,7 @@
 },
 "spot.test_registration": "Test registration",
 "spot.test_registration_ph": "e.g. F-WWCF",
-"spot.test_registration_hint": "Temporary registration worn during test flights. The final registration, if known, stays in the “Registration” field.",
+"spot.test_registration_hint": "Temporary registration worn before delivery (e.g. F-WWxx), to link the aircraft to its future final registration. Leave empty if unknown.",
 "import.f_test_registration": "Test registration",
 "storage.title": "Storage",
 "storage.database": "Database",
@@ -1412,5 +1412,6 @@
 "backup.remote_ok": "Destination reachable: a test file was written then deleted.",
 "backup.remote_fail": "Destination unreachable: {err}",
 "backup.remote_last_ok": "Last copy succeeded: {date}",
-"backup.remote_last_fail": "Last copy failed: {date}"
+"backup.remote_last_fail": "Last copy failed: {date}",
+"common.optional": "optional"
 }
