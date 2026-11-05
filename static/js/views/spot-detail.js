@@ -130,7 +130,7 @@ export async function render(root, params) {
     { icon: 'image', label: t('share_img.title'), onClick: () => navigate(`#/spots/${s.id_spotting}/share`) },
     { icon: 'link', label: t('share.this_spot'), onClick: async () => (await import('./shares.js')).createShareFlow({ kind: 'spot', target: String(s.id_spotting) }) },
     store.mod('watchlist') && { icon: 'eye', label: t('watch.add'), onClick: async () => { try { await api('/api/watchlist', { method: 'POST', body: { registration: s.registration } }); toast(esc(t('watch.added')), { type: 'success' }); } catch (err) { errorToast(err); } } },
-    { icon: 'copy', label: t('spot.duplicate'), onClick: () => navigate(`#/spots/new?airport=${encodeURIComponent(s.airport || s.place || '')}`) },
+    { icon: 'copy', label: t('spot.duplicate'), onClick: () => navigate(`#/spots/new?${s.airport ? 'airport=' + encodeURIComponent(s.airport) : 'place=' + encodeURIComponent(s.place || '') + (s.lat != null ? `&lat=${s.lat}&lng=${s.lng}` : '')}`) },
     s.image && { icon: 'download', label: t('spot.download_photo'), onClick: () => { const a = document.createElement('a'); a.href = mediaUrl('images', s.image); a.download = `${s.registration}.webp`; a.click(); } },
     '-',
     { icon: 'trash-2', label: t('common.delete'), danger: true, onClick: async () => {

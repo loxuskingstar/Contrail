@@ -43,10 +43,14 @@ def build_filters(f: dict) -> tuple[str, list]:
     where, params = ["1=1"], []
     if f.get("search"):
         like = f"%{f['search'].strip()}%"
+        # Une ancienne immatriculation ramène aussi les spots du même avion (nouvelle compagnie, immat d'essai…)
+        sib = airframes.group(f["search"]) if len(regs.normalize(f["search"])) >= 3 else []
+        sib = sib if len(sib) > 1 else []
         where.append("(s.registration LIKE ? OR s.aircraft LIKE ? OR s.aircraft_icao LIKE ? OR s.owner LIKE ? "
                      "OR s.airport LIKE ? OR s.livery LIKE ? OR s.description LIKE ? OR s.msn LIKE ? OR s.date LIKE ? "
-                     "OR s.test_registration LIKE ? OR s.place LIKE ?)")
-        params += [like] * 11
+                     "OR s.test_registration LIKE ? OR s.place LIKE ?"
+                     + (f" OR s.registration IN ({','.join('?' * len(sib))})" if sib else "") + ")")
+        params += [like] * 11 + sib
     for key, col in (("registration", "s.registration"), ("airport", "s.airport"), ("place", "s.place"), ("country", "s.country"),
                      ("flight_type", "s.flight_type"), ("camera", "s.camera"), ("lens", "s.lens"),
                      ("livery_category", "s.livery_category")):
@@ -85,6 +89,8 @@ def build_filters(f: dict) -> tuple[str, list]:
         where.append("s.image IS NOT NULL")
     if f.get("has_audio"):
         where.append("s.atc_audio IS NOT NULL")
+    if f.get("unknown"):
+        where.append("s.registration LIKE 'SANS-IMMAT-%'")      # spots à compléter : avion non identifié
     if f.get("patrol"):
         where.append("s.patrol_id = ?")
         params.append(int(f["patrol"]))
@@ -134,7 +140,7 @@ def list_spots(
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
-    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None,
+    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False,
     sort: str = "date_desc", limit: int = Query(60, le=500), offset: int = 0,
 ):
     f = dict(locals())
@@ -229,6 +235,10 @@ def facets():
         "years": col("SELECT DISTINCT substr(date,1,4) v FROM spotting WHERE date IS NOT NULL ORDER BY v DESC"),
         "countries": col("SELECT country v, COUNT(*) n FROM spotting GROUP BY country ORDER BY n DESC"),
         "flight_types": FLIGHT_TYPES,
+        # Sites (aéroports et lieux libres) avec leur nombre de spots, du plus récemment visité au plus ancien
+        "sites": q("SELECT CASE WHEN airport IS NOT NULL THEN 'airport' ELSE 'place' END kind, COALESCE(airport, place) value, "
+                   "COUNT(*) n, MAX(date) last, AVG(lat) lat, AVG(lng) lng FROM spotting WHERE airport IS NOT NULL OR place IS NOT NULL "
+                   "GROUP BY kind, value ORDER BY last DESC"),
         "recent_airports": col("SELECT airport v, MAX(date) d FROM spotting WHERE airport IS NOT NULL "
                                "GROUP BY airport ORDER BY d DESC LIMIT 8"),
     }
@@ -299,6 +309,22 @@ def patrol_names():
     """Noms de patrouilles déjà utilisés, du plus récent au plus ancien (suggestions de saisie)."""
     return [r["name"] for r in q("SELECT name FROM patrols WHERE name IS NOT NULL AND name <> '' GROUP BY name "
                                  "ORDER BY MAX(id_patrol) DESC LIMIT 50")]
+
+
+@router.get("/countries")
+def countries():
+    """Codes pays connus (nationalité d'une patrouille)."""
+    return sorted(set(regs.PREFIXES.values()))
+
+
+@router.get("/patrol-countries")
+def patrol_countries():
+    """Nationalité déjà saisie pour chaque nom de patrouille (la plus récente l'emporte) : pré-remplit la saisie."""
+    out: dict[str, str] = {}
+    for r in q("SELECT p.name, s.country FROM spotting s JOIN patrols p ON p.id_patrol = s.patrol_id "
+               "WHERE s.is_patrol = 1 AND s.country IS NOT NULL AND p.name IS NOT NULL ORDER BY s.id_spotting DESC"):
+        out.setdefault(r["name"].lower(), r["country"])
+    return out
 
 
 def patrol_of(s: dict) -> dict | None:
@@ -541,6 +567,11 @@ def patrol_key(name: str) -> str:
     return re.sub(r"[\s_]+", "-", name.strip().upper())[:60]
 
 
+def _simple_country(info: dict) -> str | None:
+    c = str(info.get("country") or "").strip().upper()
+    return c if re.fullmatch(r"[A-Z]{2}", c) else None
+
+
 def _simple_size(info: dict) -> int | None:
     try:
         n = int(info.get("size"))
@@ -617,7 +648,7 @@ def create_spot(
     out.update(prepare(merged_input))
     member_rows: list[dict] = []
     if simple:
-        out.update({"country": None, "is_patrol": 1, "patrol_size": _simple_size(patrol_in)})
+        out.update({"country": _simple_country(patrol_in), "is_patrol": 1, "patrol_size": _simple_size(patrol_in)})
     elif patrol_in:
         if out.get("military") is None:
             out["military"] = 1 if regs.looks_military(out.get("owner"), out.get("aircraft")) else 0
@@ -697,9 +728,12 @@ def update_spot(
         out["atc_audio"] = None
     out.update(prepare({**{k: v for k, v in out.items() if k in EDITABLE}, **payload}, existing))
     if existing.get("is_patrol"):
-        out["country"] = None
-        if isinstance(payload.get("patrol"), dict) and "size" in payload["patrol"]:
-            out["patrol_size"] = _simple_size(payload["patrol"])
+        out["country"] = existing.get("country")        # nationalité de la patrouille, pas déduite d'une immatriculation
+        if isinstance(payload.get("patrol"), dict):
+            if "size" in payload["patrol"]:
+                out["patrol_size"] = _simple_size(payload["patrol"])
+            if "country" in payload["patrol"]:
+                out["country"] = _simple_country(payload["patrol"])
     out["updated_at"] = now_iso()
     sets = ", ".join(f"{k} = ?" for k in out)
     patrol_in = payload.get("patrol") if isinstance(payload.get("patrol"), dict) else None

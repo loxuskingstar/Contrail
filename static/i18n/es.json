@@ -1439,5 +1439,10 @@
 "patrol.size": "Número de aviones",
 "patrol.simple_hint": "El nombre de la patrulla sustituye a la matrícula: cuenta como un solo avión y sus apariciones se acumulan bajo ese nombre.",
 "patrol.n_aircraft": "{n} aviones",
-"err.patrol_name_required": "Indica el nombre de la patrulla."
+"err.patrol_name_required": "Indica el nombre de la patrulla.",
+"spots.scope_all": "Todos los lugares",
+"spots.scope_title": "Lugar mostrado",
+"spots.scope_hint": "Al abrir la lista solo se muestran los spots del aeropuerto o lugar elegido. Los spots sin aeropuerto ni lugar solo aparecen en «Todos los lugares».",
+"patrol.country": "País de la patrulla",
+"spots.f_unknown": "Matrícula por completar"
 }

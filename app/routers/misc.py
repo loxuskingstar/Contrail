@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from ..core import (APP_VERSION, ENV_KEYS, config_source, db, execute, get_config, get_settings, q, q1,
                     safe_media_path, save_config, set_settings)
 from ..services import aircraft, gamification, geo, media, storage
+from ..services import airframes as airframes_svc
 from ..services import registration as regs
 
 router = APIRouter(tags=["misc"])
@@ -361,14 +362,18 @@ def global_search(q_: str = "", q: str = ""):  # noqa: A002
         return {"spots": [], "airframes": [], "flights": [], "airports": [], "tags": []}
     like = f"%{term}%"
     conn = db()
+    # Une ancienne immatriculation ramène aussi les spots du même avion
+    sib = airframes_svc.group(term) if len(regs.normalize(term)) >= 3 else []
+    sib = sib if len(sib) > 1 else []
+    in_sib = f" OR registration IN ({','.join('?' * len(sib))})" if sib else ""
     spots = conn.execute(
         "SELECT id_spotting, registration, test_registration, aircraft_icao, aircraft, owner, airport, place, date, thumb FROM spotting "
         "WHERE registration LIKE ? OR test_registration LIKE ? OR msn LIKE ? OR owner LIKE ? OR aircraft LIKE ? "
-        "OR livery LIKE ? OR description LIKE ? OR place LIKE ? ORDER BY date DESC LIMIT 8", (like,) * 8).fetchall()
+        f"OR livery LIKE ? OR description LIKE ? OR place LIKE ?{in_sib} ORDER BY date DESC LIMIT 8", (like,) * 8 + tuple(sib)).fetchall()
     airframes = conn.execute(
         "SELECT registration, MAX(aircraft) aircraft, COUNT(*) n FROM spotting "
-        "WHERE registration LIKE ? OR test_registration LIKE ? OR msn LIKE ? "
-        "GROUP BY registration ORDER BY n DESC LIMIT 6", (like,) * 3).fetchall()
+        f"WHERE registration LIKE ? OR test_registration LIKE ? OR msn LIKE ?{in_sib} "
+        "GROUP BY registration ORDER BY n DESC LIMIT 6", (like,) * 3 + tuple(sib)).fetchall()
     flights = conn.execute(
         "SELECT id_flight, date, dep_icao, arr_icao, flight_number, airline FROM flights WHERE flight_number LIKE ? "
         "OR airline LIKE ? OR registration LIKE ? OR dep_icao LIKE ? OR arr_icao LIKE ? ORDER BY date DESC LIMIT 6",

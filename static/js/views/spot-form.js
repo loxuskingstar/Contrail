@@ -17,8 +17,17 @@ function nowLocal() {
 
 export async function render(root, params, query) {
   const editing = !!params.id;
+  // Lieu en cours : celui choisi dans la liste des spots (sinon l'aéroport par défaut)
+  let scope = {};
+  try { scope = JSON.parse(localStorage.getItem('contrail.spotsScope') || 'null') || {}; } catch { /* pas de mémoire locale */ }
+  let scopeLL = null;
+  if (!editing && scope.place && !query.airport && !query.place) {
+    const site = ((store.facets || (await store.refreshFacets().catch(() => null)))?.sites || []).find((x) => x.kind === 'place' && x.value === scope.place);
+    if (site && site.lat != null) scopeLL = [site.lat, site.lng];
+  }
   const s = editing ? await api(`/api/spots/${params.id}`) : {
-    registration: query.reg || '', airport: query.airport || store.settings.default_airport || '', date: nowLocal(),
+    registration: query.reg || '', airport: query.airport || (query.place ? '' : scope.airport || (scope.place ? '' : store.settings.default_airport) || ''),
+    place: query.place || (query.airport ? '' : scope.place || ''), lat: query.lat ?? scopeLL?.[0] ?? null, lng: query.lng ?? scopeLL?.[1] ?? null, date: nowLocal(),
     icao24: query.icao24 || '', tags: [], military: 0, favorite: 0, rating: null,
   };
   const isUnknown = typeof s.registration === 'string' && s.registration.startsWith('SANS-IMMAT-');
@@ -50,6 +59,8 @@ export async function render(root, params, query) {
             <label class="field" style="flex:2"><span>${esc(t('patrol.name'))}</span><input name="patrol_sname" list="patrol-names" value="${esc(s.patrol_name)}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off"></label>
             <label class="field"><span>${esc(t('patrol.size'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span><input name="patrol_size" value="${esc(s.patrol_size)}" inputmode="numeric" placeholder="8"></label>
           </div>
+          <label class="field"><span>${esc(t('patrol.country'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
+            <select name="patrol_country"><option value="">—</option>${s.country ? `<option value="${esc(s.country)}" selected>${flag(s.country)} ${esc(countryName(s.country))}</option>` : ''}</select></label>
           <p class="tiny muted">${esc(t('patrol.simple_hint'))}</p>
         </div>` : ''}
         <div data-regblock class="stack">
@@ -355,6 +366,19 @@ export async function render(root, params, query) {
   const addBtn = root.querySelector('[data-pat-add]');
   if (addBtn) addBtn.onclick = () => { root.querySelector('[data-patrol]').open = true; addPatRow(); };
   api('/api/spots/patrol-names').then((names) => { root.querySelector('#patrol-names').innerHTML = names.map((n) => `<option value="${esc(n)}">`).join(''); }).catch(() => {});
+  // Nationalité de la patrouille : liste des pays, pré-remplie d'après les passages précédents du même nom
+  const cSel = form.elements.patrol_country;
+  if (cSel) {
+    Promise.all([api('/api/spots/countries'), api('/api/spots/patrol-countries')]).then(([codes, known]) => {
+      const cur = cSel.value;
+      cSel.innerHTML = '<option value="">—</option>' + codes.map((c) => ({ c, n: countryName(c) })).sort((a, b) => a.n.localeCompare(b.n))
+        .map(({ c, n }) => `<option value="${esc(c)}">${flag(c)} ${esc(n)}</option>`).join('');
+      cSel.value = cur;
+      const guess = () => { const k = known[F('patrol_sname').value.trim().toLowerCase()]; if (k && !cSel.value) cSel.value = k; };
+      F('patrol_sname').addEventListener('change', guess);
+      F('patrol_sname').addEventListener('blur', guess);
+    }).catch(() => {});
+  }
   // Mode simple : la patrouille remplace l'immatriculation
   const patSimple = form.elements.patrol_simple;
   const syncPatrol = () => {
@@ -384,7 +408,7 @@ export async function render(root, params, query) {
     data.favorite = F('favorite').checked;
     data.rating = rating || null;
     data.tags = picker.value();
-    if (asPatrol) data.patrol = { simple: true, name: F('patrol_sname').value.trim(), size: F('patrol_size').value.trim() };
+    if (asPatrol) data.patrol = { simple: true, name: F('patrol_sname').value.trim(), size: F('patrol_size').value.trim(), country: F('patrol_country').value };
     const members = asPatrol ? [] : [...patRows.children].map((r) => ({ registration: r.querySelector('[data-pr]').value.trim(), unknown_registration: r.querySelector('[data-pu]').checked }))
       .filter((m) => m.registration || m.unknown_registration);
     const patName = F('patrol_name')?.value.trim() || '';

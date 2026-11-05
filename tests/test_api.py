@@ -854,3 +854,33 @@ def test_simple_patrol_is_one_spot(client):
     client.delete(f"/api/spots/{s2['id_spotting']}")
     from app.core import q as _q
     assert not _q("SELECT 1 FROM patrols p WHERE NOT EXISTS (SELECT 1 FROM spotting s WHERE s.patrol_id = p.id_patrol)")
+
+
+def test_search_follows_airframe_group_and_sites_facet(client):
+    def post(d):
+        return client.post("/api/spots", data={"data": json.dumps(d)})
+    post({"registration": "F-WZZA", "msn": "7001", "manufacturer": "Airbus", "aircraft": "Airbus A320", "airport": "LFBO", "date": "2026-10-01T10:00"})
+    post({"registration": "D-AZZA", "msn": "7001", "manufacturer": "Airbus", "aircraft": "Airbus A320", "airport": "EDDM", "date": "2026-10-05T10:00"})
+    old = client.get("/api/spots", params={"search": "F-WZZA"}).json()["items"]
+    assert {i["registration"] for i in old} == {"F-WZZA", "D-AZZA"}              # l'ancienne immat ramène le nouvel avion
+    g = client.get("/api/search", params={"q": "F-WZZA"}).json()
+    assert {s["registration"] for s in g["spots"]} >= {"F-WZZA", "D-AZZA"} and {a["registration"] for a in g["airframes"]} >= {"F-WZZA", "D-AZZA"}
+    sites = client.get("/api/spots/facets").json()["sites"]
+    assert {"kind": "airport", "value": "EDDM"}.items() <= next(x for x in sites if x["value"] == "EDDM").items()
+    assert sites[0]["last"] >= sites[-1]["last"] and all(x["n"] >= 1 for x in sites)
+
+
+def test_patrol_country_and_unknown_filter(client):
+    def post(d):
+        return client.post("/api/spots", data={"data": json.dumps(d)})
+    s = post({"airport": "LFBO", "date": "2026-10-10T10:00", "patrol": {"simple": True, "name": "Breitling Jet Team", "country": "fr"}}).json()["spot"]
+    assert s["country"] == "FR"
+    assert client.get("/api/spots/patrol-countries").json()["breitling jet team"] == "FR"
+    assert "FR" in client.get("/api/spots/countries").json()
+    up = client.put(f"/api/spots/{s['id_spotting']}", data={"data": json.dumps({"patrol": {"name": "Breitling Jet Team", "country": "ch"}})}).json()["spot"]
+    assert up["country"] == "CH"
+    up = client.put(f"/api/spots/{s['id_spotting']}", data={"data": json.dumps({"description": "x"})}).json()["spot"]
+    assert up["country"] == "CH"                                   # modifier autre chose ne touche pas la nationalité
+    u = post({"unknown_registration": True, "aircraft": "Rafale", "airport": "LFBO", "date": "2026-10-11T10:00"}).json()["spot"]
+    got = client.get("/api/spots", params={"unknown": True, "limit": 500}).json()["items"]
+    assert u["id_spotting"] in {i["id_spotting"] for i in got} and all(i["registration"].startswith("SANS-IMMAT-") for i in got)
