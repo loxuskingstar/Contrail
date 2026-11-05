@@ -1,5 +1,5 @@
 // Réglages : apparence, modules, spotting, intégrations, données (sauvegardes, import/export), étiquettes, à propos
-import { api } from '../api.js';
+import { api, mediaUrl } from '../api.js';
 import { store, rerenderShell, applyAppearance, switchSession, resetTestSession } from '../app.js';
 import { t, LANGS, setLang, fmtDate, fmtNum } from '../i18n.js';
 import { icon } from '../lib/icons.js';
@@ -79,6 +79,9 @@ export async function render(root, params) {
     body.innerHTML = `<div class="stack"><div class="card stack">
         <label class="field"><span>${esc(t('settings.default_airport'))}</span><div class="input-wrap"><input data-default value="${esc(S.default_airport)}" placeholder="LFBO"></div></label>
         <label class="field"><span>${esc(t('settings.home_airports'))}</span><input data-homes value="${esc((S.home_airports || []).join(', '))}" placeholder="LFBO, LFPG"><span class="tiny muted">${esc(t('settings.home_airports_hint'))}</span></label>
+        <div class="field"><span>${esc(t('settings.patrol_mode'))}</span>
+          <div class="seg">${['simple', 'detailed'].map((v) => `<button data-patrol-mode="${v}" class="${(S.patrol_mode || 'simple') === v ? 'on' : ''}">${esc(t(`settings.patrol_${v}`))}</button>`).join('')}</div>
+          <span class="tiny muted">${esc(t('settings.patrol_mode_hint'))}</span></div>
       </div>
       <div class="card stack"><div class="card-title">${esc(t('settings.images'))}</div>
         <div class="field-row">
@@ -96,6 +99,7 @@ export async function render(root, params) {
         <label class="field"><span>${esc(t('settings.watch_interval'))}</span><select data-watchint>${[2, 5, 10, 15, 30, 60].map((v) => `<option value="${v}" ${S.watch_interval_min === v ? 'selected' : ''}>${v} min</option>`).join('')}</select></label>
       </div></div>`;
     airportInput(body.querySelector('[data-default]'));
+    body.querySelectorAll('[data-patrol-mode]').forEach((b) => (b.onclick = () => save({ patrol_mode: b.dataset.patrolMode }, { reload: true })));
     body.querySelector('[data-default]').onchange = (e) => save({ default_airport: e.target.value.trim().toUpperCase() });
     body.querySelector('[data-homes]').onchange = (e) => save({ home_airports: e.target.value.split(/[\s,;]+/).map((x) => x.trim().toUpperCase()).filter(Boolean) });
     body.querySelector('[data-imgmax]').onchange = (e) => save({ image_max_px: Number(e.target.value) });
@@ -166,6 +170,8 @@ export async function render(root, params) {
             <td style="text-align:right"><a class="btn-icon" href="/api/backups/${encodeURIComponent(x.name)}" download>${icon('download', '', 18)}</a><button class="btn-icon" data-delb="${esc(x.name)}">${icon('trash-2', '', 18)}</button></td></tr>`).join('')}</tbody></table>`
             : `<p class="small muted">${esc(t('settings.no_backup'))}</p>`}
         </div>
+        <div class="card stack" data-remote><div class="card-title">${icon('cloud-upload', '', 15)} ${esc(t('backup.remote_title'))}</div><div class="skeleton" style="height:90px"></div></div>
+        <div class="card stack" data-storage><div class="card-title">${icon('hard-drive', '', 15)} ${esc(t('storage.title'))}</div><div class="skeleton" style="height:90px"></div></div>
         <div class="card stack"><div class="card-title">${esc(t('settings.import'))}</div>
           <p class="small muted">${esc(t('settings.import_d'))}</p>
           <div class="row wrap"><button class="btn" data-imp="spots">${icon('camera', '', 18)} ${esc(t('settings.import_spots'))}</button>
@@ -177,6 +183,8 @@ export async function render(root, params) {
           <p class="tiny muted">${esc(t('settings.export_d'))}</p></div>
         <div class="card"><a class="row" href="#/drafts">${icon('cloud-upload', '', 20)}<span class="grow">${esc(t('nav.drafts'))}</span>${icon('chevron-right')}</a></div>
       </div>`;
+      storageCard(body.querySelector('[data-storage]'));
+      remoteBackupCard(body.querySelector('[data-remote]'));
       body.querySelector('[data-tenter]')?.addEventListener('click', (e) => { e.currentTarget.disabled = true; switchSession('test'); });
       body.querySelector('[data-tquit]')?.addEventListener('click', () => switchSession('main'));
       body.querySelector('[data-treset]')?.addEventListener('click', resetTestSession);
@@ -329,6 +337,88 @@ async function refdbCard(box) {
     });
     clearTimeout(timer);
     if (st.running) timer = setTimeout(draw, 1500);
+  };
+  draw();
+}
+
+
+// ------------------------------------------------------------------ occupation disque et maintenance
+const mo = (n) => (n >= 1e9 ? `${fmtNum(Math.round(n / 1e8) / 10)} Go` : n >= 1e5 ? `${fmtNum(Math.round(n / 1e5) / 10)} Mo` : `${fmtNum(Math.max(0, Math.round(n / 1e3)))} Ko`);
+
+async function storageCard(box) {
+  const draw = async () => {
+    const r = await api('/api/storage').catch(() => null);
+    if (!r || !box.isConnected) return;
+    const rows = ['database', 'refdb', 'images', 'thumbs', 'originals', 'audio', 'backups']
+      .map((k) => [k, r.parts[k]]).filter(([k, v]) => v && (v.bytes || ['database', 'images'].includes(k)))
+      .sort((a, b) => b[1].bytes - a[1].bytes);
+    const max = Math.max(1, ...rows.map(([, v]) => v.bytes));
+    box.innerHTML = `<div class="card-title">${icon('hard-drive', '', 15)} ${esc(t('storage.title'))}<span class="muted">${esc(mo(r.total))}</span></div>
+      ${rows.map(([k, v]) => `<div class="row" style="gap:10px"><span class="small" style="width:118px">${esc(t(`storage.${k}`))}</span>
+        <span class="grow" style="height:8px;border-radius:4px;background:var(--surface-2,#8881);overflow:hidden"><i style="display:block;height:100%;width:${Math.max(2, Math.round((v.bytes / max) * 100))}%;background:var(--accent)"></i></span>
+        <span class="small" style="width:70px;text-align:right">${esc(mo(v.bytes))}</span></div>`).join('')}
+      <p class="tiny muted">${esc(t('storage.avg', { n: mo(r.avg_image), spots: fmtNum(r.with_image) }))}${r.parts.refdb.bytes > r.total / 2 ? ` ${esc(t('storage.refdb_hint'))}` : ''}</p>
+      <div data-dups></div>
+      <div class="row wrap"><button class="btn" data-opt>${icon('wand-sparkles', '', 18)} ${esc(t('storage.optimize'))}</button>
+        ${r.orphans.files ? `<button class="btn" data-purge>${icon('trash-2', '', 18)} ${esc(t('storage.purge', { n: fmtNum(r.orphans.files), size: mo(r.orphans.bytes) }))}</button>` : ''}</div>`;
+    const run = async (purge, btn) => {
+      btn.disabled = true;
+      try {
+        const m = await api('/api/maintenance', { method: 'POST', body: { purge_orphans: purge } });
+        toast(esc(m.integrity ? t('storage.done', { before: mo(m.db_before), after: mo(m.db_after), n: fmtNum(m.orphans_removed) }) : t('storage.corrupt')), { type: m.integrity ? 'success' : 'error', duration: 7000 });
+      } catch (e) { errorToast(e); }
+      draw();
+    };
+    box.querySelector('[data-opt]').onclick = (e) => run(false, e.currentTarget);
+    api('/api/spots/duplicates').then((d) => {
+      const host = box.querySelector('[data-dups]');
+      if (!host || !d.count) return;
+      const side = (x) => `<a class="row" style="gap:8px;min-width:0" href="#/spots/${x.id}">${x.thumb ? `<img src="${mediaUrl('thumbs', x.thumb)}" alt="" style="width:56px;height:40px;object-fit:cover;border-radius:8px">` : ''}<span class="small mono">${esc(x.registration)}</span></a>`;
+      host.innerHTML = `<div class="card-title" style="margin:6px 0 2px">${icon('copy', '', 15)} ${esc(t('storage.dups', { n: d.count }))}</div>
+        ${d.pairs.slice(0, 8).map((p) => `<div class="row" style="gap:10px;justify-content:space-between;padding:4px 0;border-top:1px solid var(--hair)">${side(p.a)}<span class="tiny muted">${esc(t('storage.dup_distance', { n: p.distance }))}</span>${side(p.b)}</div>`).join('')}`;
+    }).catch(() => {});
+    box.querySelector('[data-purge]')?.addEventListener('click', async (e) => {
+      if (await confirmDialog(esc(t('storage.purge_confirm', { n: fmtNum(r.orphans.files) })), { danger: true })) run(true, e.currentTarget);
+    });
+  };
+  draw();
+}
+
+
+// ------------------------------------------------------------------ copie des sauvegardes hors de la machine
+async function remoteBackupCard(box) {
+  const draw = async () => {
+    const [cfg, bk] = await Promise.all([api('/api/config').catch(() => null), api('/api/backups').catch(() => null)]);
+    if (!cfg || !box.isConnected) return;
+    const last = bk?.remote?.last;
+    const input = (k, label, type = 'text', hint = '') => `<label class="field"><span>${esc(label)}${cfg[k].source === 'env' ? ` <span class="badge">${esc(t('settings.from_env'))}</span>` : ''}</span>
+      <input data-rc="${k}" type="${type}" value="${esc(cfg[k].value)}" ${cfg[k].source === 'env' ? 'disabled' : ''} autocomplete="off" spellcheck="false">${hint ? `<span class="tiny muted">${esc(hint)}</span>` : ''}</label>`;
+    const status = last ? `<span class="badge ${last.ok ? 'green' : 'red'}">${icon(last.ok ? 'circle-check' : 'triangle-alert', '', 12)} ${esc(t(last.ok ? 'backup.remote_last_ok' : 'backup.remote_last_fail', { date: fmtDate(last.at) }))}</span>`
+      : `<span class="badge">${esc(t(bk?.remote?.configured ? 'backup.remote_waiting' : 'backup.remote_none'))}</span>`;
+    box.innerHTML = `<div class="card-title">${icon('cloud-upload', '', 15)} ${esc(t('backup.remote_title'))}</div>
+      <p class="small muted">${esc(t('backup.remote_desc'))}</p><div class="row wrap">${status}</div>
+      ${last && !last.ok ? `<p class="small" style="color:var(--danger,#dc2626)">${esc(last.targets.filter((x) => !x.ok).map((x) => `${x.kind} : ${x.error}`).join(' · '))}</p>` : ''}
+      ${input('backup_remote_path', t('backup.remote_path'), 'text', t('backup.remote_path_hint'))}
+      ${input('backup_webdav_url', t('backup.webdav_url'), 'url', t('backup.webdav_hint'))}
+      <div class="field-row">${input('backup_webdav_user', t('backup.webdav_user'))}${input('backup_webdav_password', t('backup.webdav_password'), 'password')}</div>
+      <div class="row wrap"><button class="btn primary" data-rsave>${icon('check', '', 18)} ${esc(t('common.save'))}</button>
+        <button class="btn" data-rtest>${icon('plug-zap', '', 18)} ${esc(t('backup.remote_test'))}</button></div>`;
+    const save = async () => {
+      const patch = {};
+      box.querySelectorAll('[data-rc]:not([disabled])').forEach((i) => (patch[i.dataset.rc] = i.value));
+      await api('/api/config', { method: 'PUT', body: patch });
+    };
+    box.querySelector('[data-rsave]').onclick = async () => { try { await save(); toast(esc(t('common.saved')), { type: 'success' }); draw(); } catch (e) { errorToast(e); } };
+    box.querySelector('[data-rtest]').onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        await save();
+        const r = await api('/api/backups/remote-test', { method: 'POST' });
+        toast(esc(!r.configured ? t('backup.remote_none') : r.ok ? t('backup.remote_ok') : t('backup.remote_fail', { err: r.targets.filter((x) => !x.ok).map((x) => x.error).join(' · ') })),
+          { type: r.ok ? 'success' : 'error', duration: 8000 });
+      } catch (err) { errorToast(err); }
+      e.currentTarget.disabled = false;
+    };
   };
   draw();
 }

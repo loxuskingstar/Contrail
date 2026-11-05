@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -15,8 +16,8 @@ import asyncio
 
 from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs, set_profile, _profile
 from .db import init_db
-from .routers import field, fleets, flights, io, misc, share, spots, stats
-from .services import gamification, sandbox, scheduler
+from .routers import field, fleets, flights, io, misc, share, spots, stats, wishes
+from .services import collection, gamification, media, refdb, sandbox, scheduler
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -27,8 +28,11 @@ log = logging.getLogger("contrail")
 async def lifespan(app: FastAPI):
     ensure_dirs()
     init_db()
+    collection.recategorize()
     gamification.sync_definitions()
     tasks = scheduler.start()
+    threading.Thread(target=refdb.compact_file, daemon=True, name="refdb-compact").start()   # allège une ancienne base de référence
+    threading.Thread(target=media.backfill_phash, daemon=True, name="phash-backfill").start()   # empreintes des photos déjà enregistrées
     log.info("%s %s prêt — authentification %s", APP_NAME, APP_VERSION,
              "activée" if auth.auth_enabled() else "désactivée")
     yield
@@ -41,9 +45,22 @@ app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan,
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
+# Taille maximale d'un envoi (octets). Les sauvegardes et la base OpenSky sont volumineuses ; le reste ne l'est pas.
+_MB = 1 << 20
+_BIG_UPLOADS = {"/api/refdb/upload": 1024 * _MB, "/api/backups/restore": 4096 * _MB}
+_MAX_UPLOAD = int(os.environ.get("CONTRAIL_MAX_UPLOAD_MB", "120")) * _MB
+
+
 @app.middleware("http")
 async def guard(request: Request, call_next):
     path = request.url.path
+    if request.method in ("POST", "PUT", "PATCH"):
+        try:
+            size = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            size = 0
+        if size > _BIG_UPLOADS.get(path, _MAX_UPLOAD):
+            return JSONResponse({"detail": "payload_too_large"}, status_code=413)
     if auth.needs_auth(path) and not auth.is_authenticated(request):
         return JSONResponse({"detail": "auth_required"}, status_code=401)
     # Profil de données : session de test (cookie) ou lien public créé en session de test (jeton « t-… »)
@@ -58,6 +75,8 @@ async def guard(request: Request, call_next):
     if test:
         response.headers["X-Contrail-Profile"] = "test"
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")   # pas d'intégration de l'application dans un autre site
+    response.headers.setdefault("Permissions-Policy", "camera=(self), microphone=(self), geolocation=(self), payment=(), usb=()")
     # Les serveurs de tuiles (OSM, CARTO) exigent un en-tête Referer : ne pas utiliser « same-origin ».
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     if path.startswith("/api/") and request.method == "GET" and "cache-control" not in response.headers:
@@ -67,7 +86,7 @@ async def guard(request: Request, call_next):
     return response
 
 
-for r in (auth.router, misc.router, spots.router, flights.router, stats.router, fleets.router, field.router, share.router, io.router):
+for r in (auth.router, misc.router, spots.router, flights.router, stats.router, fleets.router, field.router, share.router, io.router, wishes.router):
     app.include_router(r)
 
 

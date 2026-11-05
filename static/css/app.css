@@ -232,6 +232,9 @@ body.in-test .appbar { top: var(--test-h, 46px); }
 .seg button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* Champ facultatif : estompé tant qu'il est vide, plein dès qu'on le remplit ou qu'on le sélectionne */
+.field.optional { opacity: .62; transition: opacity .15s; }
+.field.optional:focus-within, .field.optional:has(input:not(:placeholder-shown)) { opacity: 1; }
 .field > span, .label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
 .input, .field input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), .field select, .field textarea, .select {
   width: 100%; height: 42px; padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--line-strong);
@@ -796,3 +799,43 @@ body.radar-mode .main { padding: 0; }
 .cal-legend { display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 8px; }
 .cal-legend i { --c: 11px; }
 @media (min-width: 1200px) { .cal { --c: 14px; } }
+
+/* ---- Wishlist */
+.wish { display: flex; gap: 14px; align-items: flex-start; padding: 14px; border-radius: var(--r-lg); position: relative; }
+.wish > .thumb { width: 64px; height: 64px; border-radius: var(--r-sm); object-fit: cover; flex-shrink: 0; background: var(--surface-2); }
+.wish-ic { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; flex-shrink: 0; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.wish-ic.k-aircraft { color: #0ea5e9; } .wish-ic.k-type { color: #8b5cf6; } .wish-ic.k-airline { color: #f59e0b; }
+.wish-ic.k-livery { color: #ec4899; } .wish-ic.k-airport { color: #10b981; } .wish-ic.k-event { color: var(--accent); } .wish-ic.k-other { color: #64748b; }
+.wish.done { opacity: .78; }
+.wish.done b { text-decoration: line-through; text-decoration-color: rgb(var(--accent-rgb) / .5); }
+.wish.child { margin-left: 22px; padding: 10px 12px; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-top: -6px; border-left: 3px solid rgb(var(--accent-rgb) / .5); }
+.wish-group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.wish-act { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.wish-prio { display: inline-flex; gap: 1px; color: var(--line-strong); flex-shrink: 0; }
+.wish-prio svg.on { color: #f97316; fill: #f97316; }
+.wish-prio.p1 svg.on { color: #94a3b8; fill: #94a3b8; }
+.wish-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.wish-kind { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; padding: 10px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; }
+.wish-kind b { color: var(--text); font-size: 13.5px; }
+.wish-kind small { font-size: 11.5px; line-height: 1.3; }
+.wish-kind:hover { background: var(--surface-2); }
+.wish-kind.on { border-color: rgb(var(--accent-rgb) / .6); background: rgb(var(--accent-rgb) / .07); color: var(--accent); box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / .1); }
+[hidden] { display: none !important; }
+.wish-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 14px; }
+.wish-filters { display: flex; flex-direction: column; gap: 10px; margin: 6px 0 12px; }
+.wish-filters-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.wish-filters-row .input { flex: 1; min-width: 140px; max-width: 280px; }
+.wish-filters-row .seg { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .wish-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wish-filters-row .input { max-width: none; }
+  .wish-filters-row .seg { width: 100%; }
+  .wish-filters-row .seg button { flex: 1; justify-content: center; padding: 0 6px; }
+}
+.chip-sep { width: 1px; align-self: stretch; background: var(--line-strong); margin: 4px 6px; flex-shrink: 0; }
+
+/* Fiche détaillée d'un succès */
+.ach-step { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line); }
+.ach-step.todo { opacity: .55; }
+.ach-step.next { background: color-mix(in srgb, var(--accent) 7%, transparent); margin: 0 -10px; padding: 12px 10px; border-radius: 12px; border-top-color: transparent; }
+.ach-medal.sm { width: 42px; height: 42px; flex: none; font-size: 18px; }

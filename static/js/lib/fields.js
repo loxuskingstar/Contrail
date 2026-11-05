@@ -35,10 +35,17 @@ export function airportInput(input, { onPick } = {}) {
   let list = null, items = [], sel = -1;
   const close = () => { list?.remove(); list = null; };
   const pick = (a) => {
-    input.value = a.icao;
-    input.dataset.name = a.name;
+    if (a.label) {                       // ville ou lieu : on garde son libellé et ses coordonnées pour l'enregistrement
+      input.value = a.label;
+      input.dataset.kind = 'place';
+      input.dataset.name = a.label;
+    } else {
+      input.value = a.icao;
+      input.dataset.name = a.name;
+      delete input.dataset.kind;
+      rememberAirport(a.icao);
+    }
     close();
-    rememberAirport(a.icao);
     onPick?.(a);
     input.dispatchEvent(new Event('change', { bubbles: true }));
   };
@@ -49,21 +56,33 @@ export function airportInput(input, { onPick } = {}) {
     if (!arr.length) return;
     list = document.createElement('div');
     list.className = 'ac-list';
-    list.innerHTML = arr.map((a, i) => `<div class="ac-item" data-i="${i}"><b>${esc(a.icao)}</b><span class="grow ellipsis">${esc(a.name)}<br><span class="tiny muted">${esc(a.city || '')}${a.iata ? ' · ' + esc(a.iata) : ''}</span></span></div>`).join('');
+    list.innerHTML = arr.map((a, i) => a.label
+      ? `<div class="ac-item" data-i="${i}"><b>${icon('map-pin', '', 16)}</b><span class="grow ellipsis">${esc(a.label)}<br><span class="tiny muted">${esc(t('spot.place_city'))}</span></span></div>`
+      : `<div class="ac-item" data-i="${i}"><b>${esc(a.icao)}</b><span class="grow ellipsis">${esc(a.name)}<br><span class="tiny muted">${esc(a.city || '')}${a.iata ? ' · ' + esc(a.iata) : ''}</span></span></div>`).join('');
     list.querySelectorAll('.ac-item').forEach((n) => n.addEventListener('mousedown', (e) => { e.preventDefault(); pick(items[Number(n.dataset.i)]); }));
     wrap.append(list);
   };
   const search = debounce(async () => {
     const q = input.value.trim();
     if (q.length < 2) { close(); return; }
+    let airports = [];
     try {
-      const res = await api('/api/airports/search', { query: { q, limit: 8 } });
-      cacheAirports(res);
-      if (document.activeElement === input) show(res);
+      airports = await api('/api/airports/search', { query: { q, limit: 8 } });
+      cacheAirports(airports);
+      if (document.activeElement === input) show(airports);
     } catch {
       show(offlineSearch(q));
+      return;
+    }
+    // Villes et lieux : un second appel, pour ne pas retarder l'affichage des aéroports
+    if (q.length >= 3 && navigator.onLine) {
+      try {
+        const places = await api('/api/places/search', { query: { q } });
+        if (places.length && document.activeElement === input && input.value.trim() === q) show([...airports.slice(0, 5), ...places]);
+      } catch { /* service de géocodage indisponible : les aéroports suffisent */ }
     }
   }, 180);
+  input.addEventListener('input', () => { delete input.dataset.kind; });   // le texte modifié à la main n'est plus un lieu choisi
   input.addEventListener('input', search);
   input.addEventListener('focus', () => {
     if (input.value.trim()) return;

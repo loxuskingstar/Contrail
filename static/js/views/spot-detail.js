@@ -3,7 +3,7 @@ import { api, mediaUrl } from '../api.js';
 import { store, navigate } from '../app.js';
 import { t, fmtDate, fmtNum, countryName, flag } from '../i18n.js';
 import { icon } from '../lib/icons.js';
-import { esc, badgeHtml, tagChips, lightbox, menu, confirmDialog, toast, errorToast } from '../ui.js';
+import { esc, regText, regLabel, badgeHtml, tagChips, lightbox, menu, confirmDialog, toast, errorToast } from '../ui.js';
 
 const WX_ICON = { clear: 'sun', partly_cloudy: 'cloud-sun', cloudy: 'cloud', overcast: 'cloud', rain: 'cloud-rain', drizzle: 'cloud-rain', snow: 'cloud-snow', thunderstorm: 'cloud-lightning', fog: 'cloud-fog', mist: 'cloud-fog', haze: 'cloud-fog' };
 
@@ -33,13 +33,13 @@ export async function render(root, params) {
   const settings = [s.focal && `${s.focal} mm`, s.aperture && `f/${s.aperture}`, s.shutter && `${s.shutter} s`, s.iso && `ISO ${s.iso}`].filter(Boolean).join(' · ');
 
   root.innerHTML = `
-    ${s.image ? `<div class="detail-hero"><img src="${mediaUrl('images', s.image)}" alt="${esc(s.registration)}" data-zoom>
+    ${s.image ? `<div class="detail-hero"><img src="${mediaUrl('images', s.image)}" alt="${esc(regText(s.registration))}" data-zoom>
       <div class="nav-btns">${s.prev_id ? `<a class="btn-icon" href="#/spots/${s.prev_id}" title="${esc(t('spot.newer'))}">${icon('chevron-left')}</a>` : ''}${s.next_id ? `<a class="btn-icon" href="#/spots/${s.next_id}" title="${esc(t('spot.older'))}">${icon('chevron-right')}</a>` : ''}</div></div>` : ''}
     <header class="page-head" style="${s.image ? 'padding-top:20px' : ''}">
       <div class="grow" style="min-width:0">
-        <div class="row" style="gap:12px"><h1 class="reg-title">${esc(s.registration)}</h1><span class="flag" style="font-size:30px" title="${esc(countryName(s.country))}">${flag(s.country)}</span></div>
+        <div class="row" style="gap:12px"><h1 class="reg-title">${esc(regLabel(s))}</h1><span class="flag" style="font-size:30px" title="${esc(countryName(s.country))}">${flag(s.country)}</span></div>
         <div class="sub" style="font-size:17px;color:var(--text-2)">${esc(s.aircraft || s.aircraft_icao || t('spot.unknown_aircraft'))}${s.owner ? ` · <b>${esc(s.owner)}</b>` : ''}</div>
-        <div class="sub">${icon('map-pin', '', 15)} ${esc(ap ? `${ap.name} (${ap.icao})` : s.airport || '—')} · ${icon('calendar', '', 15)} ${fmtDate(s.date)}</div>
+        <div class="sub">${icon('map-pin', '', 15)} ${esc(ap ? `${ap.name} (${ap.icao})` : s.airport || s.place || '—')} · ${icon('calendar', '', 15)} ${fmtDate(s.date)}</div>
       </div>
       <div class="actions">
         <button class="btn-icon glassy" data-fav title="${esc(t('spot.favorite'))}" style="${s.favorite ? 'color:#f59e0b' : ''}">${icon('star')}</button>
@@ -50,6 +50,9 @@ export async function render(root, params) {
     </header>
     ${s.badges.length || s.tags.length ? `<div class="chips" style="margin:-8px 0 16px">${s.badges.map((b) => badgeHtml(b)).join('')}${tagChips(s.tags)}</div>` : ''}
 
+    ${s.is_patrol && s.patrol_size ? `<div class="card row" style="margin-bottom:14px">${icon('users', '', 22)}<b>${esc(t('patrol.n_aircraft', { n: s.patrol_size }))}</b></div>` : ''}
+    ${s.patrol ? `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('users', '', 18)} ${esc(s.patrol.name || t('patrol.title'))}<a href="#/spots?patrol=${s.patrol.id}">${esc(t('patrol.view_all', { n: s.patrol.members.length }))} →</a></div>
+      <div class="row wrap" style="gap:8px">${s.patrol.members.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}
     ${s.flights.length ? `<a class="card row" style="margin-bottom:14px;background:rgb(139 92 246 / .1)" href="#/airframe/${encodeURIComponent(s.registration)}">${icon('ticket', '', 26)}
       <div class="grow"><b>${esc(t('crossref.spot', { reg: s.registration, n: s.flights.length }))}</b>
       <div class="small muted">${s.flights.map((f) => `${esc(f.dep_icao)} → ${esc(f.arr_icao)} (${fmtDate(f.date, { time: false })})`).join(' · ')}</div></div>${icon('chevron-right')}</a>` : ''}
@@ -61,7 +64,7 @@ export async function render(root, params) {
           <dl class="kv" style="margin:0">
             ${kv(t('spot.type_code'), s.aircraft_icao)}${kv(t('spot.manufacturer'), s.manufacturer)}${kv(t('spot.msn'), s.msn)}
             ${kv(t('spot.airline_icao'), s.airline_icao)}${kv(t('spot.country'), s.country ? `${flag(s.country)} ${countryName(s.country)}` : '')}
-            ${kv('Mode-S', s.icao24 ? s.icao24.toUpperCase() : '')}${kv(t('spot.flight_type'), s.flight_type ? t(`ftype.${s.flight_type}`) : '')}
+            ${kv('Mode-S', s.icao24 ? s.icao24.toUpperCase() : '')}${kv(t('spot.flight_type'), s.flight_type ? t(`ftype.${s.flight_type}`) : '')}${kv(t('spot.test_registration'), s.test_registration)}
             ${kv(t('spot.livery'), s.livery && s.livery !== 'None' ? s.livery : '')}${kv(t('spot.military'), s.military ? t('common.yes') : '')}
             ${kv(t('spot.rating'), s.rating ? '★'.repeat(s.rating) : '')}
           </dl>
@@ -127,7 +130,7 @@ export async function render(root, params) {
     { icon: 'image', label: t('share_img.title'), onClick: () => navigate(`#/spots/${s.id_spotting}/share`) },
     { icon: 'link', label: t('share.this_spot'), onClick: async () => (await import('./shares.js')).createShareFlow({ kind: 'spot', target: String(s.id_spotting) }) },
     store.mod('watchlist') && { icon: 'eye', label: t('watch.add'), onClick: async () => { try { await api('/api/watchlist', { method: 'POST', body: { registration: s.registration } }); toast(esc(t('watch.added')), { type: 'success' }); } catch (err) { errorToast(err); } } },
-    { icon: 'copy', label: t('spot.duplicate'), onClick: () => navigate(`#/spots/new?airport=${encodeURIComponent(s.airport || '')}`) },
+    { icon: 'copy', label: t('spot.duplicate'), onClick: () => navigate(`#/spots/new?${s.airport ? 'airport=' + encodeURIComponent(s.airport) : 'place=' + encodeURIComponent(s.place || '') + (s.lat != null ? `&lat=${s.lat}&lng=${s.lng}` : '')}`) },
     s.image && { icon: 'download', label: t('spot.download_photo'), onClick: () => { const a = document.createElement('a'); a.href = mediaUrl('images', s.image); a.download = `${s.registration}.webp`; a.click(); } },
     '-',
     { icon: 'trash-2', label: t('common.delete'), danger: true, onClick: async () => {

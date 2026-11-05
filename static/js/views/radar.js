@@ -64,7 +64,7 @@ export async function render(root) {
   }, () => fly && toast(esc(t('radar.no_geo')), { type: 'warn' }), { enableHighAccuracy: true, timeout: 8000 });
   if (!home && !homeAp) locate(true);
 
-  const stateOf = (s) => (s.watch ? 'watch' : s.spotted ? 'spotted' : s.on_ground ? 'ground' : s.military ? 'mil' : 'air');
+  const stateOf = (s) => (s.watch || s.wish ? 'watch' : s.spotted ? 'spotted' : s.on_ground ? 'ground' : s.military ? 'mil' : 'air');
 
   async function refresh() {
     if (stopped || document.hidden) return;
@@ -86,7 +86,7 @@ export async function render(root) {
         states.set(s.icao24, s);
         return { type: 'Feature', geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
           properties: { icao24: s.icao24, track: s.track || 0, cls: s.cls || 'unknown', state: stateOf(s),
-            watch: !!s.watch, spotted: !!s.spotted, ground: !!s.on_ground } };
+            watch: !!(s.watch || s.wish), spotted: !!s.spotted, ground: !!s.on_ground } };
       });
       map.getSource('planes')?.setData({ type: 'FeatureCollection', features });
       if (res.error === 'rate_limited') status.innerHTML = `${icon('triangle-alert', '', 16)} ${esc(t('radar.rate_limited'))}`;
@@ -107,7 +107,7 @@ export async function render(root) {
     const model = info.aircraft || typeName(code) || s.desc;
     const alt = s.alt_m != null ? (store.settings.units === 'imperial' ? `${fmtNum(Math.round(s.alt_m * 3.28084))} ft` : `${fmtNum(Math.round(s.alt_m * 3.28084 / 100) * 100)} ft · ${fmtNum(Math.round(s.alt_m))} m`) : '—';
     const spd = s.velocity != null ? `${fmtNum(Math.round(s.velocity * 1.94384))} kt` : '—';
-    const tag = s.watch ? `<span class="badge rose">${icon('eye', '', 12)} ${esc(t('nav.watchlist'))}</span>` : '';
+    const tag = s.watch || s.wish ? `<span class="badge rose">${icon('star', '', 12)} ${esc(s.wish && !s.watch ? `${t('nav.watchlist')} · ${s.wish.title}` : t('nav.watchlist'))}</span>` : '';
     sh.body.innerHTML = `
       <div data-photo class="ac-photo"><img class="ac-sil" src="${aircraftDataUrl(cls, getComputedStyle(document.documentElement).getPropertyValue('--muted').trim(), 120)}" alt=""></div>
       <div class="row" style="margin:14px 0">
@@ -130,7 +130,7 @@ export async function render(root) {
       <div class="row wrap" style="margin-top:14px">
         <a class="btn primary" href="#/spots/new?reg=${encodeURIComponent(reg || '')}&icao24=${s.icao24}" data-close>${icon('camera', '', 18)} ${esc(t('radar.spot_it'))}</a>
         ${reg ? `<a class="btn" href="#/airframe/${encodeURIComponent(reg)}" data-close>${icon('history', '', 18)} ${esc(t('nav.airframe'))}</a>` : ''}
-        ${reg && store.mod('watchlist') && !s.watch ? `<button class="btn" data-watch>${icon('eye', '', 18)} ${esc(t('watch.add'))}</button>` : ''}
+        ${reg && store.mod('watchlist') && !s.watch && !(s.wish && s.wish.kind === 'aircraft') ? `<button class="btn" data-watch>${icon('eye', '', 18)} ${esc(t('watch.add'))}</button>` : ''}
       </div>`;
     sh.body.querySelectorAll('a[data-close]').forEach((a) => a.addEventListener('click', () => sh.close()));
     sh.body.querySelector('[data-watch]')?.addEventListener('click', async () => {

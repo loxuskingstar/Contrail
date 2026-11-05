@@ -1,5 +1,6 @@
 // Détail d'une compagnie : complétion de flotte par type, appareils vus / manquants, exclusions
 import { api, mediaUrl } from '../api.js';
+import { store } from '../app.js';
 import { t, fmtNum, fmtDate } from '../i18n.js';
 import { icon } from '../lib/icons.js';
 import { esc, sheet, toast, errorToast, confirmDialog, emptyState, menu } from '../ui.js';
@@ -67,6 +68,7 @@ export async function render(root, params) {
         const f = d.fleet.find((x) => x.registration === reg);
         menu(c, [
           { icon: 'history', label: t('nav.airframe'), onClick: () => (location.hash = `#/airframe/${encodeURIComponent(reg)}`) },
+          !f?.spotted && store.mod('watchlist') && { icon: 'star', label: t('wish.add_aircraft'), onClick: async () => (await import('./wishlist.js')).quickAdd({ kind: 'aircraft', value: reg, track: true }) },
           !f?.spotted && { icon: 'camera', label: t('spot.new'), onClick: () => (location.hash = `#/spots/new?reg=${encodeURIComponent(reg)}`) },
           '-',
           { icon: 'eye-off', label: t('fleet.exclude'), onClick: async () => { d = await api(`/api/fleets/${encodeURIComponent(key)}/exclude`, { method: 'POST', body: { registration: reg } }); draw(); } },
@@ -77,6 +79,7 @@ export async function render(root, params) {
     });
     root.querySelector('[data-menu]').onclick = (e) => menu(e.currentTarget, [
       { icon: 'upload', label: t('fleet.import'), onClick: importFleet },
+      store.mod('watchlist') && { icon: 'star', label: t('wish.add_airline'), onClick: async () => (await import('./wishlist.js')).quickAdd({ kind: 'airline', value: key, title: d.name }) },
       { icon: 'camera', label: t('fleet.see_spots'), onClick: () => (location.hash = `#/spots?airline=${encodeURIComponent(key)}`) },
       { icon: 'share-2', label: t('share.this_gallery'), onClick: async () => (await import('./shares.js')).createShareFlow({ kind: 'gallery', target: `airline:${key}`, title: d.name }) },
       total && '-',

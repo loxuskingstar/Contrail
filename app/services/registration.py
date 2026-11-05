@@ -56,9 +56,27 @@ def normalize(reg: str | None) -> str:
     return r
 
 
+# Spot sans immatriculation lisible : une immatriculation de substitution unique, jamais comptée comme un avion identifié
+UNKNOWN_PREFIX = "SANS-IMMAT-"
+
+
+def new_unknown() -> str:
+    import secrets
+    return UNKNOWN_PREFIX + secrets.token_hex(3).upper()
+
+
+def is_unknown(reg: str | None) -> bool:
+    return bool(reg) and reg.upper().startswith(UNKNOWN_PREFIX)
+
+
+def known(reg: str | None) -> str | None:
+    """NULL pour une immatriculation de substitution (fonction SQL `known`, utilisée dans les COUNT(DISTINCT …))."""
+    return None if is_unknown(reg) else reg
+
+
 def country_of(reg: str | None) -> str | None:
     r = normalize(reg)
-    if not r:
+    if not r or is_unknown(r):
         return None
     # Cas particuliers de la Chine / Hong Kong / Macao / Taïwan (préfixe B).
     if r.startswith("B-"):

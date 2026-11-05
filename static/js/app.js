@@ -51,7 +51,7 @@ const NAV = [
   { group: 'nav.g.field' },
   { href: '#/radar', icon: 'radar', key: 'nav.radar', match: /^radar/, mod: 'radar' },
   { href: '#/locations', icon: 'binoculars', key: 'nav.locations', match: /^locations/, mod: 'locations' },
-  { href: '#/watchlist', icon: 'eye', key: 'nav.watchlist', match: /^watchlist/, mod: 'watchlist' },
+  { href: '#/wishlist', icon: 'star', key: 'nav.watchlist', match: /^(wishlist|watchlist)/, mod: 'watchlist' },
   { group: 'nav.g.more' },
   { href: '#/achievements', icon: 'trophy', key: 'nav.achievements', match: /^achievements/, mod: 'gamification' },
   { href: '#/story', icon: 'wand-sparkles', key: 'nav.story', match: /^story/, mod: 'gamification' },
@@ -77,7 +77,7 @@ const ROUTES = [
   [/^stats$/, 'stats'],
   [/^locations$/, 'locations'],
   [/^radar$/, 'radar'],
-  [/^watchlist$/, 'watchlist'],
+  [/^(?:wishlist|watchlist)$/, 'wishlist'],
   [/^achievements$/, 'achievements'],
   [/^story$/, 'story'],
   [/^shares$/, 'shares'],
@@ -143,7 +143,7 @@ function updateNav(path) {
     a.classList.toggle('active', !!item?.match?.test(path));
   });
   const more = $('.bottomnav [data-more]');
-  if (more) more.classList.toggle('active', /^(more|fleets|liveries|stats|locations|watchlist|achievements|story|shares|settings|drafts)/.test(path));
+  if (more) more.classList.toggle('active', /^(more|fleets|liveries|stats|locations|wishlist|watchlist|achievements|story|shares|settings|drafts)/.test(path));
 }
 
 // Le grand titre (One UI) se replie dans la barre supérieure au défilement
@@ -287,7 +287,7 @@ function systemNotify(n) {
 async function openNotifications() {
   const s = sheet({ title: esc(t('notif.title')), body: `<div class="skeleton" style="height:120px"></div>` });
   const res = await api('/api/notifications', { query: { limit: 60 } });
-  const ic = { crossref: 'ticket', achievement: 'trophy', watchlist: 'eye', backup: 'archive' };
+  const ic = { crossref: 'ticket', achievement: 'trophy', watchlist: 'eye', wishlist: 'star', backup: 'archive' };
   s.body.innerHTML = res.items.length ? `
     <div class="row" style="justify-content:flex-end;margin-bottom:8px">
       ${'Notification' in window && Notification.permission === 'default' ? `<button class="btn sm" data-perm>${icon('bell', '', 16)} ${esc(t('notif.enable_system'))}</button>` : ''}
@@ -331,7 +331,7 @@ function openPalette() {
     const { mediaUrl } = await import('./api.js');
     results.innerHTML = [
       grp(t('search.airframes'), r.airframes.map((a) => `<a href="#/airframe/${encodeURIComponent(a.registration)}">${icon('plane')}<span class="mono"><b>${esc(a.registration)}</b></span><span class="muted small ellipsis grow">${esc(a.aircraft || '')}</span><span class="badge">${a.n}×</span></a>`)),
-      grp(t('search.spots'), r.spots.map((s) => `<a href="#/spots/${s.id_spotting}">${s.thumb ? `<img src="${mediaUrl('thumbs', s.thumb)}" alt="">` : icon('camera')}<span class="grow ellipsis"><b class="mono">${esc(s.registration)}</b> <span class="muted small">${esc(s.owner || '')} · ${esc(s.airport || '')}</span></span></a>`)),
+      grp(t('search.spots'), r.spots.map((s) => `<a href="#/spots/${s.id_spotting}">${s.thumb ? `<img src="${mediaUrl('thumbs', s.thumb)}" alt="">` : icon('camera')}<span class="grow ellipsis"><b class="mono">${esc(s.registration)}</b> <span class="muted small">${s.test_registration && s.test_registration !== s.registration ? `<span class="mono">${esc(s.test_registration)}</span> · ` : ''}${esc(s.owner || '')} · ${esc(s.airport || '')}</span></span></a>`)),
       grp(t('search.flights'), r.flights.map((f) => `<a href="#/flights/${f.id_flight}">${icon('ticket')}<span class="grow"><b>${esc(f.dep_icao)} → ${esc(f.arr_icao)}</b> <span class="muted small">${esc(f.flight_number || '')} · ${esc(f.date)}</span></span></a>`)),
       grp(t('search.airports'), r.airports.map((a) => `<a href="#/spots?airport=${a.icao}">${icon('map-pin')}<span class="grow"><b class="mono">${a.icao}</b> <span class="muted small">${esc(a.name)}</span></span></a>`)),
       grp(t('search.tags'), r.tags.map((tg) => `<a href="#/spots?tag=${tg.id_tag}">${icon('tag')}<span>${esc(tg.name)}</span></a>`)),

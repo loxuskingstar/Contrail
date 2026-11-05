@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import { t, fmtDate, fmtNum, flag, countryName } from '../i18n.js';
 import { icon } from '../lib/icons.js';
-import { esc, lightbox, emptyState } from '../ui.js';
+import { esc, regText, lightbox, emptyState } from '../ui.js';
 
 export async function render(app, { token }) {
   let d;
@@ -32,7 +32,7 @@ export async function render(app, { token }) {
           <div class="meta">${esc([f.flight_number, f.airline, f.aircraft, f.registration].filter(Boolean).join(' · '))}</div></div><b class="num">${fmtNum(f.distance_km)} km</b></div>`).join('')}</div>` : ''}
       ${d.spots.length ? `<div class="gallery">${d.spots.map((s, i) => `<button class="tile ${s.has_image ? '' : 'noimg'}" data-i="${i}" style="border:0;padding:0;text-align:left;color:inherit">
           ${s.has_image ? `<img loading="lazy" src="${img(s.id_spotting)}" alt="${esc(s.registration)}">` : icon('plane', '', 32)}
-          <div class="cap"><b class="mono">${esc(s.registration)}</b> <span class="flag">${flag(s.country)}</span><small class="ellipsis">${esc([s.aircraft || s.aircraft_icao, s.owner].filter(Boolean).join(' · '))}</small>
+          <div class="cap"><b class="mono">${esc(regText(s.registration))}</b> <span class="flag">${flag(s.country)}</span><small class="ellipsis">${esc([s.aircraft || s.aircraft_icao, s.owner].filter(Boolean).join(' · '))}</small>
           <small>${esc(s.airport || '')} · ${fmtDate(s.date, { time: false })}</small></div></button>`).join('')}</div>` : ''}
       ${!d.spots.length && !d.flights.length ? `<div class="card">${emptyState('images', t('share.public_empty'))}</div>` : ''}
       <p class="tiny muted center" style="margin-top:28px">${esc(t('share.public_footer'))}</p>

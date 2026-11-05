@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timedelta
 
 from ..core import get_settings, q
-from . import backup, opensky, weather
+from . import backup, opensky, weather, wishes
 from .notify import notify, texts
 
 log = logging.getLogger("contrail.scheduler")
@@ -38,6 +38,8 @@ async def _watch_loop() -> None:
             interval = max(2, int(s.get("watch_interval_min") or 5))
             if s.get("modules", {}).get("watchlist", True):
                 await asyncio.to_thread(opensky.check_watchlist)
+                await asyncio.to_thread(wishes.sync)
+                await asyncio.to_thread(wishes.reminders)
         except Exception:  # noqa: BLE001
             log.exception("Vérification de la watchlist en échec")
         await asyncio.sleep(interval * 60)

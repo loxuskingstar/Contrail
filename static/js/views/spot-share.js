@@ -2,7 +2,7 @@
 import { api, mediaUrl } from '../api.js';
 import { t, fmtDate, countryName } from '../i18n.js';
 import { icon } from '../lib/icons.js';
-import { esc, pageHead, toast } from '../ui.js';
+import { esc, pageHead, toast, regLabel } from '../ui.js';
 import { FONTS, loadFonts, loadImage, drawCover, drawContain, rrect, rgba, fit, fitSize, wrap, barcode, dashed, grain, flagEmoji, canvasBlob } from '../lib/canvas.js';
 import { drawAircraft, loadTypes, classify, typeName } from '../lib/shapes.js';
 import { PALETTES } from './story.js';
@@ -44,7 +44,7 @@ function facts(s, o) {
   const badges = (s.badges || []).filter((b) => ['first_type', 'special_livery', 'most_spotted', 'flown', 'golden_hour', 'night', 'military'].includes(b.code))
     .map((b) => (b.code === 'special_livery' && b.cat && b.cat !== 'special' ? t(`livery.${b.cat}`) : t(`badge.${b.code}`, b.n ? { n: b.n } : undefined)));
   return {
-    reg: s.registration, flag: flagEmoji(s.country), country: s.country ? countryName(s.country) : '',
+    reg: regLabel(s), isPatrol: !!s.is_patrol, flag: flagEmoji(s.country), country: s.country ? countryName(s.country) : '',
     type: s.aircraft || typeName(s.aircraft_icao) || s.aircraft_icao || '', code: s.aircraft_icao || '',
     airline: o.info.airline ? s.owner || '' : '',
     airport: o.info.airport && (ap || s.airport) ? (ap ? `${ap.city || ap.name} · ${ap.iata || ap.icao}` : s.airport) : '',
@@ -306,7 +306,7 @@ async function drawBoarding(c, W, H, img, f, o, P) {
     c.fillStyle = sub; c.font = `600 ${20 * u}px ${FONTS.sans}`; c.fillText(fit(c, label.toUpperCase(), fw - 10 * u), fx, fy);
     c.fillStyle = ink; c.font = `700 ${fitSize(c, value || '—', fw - 14 * u, size * u, 700, FONTS.mono, 14 * u)}px ${FONTS.mono}`; c.fillText(value || '—', fx, fy + (size + 8) * u);
   };
-  field(t('share_img.registration'), `${f.reg}`, ix, yy, 72, iw - 80 * u);
+  field(t(f.isPatrol ? 'patrol.title' : 'share_img.registration'), `${f.reg}`, ix, yy, 72, iw - 80 * u);
   c.font = `${44 * u}px ${FONTS.sans}`; c.textAlign = 'right'; c.fillText(f.flag, ix + iw, yy + 70 * u); c.textAlign = 'left';
   yy += 130 * u;
   const cw = iw / cols;
@@ -380,7 +380,7 @@ export async function render(root, params) {
   const [img] = await Promise.all([s.image ? loadImage(mediaUrl('images', s.image)) : Promise.resolve(null), loadFonts(), loadTypes()]);
 
   root.innerHTML = `
-    ${pageHead(esc(t('share_img.title')), { sub: `<span class="mono">${esc(s.registration)}</span> · ${esc(s.aircraft || s.aircraft_icao || '')}`, actions: `<a class="btn ghost" href="#/spots/${s.id_spotting}">${icon('chevron-left', '', 18)} ${esc(t('share_img.back'))}</a>` })}
+    ${pageHead(esc(t('share_img.title')), { sub: `<span class="mono">${esc(regLabel(s))}</span> · ${esc(s.aircraft || s.aircraft_icao || '')}`, actions: `<a class="btn ghost" href="#/spots/${s.id_spotting}">${icon('chevron-left', '', 18)} ${esc(t('share_img.back'))}</a>` })}
     <div class="story-wrap">
       <div class="story-preview"><canvas data-canvas></canvas></div>
       <div class="stack">
@@ -488,7 +488,7 @@ export async function render(root, params) {
   root.querySelector('[data-fit]')?.addEventListener('change', (e) => { o.fit = e.target.checked ? 'contain' : 'cover'; redraw(); });
   root.querySelector('[data-fx]')?.addEventListener('input', (e) => { o.focusX = Number(e.target.value); redraw(); });
   root.querySelector('[data-fy]')?.addEventListener('input', (e) => { o.focusY = Number(e.target.value); redraw(); });
-  const fname = () => `${s.registration}-${o.template}-${o.format}.png`;
+  const fname = () => `${regLabel(s).replace(/[\\/:*?"<>|\s]+/g, '_')}-${o.template}-${o.format}.png`;
   root.querySelector('[data-dl]').onclick = async () => {
     const b = await canvasBlob(canvas);
     const a = document.createElement('a');
@@ -497,8 +497,8 @@ export async function render(root, params) {
   };
   root.querySelector('[data-share]')?.addEventListener('click', async () => {
     const file = new File([await canvasBlob(canvas)], fname(), { type: 'image/png' });
-    const text = [s.registration, s.aircraft, s.owner].filter(Boolean).join(' · ');
-    if (navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: s.registration, text }).catch(() => {});
+    const text = [regLabel(s), s.aircraft, s.owner].filter(Boolean).join(' · ');
+    if (navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: regLabel(s), text }).catch(() => {});
     else toast(esc(t('story.share_unsupported')), { type: 'warn' });
   });
   root.querySelector('[data-copy]')?.addEventListener('click', async () => {

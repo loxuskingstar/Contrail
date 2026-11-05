@@ -1,12 +1,16 @@
 /* Contrail — service worker : coquille hors-ligne, cache API/médias, cible de partage */
+<<<<<<< HEAD
 const VERSION = 'contrail-v1.4.5';
+=======
+const VERSION = 'contrail-v2.1.0';
+>>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 const MEDIA = 'contrail-media';
 const SHARE = 'contrail-share';
 
 const VIEWS = ['dashboard', 'spots', 'spot-form', 'spot-detail', 'airframe', 'flights', 'flight-form', 'fleets', 'fleet-detail',
-  'liveries', 'stats', 'locations', 'radar', 'watchlist', 'achievements', 'story', 'shares', 'settings', 'drafts', 'more', 'public', 'spot-share', 'flight-detail'];
+  'liveries', 'stats', 'locations', 'radar', 'wishlist', 'achievements', 'story', 'shares', 'settings', 'drafts', 'more', 'public', 'spot-share', 'flight-detail'];
 const PRECACHE = [
   '/', '/manifest.webmanifest', '/static/css/app.css',
   '/static/icons/icon.svg', '/static/icons/icon-192.png',

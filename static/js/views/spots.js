@@ -6,10 +6,22 @@ import { icon } from '../lib/icons.js';
 import { esc, sheet, spotRow, spotTile, emptyState, confirmDialog, toast, errorToast, enableSwipe, menu, debounce, $ } from '../ui.js';
 
 const PAGE = 60;
-const FILTER_KEYS = ['search', 'tag', 'airport', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'sort'];
+const SCOPE_KEY = 'contrail.spotsScope';
+const FILTER_KEYS = ['search', 'tag', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'unknown', 'sort'];
 
 export async function render(root, _p, query) {
   const filters = Object.fromEntries(FILTER_KEYS.filter((k) => query[k] !== undefined && query[k] !== '').map((k) => [k, query[k]]));
+  // Lieu actif : à l'ouverture simple de la liste, seuls les spots de l'aéroport ou du lieu choisi s'affichent
+  const plainEntry = !FILTER_KEYS.some((k) => k !== 'sort' && query[k]);
+  let persistScope = plainEntry;
+  const sites = (store.facets || (await store.refreshFacets().catch(() => null)))?.sites || [];
+  if (plainEntry && sites.length) {
+    let sc = null;
+    try { sc = JSON.parse(localStorage.getItem(SCOPE_KEY) || 'null'); } catch { /* pas de mémoire locale */ }
+    if (!sc) { const d = store.settings.default_airport; sc = d ? { airport: d } : { [sites[0].kind]: sites[0].value }; }
+    const known = sites.some((x) => (sc.airport && x.kind === 'airport' && x.value === sc.airport) || (sc.place && x.kind === 'place' && x.value === sc.place));
+    if (known) { if (sc.airport) filters.airport = sc.airport; else filters.place = sc.place; }
+  }
   let mode = localStorage.getItem('contrail.spotsView') || 'list';
   let items = [], total = 0, loading = false, done = false, map = null;
   let selecting = false;
@@ -21,6 +33,7 @@ export async function render(root, _p, query) {
       <div class="actions"><a class="btn primary hide-sm" href="#/spots/new">${icon('plus', '', 18)} ${esc(t('spot.new'))}</a>
       <button class="btn-icon glassy" data-more>${icon('ellipsis')}</button></div></header>
     <div class="stack" style="gap:12px;margin-bottom:14px">
+      <button type="button" class="btn sm scope-btn" data-scope style="align-self:flex-start"></button>
       <div class="row">
         <div class="search grow">${icon('search', '', 18)}<input class="input" type="search" placeholder="${esc(t('spots.search'))}" value="${esc(filters.search || '')}"></div>
         <button class="btn-icon glassy" data-filter title="${esc(t('spots.filters'))}">${icon('filter')}</button>
@@ -40,7 +53,29 @@ export async function render(root, _p, query) {
   const results = root.querySelector('[data-results]');
   const sentinel = root.querySelector('[data-sentinel]');
 
+  const renderScope = () => {
+    const where = filters.airport || filters.place;
+    const b = root.querySelector('[data-scope]');
+    b.innerHTML = `${icon(filters.place ? 'map-pin' : 'plane-takeoff', '', 16)} ${esc(where || t('spots.scope_all'))} ${icon('chevron-down', '', 14)}`;
+    b.classList.toggle('primary', !!where);
+  };
+  const pickScope = () => {
+    const sh = sheet({ title: esc(t('spots.scope_title')), body: `<div class="stack" style="gap:6px">
+      <button class="list-row" style="text-align:left" data-s="">${icon('layers', '', 20)}<div class="grow"><b>${esc(t('spots.scope_all'))}</b></div></button>
+      ${sites.map((x) => `<button class="list-row" style="text-align:left" data-s="${esc(x.kind)}:${esc(x.value)}">${icon(x.kind === 'place' ? 'map-pin' : 'plane-takeoff', '', 20)}<div class="grow"><b>${esc(x.value)}</b><div class="small muted">${esc(t('spots.count', { n: x.n, nf: fmtNum(x.n) }))}${x.last ? ' · ' + fmtDate(x.last, { time: false, short: true }) : ''}</div></div></button>`).join('')}
+      <p class="tiny muted">${esc(t('spots.scope_hint'))}</p></div>` });
+    sh.body.querySelectorAll('[data-s]').forEach((b) => (b.onclick = () => {
+      delete filters.airport; delete filters.place;
+      if (b.dataset.s) { const [kind, ...v] = b.dataset.s.split(':'); filters[kind] = v.join(':'); }
+      persistScope = true;
+      sh.close();
+      reload();
+    }));
+  };
+
   const syncUrl = () => {
+    if (persistScope) { try { localStorage.setItem(SCOPE_KEY, JSON.stringify({ airport: filters.airport || '', place: filters.place || '' })); } catch { /* ignoré */ } }
+
     const qs = new URLSearchParams(filters).toString();
     history.replaceState(null, '', `#/spots${qs ? '?' + qs : ''}`);
   };
@@ -49,18 +84,19 @@ export async function render(root, _p, query) {
     const box = root.querySelector('[data-active]');
     const chips = [];
     for (const [k, v] of Object.entries(filters)) {
-      if (k === 'search' || k === 'sort') continue;
+      if (k === 'search' || k === 'sort' || k === 'airport' || k === 'place') continue;   // portés par le sélecteur de lieu
       let label = v;
       if (k === 'tag') label = store.tags?.find((x) => String(x.id_tag) === String(v))?.name || v;
       if (k === 'country') label = `${flag(v)} ${countryName(v)}`;
-      if (['special', 'favorite', 'has_photo', 'has_audio'].includes(k)) label = t(`spots.f_${k}`);
+      if (['special', 'favorite', 'has_photo', 'has_audio', 'unknown'].includes(k)) label = t(`spots.f_${k}`);
       if (k === 'military') label = v === '1' ? t('spot.military') : t('spots.civil');
       if (k === 'flight_type') label = t(`ftype.${v}`);
       if (k === 'livery_category') label = t(`livery.${v}`);
+      if (k === 'patrol') label = t('patrol.title');
       chips.push(`<button class="chip on" data-rm="${k}">${esc(label)} ${icon('x', '', 14)}</button>`);
     }
     box.innerHTML = chips.join('');
-    box.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => { delete filters[b.dataset.rm]; reload(); }));
+    box.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => { delete filters[b.dataset.rm]; if (['airport', 'place'].includes(b.dataset.rm)) persistScope = true; reload(); }));
   };
 
   const setMode = (m) => {
@@ -277,6 +313,7 @@ export async function render(root, _p, query) {
     const y = window.scrollY;
     syncUrl();
     renderActive();
+    renderScope();
     map?.remove(); map = null;
     items = []; done = false; results.innerHTML = '';
     if (mode === 'map') { drawMap().catch(errorToast); return; }
@@ -293,7 +330,8 @@ export async function render(root, _p, query) {
     if (v) filters.search = v; else delete filters.search;
     reload();
   }, 300));
-  root.querySelector('[data-filter]').onclick = () => openFilters(filters, reload);
+  root.querySelector('[data-filter]').onclick = () => openFilters(filters, () => { persistScope = persistScope || !FILTER_KEYS.some((k) => k !== 'sort' && k !== 'airport' && k !== 'place' && filters[k]); reload(); });
+  root.querySelector('[data-scope]').onclick = pickScope;
   root.querySelector('[data-more]').onclick = (e) => menu(e.currentTarget, [
     { icon: 'square-check', label: t('spots.select'), onClick: startSelect },
     { icon: 'palette', label: t('nav.liveries'), onClick: () => (location.hash = '#/liveries') },
@@ -326,6 +364,7 @@ async function openFilters(filters, onApply) {
       ${tags.length ? `<div class="field"><span>${esc(t('spot.tags'))}</span><div class="chips">${tags.map((tg) => `<button class="chip ${String(f.tag) === String(tg.id_tag) ? 'on' : ''}" data-tag="${tg.id_tag}"><span class="sw" style="background:${esc(tg.color)}"></span>${esc(tg.name)}</button>`).join('')}</div></div>` : ''}
       <div class="field-row">
         <label class="field"><span>${esc(t('spot.airport'))}</span><select data-k="airport">${opt(facets.airports, f.airport)}</select></label>
+        ${(facets.places || []).length ? `<label class="field"><span>${esc(t('spot.place'))}</span><select data-k="place">${opt(facets.places, f.place)}</select></label>` : ''}
         <label class="field"><span>${esc(t('spot.type'))}</span><select data-k="type">${opt(facets.types, f.type)}</select></label>
       </div>
       <div class="field-row">
@@ -341,7 +380,7 @@ async function openFilters(filters, onApply) {
         <label class="field"><span>${esc(t('spots.sort'))}</span><select data-k="sort">${['date_desc', 'date_asc', 'created', 'registration', 'type'].map((v) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${esc(t(`sort.${v}`))}</option>`).join('')}</select></label>
       </div>
       <div class="card" style="padding:4px 14px">
-        ${['favorite', 'special', 'has_photo', 'has_audio'].map((k) => `<label class="toggle-row"><span class="t">${esc(t(`spots.f_${k}`))}</span><span class="switch"><input type="checkbox" data-b="${k}" ${f[k] ? 'checked' : ''}><span></span></span></label>`).join('')}
+        ${['favorite', 'special', 'has_photo', 'has_audio', 'unknown'].map((k) => `<label class="toggle-row"><span class="t">${esc(t(`spots.f_${k}`))}</span><span class="switch"><input type="checkbox" data-b="${k}" ${f[k] ? 'checked' : ''}><span></span></span></label>`).join('')}
       </div>
       <div class="row" style="justify-content:space-between"><button class="btn ghost" data-reset>${esc(t('spots.clear_filters'))}</button><button class="btn primary" data-apply>${esc(t('common.apply'))}</button></div>
     </div>` });

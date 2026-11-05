@@ -69,7 +69,7 @@ def available() -> bool:
 
 
 def status() -> dict:
-    out = {**_state, "available": available()}
+    out = {**_state, "available": available(), "size": REF_PATH.stat().st_size if available() else 0}
     c = _conn()
     if c:
         try:
@@ -92,7 +92,13 @@ def by_hex(hexes: list[str]) -> dict[str, dict]:
     hexes = [h.lower() for h in hexes if h]
     for i in range(0, len(hexes), 500):
         chunk = hexes[i:i + 500]
-        for r in c.execute(f"SELECT * FROM aircraft WHERE icao24 IN ({','.join('?' * len(chunk))})", chunk):
+        try:   # base compacte : icao24 stocké en entier, on interroge la vue qui l'expose (index utilisable)
+            ints = [int(h, 16) for h in chunk if RE_HEX.match(h)]
+            rows = c.execute(f"SELECT * FROM aircraft_i WHERE hx IN ({','.join('?' * len(ints))})", ints).fetchall()
+        except sqlite3.OperationalError:
+            rows = c.execute(f"SELECT * FROM aircraft WHERE icao24 IN ({','.join('?' * len(chunk))})", chunk).fetchall()
+        for r in rows:
+            r.pop("hx", None)
             out[r["icao24"]] = r
     return out
 
@@ -135,6 +141,24 @@ def by_operator(name: str | list[str] | None, icao: str | None = None, limit: in
     return list(found.values())[:limit]
 
 
+def dominant_operators(icao: str) -> list[str]:
+    """Opérateurs dominants d'un code OACI : variantes de nom regroupées, au moins 50 % du plus fréquent."""
+    c = _conn()
+    if not c or not re.fullmatch(r"[A-Za-z]{3}", icao or ""):
+        return []
+    tally: dict[str, list] = {}
+    for r in c.execute("SELECT ownop, COUNT(*) n FROM aircraft WHERE operator_icao = ? AND ownop IS NOT NULL AND ownop <> '' "
+                       "GROUP BY ownop", (icao.upper(),)):
+        k = _opkey(r["ownop"])
+        if k:
+            t = tally.setdefault(k, [0, r["ownop"]])
+            t[0] += r["n"]
+    if not tally:
+        return []
+    top = max(v[0] for v in tally.values())
+    return [v[1] for v in tally.values() if v[0] >= 0.5 * top]
+
+
 def operators(prefix: str = "", limit: int = 30) -> list[dict]:
     """Opérateurs connus de la base (pour l'autocomplétion des flottes)."""
     c = _conn()
@@ -173,6 +197,111 @@ CREATE TABLE aircraft (
 );
 CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);
 """
+
+
+# --------------------------------------------------------------------------- #
+# Compaction : les noms d'opérateur, types et descriptions sont stockés une seule fois (≈ 3× plus léger).
+# La table « aircraft » devient une VUE de même forme : le code de lecture ne change pas.
+# --------------------------------------------------------------------------- #
+VIEWS = """
+CREATE VIEW aircraft_i AS SELECT printf('%06x', a.icao24) AS icao24, a.registration, m.typecode, m.description, a.military,
+    a.year, o.name AS ownop, o.norm AS ownop_norm, a.operator_icao, o.key AS op_key, a.icao24 AS hx
+  FROM ac a LEFT JOIN m ON m.id = a.m LEFT JOIN op o ON o.id = a.op;
+CREATE VIEW aircraft AS SELECT icao24, registration, typecode, description, military, year, ownop, ownop_norm, operator_icao, op_key
+  FROM aircraft_i;
+"""
+
+
+def _kind(c: sqlite3.Connection) -> str | None:
+    r = c.execute("SELECT type FROM sqlite_master WHERE name = 'aircraft'").fetchone()
+    return (r[0] if not isinstance(r, dict) else r["type"]) if r else None
+
+
+def _compact(c: sqlite3.Connection) -> None:
+    """Remplace la table « aircraft » par des tables normalisées et une vue de compatibilité."""
+    if _kind(c) != "table":
+        return
+    c.executescript("""
+        DROP TABLE IF EXISTS op; DROP TABLE IF EXISTS m; DROP TABLE IF EXISTS ac;
+        CREATE TABLE op (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, norm TEXT, key TEXT);
+        CREATE TABLE m (id INTEGER PRIMARY KEY, typecode TEXT, description TEXT);
+        CREATE TABLE ac (icao24 INTEGER PRIMARY KEY, registration TEXT, m INTEGER, military INTEGER NOT NULL DEFAULT 0,
+                         year TEXT, op INTEGER, operator_icao TEXT);
+        INSERT INTO op(name, norm, key) SELECT ownop, MAX(ownop_norm), MAX(op_key) FROM aircraft
+            WHERE ownop IS NOT NULL GROUP BY ownop;
+        INSERT INTO m(typecode, description) SELECT DISTINCT typecode, description FROM aircraft
+            WHERE typecode IS NOT NULL OR description IS NOT NULL;
+    """)
+    ops = {n: i for i, n in c.execute("SELECT id, name FROM op")}
+    models = {(t, d): i for i, t, d in c.execute("SELECT id, typecode, description FROM m")}
+
+    def gen():
+        for icao, reg, typ, desc, mil, year, own, op_icao in c.execute(
+                "SELECT icao24, registration, typecode, description, military, year, ownop, operator_icao FROM aircraft").fetchall():
+            yield (int(icao, 16), reg, models.get((typ, desc)), mil, year, ops.get(own), op_icao)
+    c.executemany("INSERT INTO ac VALUES (?,?,?,?,?,?,?)", gen())
+    c.executescript("""
+        DROP TABLE aircraft;
+        CREATE INDEX ac_reg ON ac(registration);
+        CREATE INDEX ac_opicao ON ac(operator_icao);
+        CREATE INDEX ac_op ON ac(op);
+        CREATE INDEX op_norm ON op(norm);
+        CREATE INDEX op_key ON op(key);
+    """ + VIEWS)
+    c.commit()
+
+
+def _expand(c: sqlite3.Connection) -> None:
+    """Inverse de _compact : redonne une vraie table « aircraft » (nécessaire pour fusionner un nouvel import)."""
+    if _kind(c) != "view":
+        return
+    c.executescript("""
+        CREATE TABLE aircraft_new (icao24 TEXT PRIMARY KEY, registration TEXT, typecode TEXT, description TEXT,
+            military INTEGER NOT NULL DEFAULT 0, year TEXT, ownop TEXT, ownop_norm TEXT, operator_icao TEXT, op_key TEXT);
+        INSERT INTO aircraft_new SELECT icao24, registration, typecode, description, military, year, ownop, ownop_norm,
+            operator_icao, op_key FROM aircraft_i;
+        DROP VIEW aircraft; DROP VIEW aircraft_i;
+        DROP TABLE ac; DROP TABLE m; DROP TABLE op;
+        ALTER TABLE aircraft_new RENAME TO aircraft;
+    """)
+    c.commit()
+
+
+def _vacuum(path: Path) -> None:
+    v = sqlite3.connect(str(path))
+    try:
+        v.execute("VACUUM")
+    finally:
+        v.close()
+
+
+def compact_file() -> bool:
+    """Compacte la base déjà présente (ancienne base v1.5.x). Renvoie True si elle a été réécrite."""
+    if not REF_PATH.exists() or _state["running"]:
+        return False
+    with _lock:
+        tmp = REF_PATH.with_suffix(".compact")
+        tmp.unlink(missing_ok=True)
+        try:
+            src = sqlite3.connect(f"file:{REF_PATH}?mode=ro", uri=True)
+            dst = sqlite3.connect(str(tmp))
+            src.backup(dst)
+            src.close()
+            if _kind(dst) != "table":
+                dst.close(); tmp.unlink(missing_ok=True)
+                return False
+            before = REF_PATH.stat().st_size
+            _compact(dst)
+            dst.close()
+            _vacuum(tmp)
+            tmp.replace(REF_PATH)
+            _local.conn = None
+            log.info("Base de référence compactée : %.0f → %.0f Mo", before / 1e6, REF_PATH.stat().st_size / 1e6)
+            return True
+        except Exception:   # noqa: BLE001 — la base d'origine reste intacte
+            log.exception("Compaction de la base de référence impossible")
+            tmp.unlink(missing_ok=True)
+            return False
 
 
 def _rows_from_text(lines) -> tuple[str, object]:
@@ -237,6 +366,7 @@ def _import_stream(stream, source: str, merge: bool) -> int:
         src.backup(dst)
         src.close()
         c = dst
+        _expand(c)
         cols = {r[1] for r in c.execute("PRAGMA table_info(aircraft)")}
         if "op_key" not in cols:   # base créée par la v1.3
             c.execute("ALTER TABLE aircraft ADD COLUMN op_key TEXT")
@@ -293,10 +423,9 @@ def _import_stream(stream, source: str, merge: bool) -> int:
         tmp.unlink(missing_ok=True)
         raise ValueError("refdb_empty")
     _state["phase"] = "index"
-    if not existing:
-        c.execute("CREATE INDEX idx_reg ON aircraft(registration)")
-        c.execute("CREATE INDEX idx_op ON aircraft(ownop_norm)")
-        c.execute("CREATE INDEX idx_opicao ON aircraft(operator_icao)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_reg ON aircraft(registration)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_op ON aircraft(ownop_norm)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_opicao ON aircraft(operator_icao)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_opkey ON aircraft(op_key)")
     propagated = _propagate_operator_icao(c)
     total = c.execute("SELECT COUNT(*) FROM aircraft").fetchone()[0]
@@ -315,7 +444,9 @@ def _import_stream(stream, source: str, merge: bool) -> int:
         ("count", str(total)), ("imported_at", now_iso()), ("source", " + ".join(sources)),
         ("sources", _json.dumps(sources)), ("with_operator_icao", str(with_icao)), ("propagated", str(propagated))])
     c.commit()
+    _compact(c)
     c.close()
+    _vacuum(tmp)
     tmp.replace(REF_PATH)
     _local.conn = None
     log.info("Base de référence : %s lignes importées (%s), %s appareils, %s avec code OACI opérateur (%s propagés)",

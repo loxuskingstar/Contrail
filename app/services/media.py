@@ -115,6 +115,42 @@ def open_image(data: bytes) -> Image.Image:
     return img
 
 
+def dhash(img: Image.Image) -> str:
+    """Empreinte de différence 9×8 : stable après redimensionnement, recompression ou léger ajustement de couleur."""
+    g = img.convert("L").resize((9, 8), Image.Resampling.LANCZOS)
+    px = list(getattr(g, "get_flattened_data", g.getdata)())
+    bits = 0
+    for row in range(8):
+        for col in range(8):
+            bits = (bits << 1) | (px[row * 9 + col] > px[row * 9 + col + 1])
+    return f"{bits:016x}"
+
+
+def hash_bytes(data: bytes) -> str:
+    return dhash(ImageOps.exif_transpose(open_image(data)))
+
+
+def hamming(a: str, b: str) -> int:
+    return (int(a, 16) ^ int(b, 16)).bit_count()
+
+
+def backfill_phash(limit: int = 5000) -> int:
+    """Calcule l'empreinte des photos enregistrées avant la 1.7 (lecture de l'image déjà réduite sur disque)."""
+    from ..core import execute, q
+    n = 0
+    for r in q("SELECT id_spotting id, image FROM spotting WHERE image IS NOT NULL AND phash IS NULL LIMIT ?", (limit,)):
+        p = DIRS["images"] / r["image"]
+        if not p.is_file():
+            continue
+        try:
+            with Image.open(p) as im:
+                execute("UPDATE spotting SET phash = ? WHERE id_spotting = ?", (dhash(im), r["id"]))
+            n += 1
+        except Exception:  # noqa: BLE001 — une image illisible ne doit pas bloquer les autres
+            continue
+    return n
+
+
 def save_image(data: bytes, original_name: str = "") -> dict:
     img = open_image(data)
     exif = extract_exif(img)
@@ -122,6 +158,7 @@ def save_image(data: bytes, original_name: str = "") -> dict:
     if img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGBA" if "A" in img.getbands() else "RGB")
 
+    phash = dhash(img)
     max_px = int(get_setting("image_max_px") or 2560)
     quality = int(get_setting("image_quality") or 85)
     sub = datetime.now().strftime("%Y/%m")
@@ -145,7 +182,7 @@ def save_image(data: bytes, original_name: str = "") -> dict:
         orig.parent.mkdir(parents=True, exist_ok=True)
         orig.write_bytes(data)
 
-    return {"image": rel, "thumb": th_rel, "image_w": main.width, "image_h": main.height, "exif": exif}
+    return {"image": rel, "thumb": th_rel, "image_w": main.width, "image_h": main.height, "phash": phash, "exif": exif}
 
 
 def delete_image(rel: str | None, thumb: str | None) -> None:

@@ -50,7 +50,7 @@ def load_fixture() -> dict:
 
     for s in data.get("spots", []):
         payload = {k: s.get(k) for k in ("registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner",
-                                         "airline_icao", "livery", "flight_type", "military", "airport", "description",
+                                         "airline_icao", "livery", "flight_type", "test_registration", "military", "airport", "description",
                                          "camera", "lens", "focal", "aperture", "iso", "shutter", "favorite", "rating")}
         payload["date"] = _local_iso(s.get("days_ago", 0), s.get("time", "12:00"))
         if s.get("location") in loc_ids:
@@ -87,11 +87,23 @@ def load_fixture() -> dict:
         conn.execute("INSERT OR REPLACE INTO airlines(key, icao, name, fleet_source, fleet_fetched_at) VALUES(?,?,?,?,?)",
                      (fl["key"], fl["key"], fl["name"], "manual", now_iso()))
     for w in data.get("watchlist", []):
-        conn.execute("INSERT OR IGNORE INTO watchlist(registration, note, notify, created_at) VALUES(?,?,0,?)",
-                     (w["registration"], w.get("note"), now_iso()))
+        conn.execute("INSERT OR IGNORE INTO wishes(kind, title, value, note, notify, track, auto_complete, created_at, updated_at) "
+                     "VALUES('aircraft',?,?,?,0,1,0,?,?)", (w["registration"], w["registration"], w.get("note"), now_iso(), now_iso()))
+    for w in data.get("wishes", []):
+        start = end = None
+        if w.get("start_in") is not None:
+            start_d = datetime.now().date() + timedelta(days=int(w["start_in"]))
+            start, end = start_d.isoformat(), (start_d + timedelta(days=int(w.get("length", 1)) - 1)).isoformat()
+        conn.execute("INSERT INTO wishes(kind, title, value, airline_key, family, note, priority, goal_count, start_date, end_date, "
+                     "place, airport, notify, since, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0,NULL,?,?)",
+                     (w["kind"], w["title"], w.get("value"), w.get("airline_key"), int(w.get("family", 0)), w.get("note"),
+                      w.get("priority", 2), w.get("goal_count", 1), start, end, w.get("place"), w.get("airport"),
+                      now_iso(), now_iso()))
     conn.commit()
 
     gamification.evaluate(notify_new=False)
+    from . import wishes
+    wishes.sync(notify_done=False)
     conn.execute("DELETE FROM notifications")
     conn.commit()
     return {"spots": len(data.get("spots", [])), "flights": len(data.get("flights", []))}

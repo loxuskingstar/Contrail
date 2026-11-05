@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from ..core import db, execute, get_settings, now_iso, q, q1
-from ..services import collection, gamification, geo, media, weather
+from ..services import airframes, collection, gamification, geo, media, weather, wishes
 from ..services import registration as regs
 from ..services.notify import notify, texts
 
@@ -22,7 +23,7 @@ FLIGHT_TYPES = ["commercial", "cargo", "test", "delivery", "ferry", "military", 
                 "helicopter", "medical", "training", "airshow", "government", "other"]
 
 EDITABLE = ("registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner", "airline_icao",
-            "livery", "military", "flight_type", "date", "airport", "location_id", "lat", "lng",
+            "livery", "military", "flight_type", "test_registration", "date", "airport", "place", "location_id", "lat", "lng",
             "description", "icao24", "favorite", "rating", "camera", "lens", "focal", "aperture", "iso",
             "shutter")
 
@@ -42,10 +43,15 @@ def build_filters(f: dict) -> tuple[str, list]:
     where, params = ["1=1"], []
     if f.get("search"):
         like = f"%{f['search'].strip()}%"
+        # Une ancienne immatriculation ramène aussi les spots du même avion (nouvelle compagnie, immat d'essai…)
+        sib = airframes.group(f["search"]) if len(regs.normalize(f["search"])) >= 3 else []
+        sib = sib if len(sib) > 1 else []
         where.append("(s.registration LIKE ? OR s.aircraft LIKE ? OR s.aircraft_icao LIKE ? OR s.owner LIKE ? "
-                     "OR s.airport LIKE ? OR s.livery LIKE ? OR s.description LIKE ? OR s.msn LIKE ? OR s.date LIKE ?)")
-        params += [like] * 9
-    for key, col in (("registration", "s.registration"), ("airport", "s.airport"), ("country", "s.country"),
+                     "OR s.airport LIKE ? OR s.livery LIKE ? OR s.description LIKE ? OR s.msn LIKE ? OR s.date LIKE ? "
+                     "OR s.test_registration LIKE ? OR s.place LIKE ?"
+                     + (f" OR s.registration IN ({','.join('?' * len(sib))})" if sib else "") + ")")
+        params += [like] * 11 + sib
+    for key, col in (("registration", "s.registration"), ("airport", "s.airport"), ("place", "s.place"), ("country", "s.country"),
                      ("flight_type", "s.flight_type"), ("camera", "s.camera"), ("lens", "s.lens"),
                      ("livery_category", "s.livery_category")):
         if f.get(key):
@@ -55,8 +61,8 @@ def build_filters(f: dict) -> tuple[str, list]:
         where.append("COALESCE(s.aircraft_icao, s.aircraft) = ?")
         params.append(f["type"])
     if f.get("airline"):
-        where.append("(s.airline_icao = ? OR s.owner = ?)")
-        params += [f["airline"], f["airline"]]
+        where.append("opg(s.airline_icao, s.owner) = ?")
+        params.append(f["airline"])
     if f.get("tag"):
         where.append("EXISTS (SELECT 1 FROM spotting_tags st WHERE st.id_spotting = s.id_spotting AND st.id_tag = ?)")
         params.append(int(f["tag"]))
@@ -73,7 +79,7 @@ def build_filters(f: dict) -> tuple[str, list]:
         where.append("s.date <= ?")
         params.append(f["date_to"] + "T23:59")
     if f.get("special"):
-        where.append("s.livery_category IS NOT NULL")
+        where.append("s.livery_category IS NOT NULL AND s.livery_category NOT IN ('primer', 'white')")
     if f.get("military") is not None and f.get("military") != "":
         where.append("s.military = ?")
         params.append(int(f["military"]))
@@ -83,6 +89,11 @@ def build_filters(f: dict) -> tuple[str, list]:
         where.append("s.image IS NOT NULL")
     if f.get("has_audio"):
         where.append("s.atc_audio IS NOT NULL")
+    if f.get("unknown"):
+        where.append("s.registration LIKE 'SANS-IMMAT-%'")      # spots à compléter : avion non identifié
+    if f.get("patrol"):
+        where.append("s.patrol_id = ?")
+        params.append(int(f["patrol"]))
     if f.get("location_id"):
         where.append("s.location_id = ?")
         params.append(int(f["location_id"]))
@@ -119,16 +130,17 @@ def decorate(rows: list[dict], ctx: dict | None = None) -> list[dict]:
 LIST_COLS = ("s.id_spotting, s.registration, s.aircraft, s.aircraft_icao, s.owner, s.airline_icao, s.livery, "
              "s.livery_category, s.military, s.flight_type, s.date, s.airport, s.thumb, s.image, s.image_w, "
              "s.image_h, s.atc_audio, s.country, s.favorite, s.rating, s.sun_elevation, s.msn, s.camera, s.lens, "
-             "s.description, s.lat, s.lng, s.location_id")
+             "s.description, s.lat, s.lng, s.location_id, s.place, s.test_registration, s.patrol_id, s.is_patrol, s.patrol_size, "
+             "(SELECT name FROM patrols WHERE id_patrol = s.patrol_id) AS patrol_name")
 
 
 @router.get("")
 def list_spots(
-    search: str = "", tag: int | None = None, airport: str = "", type: str = "", airline: str = "",
+    search: str = "", tag: int | None = None, airport: str = "", place: str = "", type: str = "", airline: str = "",
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
-    location_id: int | None = None, date_from: str = "", date_to: str = "",
+    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False,
     sort: str = "date_desc", limit: int = Query(60, le=500), offset: int = 0,
 ):
     f = dict(locals())
@@ -141,7 +153,7 @@ def list_spots(
 
 @router.get("/map")
 def spots_map(
-    search: str = "", tag: int | None = None, airport: str = "", type: str = "", airline: str = "",
+    search: str = "", tag: int | None = None, airport: str = "", place: str = "", type: str = "", airline: str = "",
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
@@ -150,7 +162,7 @@ def spots_map(
     """Spots regroupés par lieu (point de vue, coordonnées GPS ou aéroport), puis par appareil."""
     f = dict(locals())
     where, params = build_filters(f)
-    rows = q(f"SELECT s.id_spotting, s.registration, s.aircraft_icao, s.aircraft, s.owner, s.thumb, s.airport, "
+    rows = q(f"SELECT s.id_spotting, s.registration, s.aircraft_icao, s.aircraft, s.owner, s.thumb, s.airport, s.place, "
              f"s.lat, s.lng, s.location_id, s.date, s.livery_category, s.military, s.favorite, "
              f"l.name AS loc_name, l.lat AS loc_lat, l.lng AS loc_lng "
              f"FROM spotting s LEFT JOIN spot_locations l ON l.id_location = s.location_id "
@@ -162,7 +174,7 @@ def spots_map(
             lat, lng, kind, name = r["loc_lat"], r["loc_lng"], "location", r["loc_name"]
             key = ("L", r["location_id"])
         elif r["lat"] is not None and r["lng"] is not None:
-            lat, lng, kind, name = r["lat"], r["lng"], "gps", None
+            lat, lng, kind, name = r["lat"], r["lng"], "gps", r["place"]
             key = ("G", round(r["lat"], 3), round(r["lng"], 3))
         elif ap:
             lat, lng, kind, name = ap["lat"], ap["lng"], "airport", ap["name"]
@@ -180,7 +192,7 @@ def spots_map(
         if r["date"]:
             p["last"] = max(p["last"] or r["date"], r["date"])
             p["first"] = min(p["first"] or r["date"], r["date"])
-        p["special"] += 1 if r["livery_category"] else 0
+        p["special"] += 1 if r["livery_category"] not in (None, "primer", "white") else 0
         p["military"] += 1 if r["military"] else 0
         tkey = r["aircraft_icao"] or r["aircraft"]
         if tkey:
@@ -191,7 +203,7 @@ def spots_map(
             a = p["_regs"][r["registration"]] = {
                 "registration": r["registration"], "id_spotting": r["id_spotting"], "aircraft": r["aircraft"],
                 "aircraft_icao": r["aircraft_icao"], "owner": r["owner"], "date": r["date"], "thumb": r["thumb"],
-                "n": 0, "special": bool(r["livery_category"]), "favorite": False}
+                "n": 0, "special": r["livery_category"] not in (None, "primer", "white"), "favorite": False}
         a["n"] += 1
         a["thumb"] = a["thumb"] or r["thumb"]
         a["favorite"] = a["favorite"] or bool(r["favorite"])
@@ -216,12 +228,17 @@ def facets():
         return [r["v"] for r in q(sql) if r["v"]]
     return {
         "airports": col("SELECT airport v, COUNT(*) n FROM spotting GROUP BY airport ORDER BY n DESC"),
+        "places": col("SELECT place v, COUNT(*) n FROM spotting WHERE place IS NOT NULL GROUP BY place ORDER BY n DESC"),
         "types": col("SELECT COALESCE(aircraft_icao, aircraft) v, COUNT(*) n FROM spotting GROUP BY v ORDER BY n DESC"),
-        "airlines": q("SELECT COALESCE(airline_icao, owner) v, MAX(owner) name, COUNT(*) n FROM spotting "
-                      "WHERE COALESCE(airline_icao, owner) IS NOT NULL GROUP BY v ORDER BY n DESC"),
+        "airlines": q("SELECT opg(airline_icao, owner) v, MAX(owner) name, COUNT(*) n FROM spotting "
+                      "WHERE opg(airline_icao, owner) IS NOT NULL GROUP BY v ORDER BY n DESC"),
         "years": col("SELECT DISTINCT substr(date,1,4) v FROM spotting WHERE date IS NOT NULL ORDER BY v DESC"),
         "countries": col("SELECT country v, COUNT(*) n FROM spotting GROUP BY country ORDER BY n DESC"),
         "flight_types": FLIGHT_TYPES,
+        # Sites (aéroports et lieux libres) avec leur nombre de spots, du plus récemment visité au plus ancien
+        "sites": q("SELECT CASE WHEN airport IS NOT NULL THEN 'airport' ELSE 'place' END kind, COALESCE(airport, place) value, "
+                   "COUNT(*) n, MAX(date) last, AVG(lat) lat, AVG(lng) lng FROM spotting WHERE airport IS NOT NULL OR place IS NOT NULL "
+                   "GROUP BY kind, value ORDER BY last DESC"),
         "recent_airports": col("SELECT airport v, MAX(date) d FROM spotting WHERE airport IS NOT NULL "
                                "GROUP BY airport ORDER BY d DESC LIMIT 8"),
     }
@@ -230,21 +247,95 @@ def facets():
 class DupCheck(BaseModel):
     registration: str
     airport: str | None = None
+    place: str | None = None
     date: str | None = None
     exclude_id: int | None = None
 
 
-def find_duplicates(reg: str, airport: str | None, date: str | None, exclude_id: int | None = None) -> list[dict]:
-    if not reg or not airport or not date:
-        return []
+def find_duplicates(reg: str, airport: str | None, date: str | None, exclude_id: int | None = None,
+                    place: str | None = None) -> list[dict]:
+    if not reg or regs.is_unknown(regs.normalize(reg)) or not (airport or place) or not date:
+        return []                     # sans immatriculation, deux spots ne sont jamais « le même avion »
     return q("SELECT id_spotting, registration, airport, date, thumb FROM spotting WHERE registration = ? "
-             "AND airport = ? AND substr(date,1,10) = ? AND id_spotting <> ?",
-             (regs.normalize(reg), geo.resolve_icao(airport), date[:10], exclude_id or -1))
+             "AND ((? IS NOT NULL AND airport = ?) OR (? IS NOT NULL AND place = ?)) AND substr(date,1,10) = ? AND id_spotting <> ?",
+             (regs.normalize(reg), airport and geo.resolve_icao(airport), airport and geo.resolve_icao(airport), place, place,
+              date[:10], exclude_id or -1))
 
 
 @router.post("/check-duplicate")
 def check_duplicate(body: DupCheck):
-    return {"duplicates": find_duplicates(body.registration, body.airport, body.date, body.exclude_id)}
+    ap, pl = _split_place(body.airport, body.place)
+    return {"duplicates": find_duplicates(body.registration, ap, body.date, body.exclude_id, place=pl)}
+
+
+PHOTO_DUP_MAX = 6      # distance de Hamming (sur 64 bits) : au-delà, ce sont deux photos différentes du même avion
+
+
+@router.post("/check-photo")
+def check_photo(image: UploadFile = File(...), exclude_id: int | None = Form(None)):
+    """Spots dont la photo ressemble à celle qu'on s'apprête à enregistrer."""
+    try:
+        h = media.hash_bytes(image.file.read())
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(422, "invalid_image") from e
+    out = []
+    mine = q1("SELECT patrol_id FROM spotting WHERE id_spotting = ?", (exclude_id,)) if exclude_id else None
+    for r in q("SELECT id_spotting, registration, date, airport, thumb, phash FROM spotting WHERE phash IS NOT NULL AND id_spotting <> ? "
+               "AND (patrol_id IS NULL OR patrol_id IS NOT ?)", (exclude_id or -1, mine and mine["patrol_id"])):
+        d = media.hamming(h, r["phash"])
+        if d <= PHOTO_DUP_MAX:
+            out.append({**{k: r[k] for k in ("id_spotting", "registration", "date", "airport", "thumb")}, "distance": d})
+    return {"matches": sorted(out, key=lambda m: m["distance"])[:5]}
+
+
+@router.get("/duplicates")
+def photo_duplicates(limit: int = 50):
+    """Paires de spots dont les photos sont quasi identiques."""
+    rows = q("SELECT id_spotting id, registration, date, airport, thumb, phash, patrol_id FROM spotting WHERE phash IS NOT NULL ORDER BY id_spotting")
+    vals = [(int(r["phash"], 16), r) for r in rows]
+    pairs = []
+    for i, (a, ra) in enumerate(vals):
+        for b, rb in vals[i + 1:]:
+            d = (a ^ b).bit_count()
+            if d <= PHOTO_DUP_MAX and not (ra["patrol_id"] and ra["patrol_id"] == rb["patrol_id"]):   # une patrouille partage sa photo
+                pairs.append({"distance": d, "a": {k: ra[k] for k in ("id", "registration", "date", "airport", "thumb")},
+                              "b": {k: rb[k] for k in ("id", "registration", "date", "airport", "thumb")}})
+    pairs.sort(key=lambda p: p["distance"])
+    return {"count": len(pairs), "pairs": pairs[:limit]}
+
+
+@router.get("/patrol-names")
+def patrol_names():
+    """Noms de patrouilles déjà utilisés, du plus récent au plus ancien (suggestions de saisie)."""
+    return [r["name"] for r in q("SELECT name FROM patrols WHERE name IS NOT NULL AND name <> '' GROUP BY name "
+                                 "ORDER BY MAX(id_patrol) DESC LIMIT 50")]
+
+
+@router.get("/countries")
+def countries():
+    """Codes pays connus (nationalité d'une patrouille)."""
+    return sorted(set(regs.PREFIXES.values()))
+
+
+@router.get("/patrol-countries")
+def patrol_countries():
+    """Nationalité déjà saisie pour chaque nom de patrouille (la plus récente l'emporte) : pré-remplit la saisie."""
+    out: dict[str, str] = {}
+    for r in q("SELECT p.name, s.country FROM spotting s JOIN patrols p ON p.id_patrol = s.patrol_id "
+               "WHERE s.is_patrol = 1 AND s.country IS NOT NULL AND p.name IS NOT NULL ORDER BY s.id_spotting DESC"):
+        out.setdefault(r["name"].lower(), r["country"])
+    return out
+
+
+def patrol_of(s: dict) -> dict | None:
+    if not s.get("patrol_id"):
+        return None
+    p = q1("SELECT id_patrol id, name FROM patrols WHERE id_patrol = ?", (s["patrol_id"],))
+    if not p:
+        return None
+    p["members"] = q("SELECT id_spotting, registration, test_registration, aircraft, owner, thumb FROM spotting "
+                     "WHERE patrol_id = ? ORDER BY id_spotting", (p["id"],))
+    return p
 
 
 @router.get("/{spot_id}")
@@ -260,7 +351,11 @@ def get_spot(spot_id: int, sort: str = "date_desc"):
     s["airport_info"] = geo.airport(s["airport"])
     s["location"] = q1("SELECT * FROM spot_locations WHERE id_location = ?", (s["location_id"],)) if s["location_id"] else None
     s["flights"] = collection.crossref_for_spot(s["registration"])
-    s["encounters"] = q1("SELECT COUNT(*) n FROM spotting WHERE registration = ?", (s["registration"],))["n"]
+    s["patrol"] = None if s.get("is_patrol") else patrol_of(s)
+    s["patrol_name"] = (q1("SELECT name FROM patrols WHERE id_patrol = ?", (s["patrol_id"],)) or {}).get("name") if s.get("patrol_id") else None
+    ids = airframes.group(s["registration"])
+    s["encounters"] = q1(f"SELECT COUNT(*) n FROM spotting WHERE registration IN ({','.join('?' * len(ids))})", ids)["n"]
+    s["aliases"] = [i for i in ids if i != s["registration"]]
     key = "COALESCE(date, created_at) || printf('%010d', id_spotting)"
     cur = q1(f"SELECT {key} k FROM spotting WHERE id_spotting = ?", (spot_id,))["k"]
     newer = q1(f"SELECT id_spotting FROM spotting WHERE {key} > ? ORDER BY {key} ASC LIMIT 1", (cur,))
@@ -280,6 +375,19 @@ def _to_float(v):
         return None
 
 
+def _split_place(airport_raw: str | None, place_raw: str | None) -> tuple[str | None, str | None]:
+    """Le champ « aéroport » accepte aussi un lieu libre (plage, meeting, ville) : un aéroport reconnu reste un aéroport,
+    tout autre texte devient un lieu. Renvoie (code OACI, lieu)."""
+    a = geo.airport(airport_raw) if airport_raw else None
+    if a:
+        return a["icao"], None
+    if airport_raw and not place_raw:
+        if re.fullmatch(r"[A-Z]{4}", airport_raw):        # code OACI en majuscules mais absent de la base : conservé tel quel
+            return airport_raw, None
+        return None, airport_raw[:120]
+    return None, (place_raw or "")[:120] or None
+
+
 def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
     out = {k: data.get(k) for k in EDITABLE if k in data}
     for k, v in list(out.items()):
@@ -289,11 +397,15 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
     if "registration" in out or not existing:
         reg = regs.normalize(merged.get("registration"))
         if not reg:
-            raise HTTPException(422, "registration_required")
+            if not data.get("unknown_registration"):
+                raise HTTPException(422, "registration_required")
+            # Sans immatriculation lisible : on garde celle de substitution déjà attribuée, sinon on en crée une
+            old = (existing or {}).get("registration")
+            reg = old if regs.is_unknown(old) else regs.new_unknown()
         out["registration"] = reg
         out["country"] = regs.country_of(reg)
-    if "airport" in out:
-        out["airport"] = geo.resolve_icao(out["airport"]) if out["airport"] else None
+    if "airport" in out or "place" in out:
+        out["airport"], out["place"] = _split_place(out.get("airport"), out.get("place"))
     if "aircraft_icao" in out and out["aircraft_icao"]:
         out["aircraft_icao"] = out["aircraft_icao"].upper()
     if "airline_icao" in out and out["airline_icao"]:
@@ -314,8 +426,15 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
                 out[k] = None
     if "msn" in out and out["msn"] is not None:
         out["msn"] = str(out["msn"])
+    # Immatriculation d'essai (facultative, tout type de vol) : normalisée
+    if "test_registration" in out:
+        out["test_registration"] = regs.normalize(out["test_registration"]) or None if out["test_registration"] else None
+
     if "livery" in out:
         out["livery_category"] = collection.livery_category(out["livery"])
+        # Un avion en primer est un avion d'essai : le type de vol « Vol d'essai » est proposé s'il n'est pas renseigné
+        if out["livery_category"] == "primer" and not (out.get("flight_type") or (existing or {}).get("flight_type")):
+            out["flight_type"] = "test"
     merged = {**(existing or {}), **out}
     # Coordonnées : point de vue choisi > GPS EXIF > (affichage : aéroport)
     if out.get("location_id"):
@@ -325,8 +444,10 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
             if not merged.get("airport") and loc["airport"]:
                 out["airport"] = loc["airport"]
     merged = {**(existing or {}), **out}
-    if any(k in out for k in ("date", "airport")) or not existing:
-        out["date_utc"] = geo.local_to_utc(merged.get("date"), merged.get("airport"))
+    if any(k in out for k in ("date", "airport", "place", "lat", "lng")) or not existing:
+        # Sans aéroport, l'heure locale est celle du fuseau de l'aéroport le plus proche des coordonnées
+        tz = "UTC" if geo.airport(merged.get("airport")) else geo.tz_at(merged.get("lat"), merged.get("lng"))
+        out["date_utc"] = geo.local_to_utc(merged.get("date"), merged.get("airport"), fallback_tz=tz)
     merged = {**(existing or {}), **out}
     lat, lng = merged.get("lat"), merged.get("lng")
     if lat is None:
@@ -383,7 +504,7 @@ def _apply_image(out: dict, image: UploadFile | None, data: dict) -> None:
 
 
 def _post_save(spot_id: int, reg: str, is_new: bool, weather_needed: bool, bg: BackgroundTasks) -> dict:
-    extra: dict = {"crossref": [], "achievements": []}
+    extra: dict = {"crossref": [], "achievements": [], "wishes": []}
     settings = get_settings()
     if weather_needed and settings["modules"].get("weather", True):
         execute("UPDATE spotting SET weather_status='pending' WHERE id_spotting=?", (spot_id,))
@@ -394,9 +515,110 @@ def _post_save(spot_id: int, reg: str, is_new: bool, weather_needed: bool, bg: B
             extra["crossref"] = flights
             title, body = texts("crossref_spot", reg=reg, n=len(flights))
             notify("crossref", title, body, f"#/airframe/{reg}", {"registration": reg, "spot": spot_id})
+    if settings["modules"].get("watchlist", True):
+        extra["wishes"] = [{"id": w["id"], "title": w["title"], "kind": w["kind"]} for w in wishes.sync()]
     if settings["modules"].get("gamification", True):
         extra["achievements"] = gamification.evaluate()
     return extra
+
+
+
+# --------------------------------------------------------------------------- #
+# Patrouilles : un spot par avion, photo partagée, reliés par patrol_id
+# --------------------------------------------------------------------------- #
+MEMBER_FIELDS = ("registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner", "airline_icao", "livery",
+                 "test_registration")
+INHERIT = ("aircraft", "aircraft_icao", "manufacturer", "owner", "airline_icao", "livery", "military", "flight_type",
+           "date", "airport", "place", "location_id", "lat", "lng", "description", "camera", "lens", "focal", "aperture",
+           "iso", "shutter")
+INHERIT_RAW = ("exif_json", "image", "thumb", "image_w", "image_h", "phash")
+
+
+def _prepare_members(base: dict, members: list | None) -> list[dict]:
+    """Lignes prêtes à insérer pour les autres avions d'une patrouille (hérite de la photo, de la date, du lieu)."""
+    rows: list[dict] = []
+    seen = {base.get("registration")} if not regs.is_unknown(base.get("registration")) else set()
+    for m in members or []:
+        if not isinstance(m, dict):
+            continue
+        inp = {k: base[k] for k in INHERIT if base.get(k) not in (None, "")}
+        inp.update({k: v for k, v in m.items() if k in MEMBER_FIELDS and v not in (None, "")})
+        inp["unknown_registration"] = bool(m.get("unknown_registration"))
+        row = prepare(inp)
+        if row["registration"] in seen:
+            continue
+        seen.add(row["registration"])
+        row.update({k: base[k] for k in INHERIT_RAW if base.get(k) is not None})
+        rows.append(row)
+    return rows
+
+
+def _gc_patrols() -> None:
+    """Une patrouille sans spot disparaît ; en mode détaillé, avec un seul avion restant, elle se dissout.
+    Une patrouille « mode simple » (un seul spot, is_patrol) reste telle quelle."""
+    for r in q("SELECT p.id_patrol FROM patrols p LEFT JOIN spotting s ON s.patrol_id = p.id_patrol "
+               "GROUP BY p.id_patrol HAVING COUNT(s.id_spotting) < 2 AND COALESCE(SUM(s.is_patrol), 0) = 0"):
+        execute("UPDATE spotting SET patrol_id = NULL WHERE patrol_id = ?", (r["id_patrol"],))
+        execute("DELETE FROM patrols WHERE id_patrol = ?", (r["id_patrol"],))
+
+
+def patrol_key(name: str) -> str:
+    """Clé d'immatriculation d'une patrouille « mode simple » : son nom en majuscules, espaces → tirets."""
+    return re.sub(r"[\s_]+", "-", name.strip().upper())[:60]
+
+
+def _simple_country(info: dict) -> str | None:
+    c = str(info.get("country") or "").strip().upper()
+    return c if re.fullmatch(r"[A-Z]{2}", c) else None
+
+
+def _simple_size(info: dict) -> int | None:
+    try:
+        n = int(info.get("size"))
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def _free_files(s: dict) -> None:
+    """Supprime les fichiers d'un spot ; la photo reste si un autre spot (patrouille) la partage encore."""
+    if s.get("image") and q1("SELECT 1 FROM spotting WHERE image = ? LIMIT 1", (s["image"],)):
+        media.delete_audio(s.get("atc_audio"))
+        return
+    delete_spot_files(s)
+
+
+def _insert_members(rows: list[dict], patrol_id: int, tags: list, bg: BackgroundTasks) -> dict:
+    extra: dict = {"crossref": [], "achievements": [], "wishes": []}
+    for row in rows:
+        row["patrol_id"] = patrol_id
+        row["created_at"] = row["updated_at"] = now_iso()
+        if row.get("military") is None:
+            row["military"] = 1 if regs.looks_military(row.get("owner"), row.get("aircraft")) else 0
+        cur = execute(f"INSERT INTO spotting({', '.join(row)}) VALUES({', '.join('?' * len(row))})", list(row.values()))
+        set_tags(cur.lastrowid, tags)
+        e = _post_save(cur.lastrowid, row["registration"], True, bool(row.get("airport") and row.get("date_utc")), bg)
+        for k, v in e.items():
+            extra[k] = extra.get(k, []) + v
+    return extra
+
+
+def _patrol_id(spot: dict | None, info: dict) -> int:
+    """Patrouille du spot : renomme l'existante ou en crée une."""
+    name = (info.get("name") or "").strip()[:80] or None
+    pid = (spot or {}).get("patrol_id")
+    if pid:
+        if "name" in info:
+            execute("UPDATE patrols SET name = ? WHERE id_patrol = ?", (name, pid))
+        return pid
+    return execute("INSERT INTO patrols(name, created_at) VALUES(?, ?)", (name, now_iso())).lastrowid
+
+
+def _duplicates_of(rows: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for r in rows:
+        out += find_duplicates(r["registration"], r.get("airport"), r.get("date"), place=r.get("place"))
+    return out
 
 
 @router.post("")
@@ -412,14 +634,31 @@ def create_spot(
         exist = q1("SELECT id_spotting FROM spotting WHERE draft_uuid = ?", (payload["draft_uuid"],))
         if exist:
             return {"spot": get_spot(exist["id_spotting"]), "already_synced": True, "crossref": [], "achievements": []}
+    patrol_in = payload.get("patrol") if isinstance(payload.get("patrol"), dict) else None
+    simple = bool(patrol_in and patrol_in.get("simple"))
+    if simple:
+        if not (patrol_in.get("name") or "").strip():
+            raise HTTPException(422, "patrol_name_required")
+        payload["registration"] = patrol_key(patrol_in["name"])      # la patrouille tient lieu d'immatriculation
     out: dict = {}
     _apply_image(out, image, payload)
     merged_input = {**payload, **{k: v for k, v in out.items() if k in EDITABLE and not payload.get(k)}}
-    if not merged_input.get("airport") and get_settings().get("default_airport"):
+    if not merged_input.get("airport") and not merged_input.get("place") and get_settings().get("default_airport"):
         merged_input["airport"] = get_settings()["default_airport"]
     out.update(prepare(merged_input))
+    member_rows: list[dict] = []
+    if simple:
+        out.update({"country": _simple_country(patrol_in), "is_patrol": 1, "patrol_size": _simple_size(patrol_in)})
+    elif patrol_in:
+        if out.get("military") is None:
+            out["military"] = 1 if regs.looks_military(out.get("owner"), out.get("aircraft")) else 0
+        try:
+            member_rows = _prepare_members(out, patrol_in.get("members"))
+        except HTTPException:
+            media.delete_image(out.get("image"), out.get("thumb"))
+            raise
     if not force:
-        dups = find_duplicates(out["registration"], out.get("airport"), out.get("date"))
+        dups = find_duplicates(out["registration"], out.get("airport"), out.get("date"), place=out.get("place")) + _duplicates_of(member_rows)
         if dups:
             media.delete_image(out.get("image"), out.get("thumb"))
             raise HTTPException(409, detail={"code": "duplicate", "duplicates": dups})
@@ -432,11 +671,17 @@ def create_spot(
         out["military"] = 1 if regs.looks_military(out.get("owner"), out.get("aircraft")) else 0
     out["draft_uuid"] = payload.get("draft_uuid")
     out["created_at"] = out["updated_at"] = now_iso()
+    if patrol_in:
+        out["patrol_id"] = _patrol_id(None, patrol_in)
     cols = ", ".join(out.keys())
     cur = execute(f"INSERT INTO spotting({cols}) VALUES({', '.join('?' * len(out))})", list(out.values()))
     spot_id = cur.lastrowid
     set_tags(spot_id, payload.get("tags") or [])
     extra = _post_save(spot_id, out["registration"], True, bool(out.get("airport") and out.get("date_utc")), bg)
+    if member_rows:
+        more = _insert_members(member_rows, out["patrol_id"], payload.get("tags") or [], bg)
+        for k, v in more.items():
+            extra[k] = extra.get(k, []) + v
     return {"spot": get_spot(spot_id), **extra}
 
 
@@ -452,14 +697,25 @@ def update_spot(
     if not existing:
         raise HTTPException(404, "not_found")
     payload = json.loads(data or "{}")
+    if existing.get("is_patrol"):
+        # Patrouille « mode simple » : l'immatriculation est la clé tirée de son nom
+        payload.pop("registration", None)
+        payload.pop("unknown_registration", None)
+        info = payload.get("patrol") if isinstance(payload.get("patrol"), dict) else {}
+        if payload.get("patrol", 0) is None:
+            payload.pop("patrol")
+        elif (info.get("name") or "").strip():
+            payload["registration"] = patrol_key(info["name"])
+        elif "name" in info:
+            raise HTTPException(422, "patrol_name_required")
     out: dict = {}
+    drop_old: tuple | None = None
     if image and image.filename:
-        old = (existing.get("image"), existing.get("thumb"))
+        drop_old = (existing.get("image"), existing.get("thumb"))
         _apply_image(out, image, payload)
-        media.delete_image(*old)
     elif payload.get("remove_image"):
-        media.delete_image(existing.get("image"), existing.get("thumb"))
-        out.update({"image": None, "thumb": None, "image_w": None, "image_h": None})
+        drop_old = (existing.get("image"), existing.get("thumb"))
+        out.update({"image": None, "thumb": None, "image_w": None, "image_h": None, "phash": None})
     if audio and audio.filename:
         try:
             new_audio = media.save_audio(audio.file.read(), audio.filename)
@@ -471,11 +727,40 @@ def update_spot(
         media.delete_audio(existing.get("atc_audio"))
         out["atc_audio"] = None
     out.update(prepare({**{k: v for k, v in out.items() if k in EDITABLE}, **payload}, existing))
+    if existing.get("is_patrol"):
+        out["country"] = existing.get("country")        # nationalité de la patrouille, pas déduite d'une immatriculation
+        if isinstance(payload.get("patrol"), dict):
+            if "size" in payload["patrol"]:
+                out["patrol_size"] = _simple_size(payload["patrol"])
+            if "country" in payload["patrol"]:
+                out["country"] = _simple_country(payload["patrol"])
     out["updated_at"] = now_iso()
     sets = ", ".join(f"{k} = ?" for k in out)
+    patrol_in = payload.get("patrol") if isinstance(payload.get("patrol"), dict) else None
+    member_rows: list[dict] = []
+    if patrol_in and patrol_in.get("members"):
+        member_rows = _prepare_members({**existing, **out}, patrol_in["members"])
+        dups = _duplicates_of(member_rows)
+        if dups and not payload.get("force"):
+            raise HTTPException(409, detail={"code": "duplicate", "duplicates": dups})
+    if patrol_in is not None:
+        out["patrol_id"] = _patrol_id(existing, patrol_in)
+        sets = ", ".join(f"{k} = ?" for k in out)
+    elif "patrol" in payload and payload["patrol"] is None:
+        out["patrol_id"] = None
+        sets = ", ".join(f"{k} = ?" for k in out)
     execute(f"UPDATE spotting SET {sets} WHERE id_spotting = ?", list(out.values()) + [spot_id])
+    if drop_old and drop_old[0]:
+        if q1("SELECT 1 FROM spotting WHERE image = ? LIMIT 1", (drop_old[0],)):
+            pass                           # la photo reste utilisée par un autre avion de la patrouille
+        else:
+            media.delete_image(*drop_old)
     if "tags" in payload:
         set_tags(spot_id, payload["tags"])
+    if member_rows:
+        _insert_members(member_rows, out["patrol_id"], payload.get("tags") or [t["id_tag"] for t in q(
+            "SELECT id_tag FROM spotting_tags WHERE id_spotting = ?", (spot_id,))], bg)
+    _gc_patrols()
     changed_wx = (out.get("date_utc") != existing.get("date_utc") or out.get("airport", existing["airport"]) != existing["airport"])
     extra = _post_save(spot_id, out.get("registration", existing["registration"]), False, changed_wx, bg)
     return {"spot": get_spot(spot_id), **extra}
@@ -511,7 +796,8 @@ def delete_spot(spot_id: int):
     if not s:
         raise HTTPException(404, "not_found")
     execute("DELETE FROM spotting WHERE id_spotting = ?", (spot_id,))
-    delete_spot_files(s)
+    _free_files(s)
+    _gc_patrols()
     return {"deleted": spot_id}
 
 
@@ -532,7 +818,8 @@ def bulk(body: Bulk):
         conn.execute(f"DELETE FROM spotting WHERE id_spotting IN ({marks})", body.ids)
         conn.commit()
         for r in rows:
-            delete_spot_files(r)
+            _free_files(r)
+        _gc_patrols()
     elif body.action in ("add_tag", "remove_tag"):
         tag_id = int(body.value)
         for i in body.ids:

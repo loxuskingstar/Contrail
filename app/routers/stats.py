@@ -12,7 +12,8 @@ from pydantic import BaseModel
 
 from ..core import db, execute, get_config, now_iso, q, q1
 from ..services import aircraft as ac
-from ..services import collection, geo
+from ..services import airframes
+from ..services import collection, geo, wishes
 from ..services import registration as regs
 from .spots import decorate, LIST_COLS
 
@@ -27,11 +28,13 @@ def _period(year: str) -> tuple[str, list]:
 def stats(year: str = ""):
     w, p = _period(year)
     totals = q1(
-        f"SELECT COUNT(*) spots, COUNT(DISTINCT registration) registrations, "
+        f"SELECT COUNT(*) spots, COUNT(DISTINCT known(registration)) registrations, "
         f"COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
-        f"COUNT(DISTINCT COALESCE(airline_icao, owner)) airlines, COUNT(DISTINCT NULLIF(airport,'')) airports, "
+        f"COUNT(DISTINCT opg(airline_icao, owner)) airlines, COUNT(DISTINCT NULLIF(airport,'')) airports, "
         f"COUNT(DISTINCT country) countries, SUM(CASE WHEN image IS NOT NULL THEN 1 ELSE 0 END) photos, "
-        f"SUM(CASE WHEN livery_category IS NOT NULL THEN 1 ELSE 0 END) special_liveries, "
+        f"SUM(CASE WHEN livery_category IS NOT NULL AND livery_category NOT IN ('primer', 'white') THEN 1 ELSE 0 END) special_liveries, "
+        f"COUNT(DISTINCT CASE WHEN livery_category = 'primer' THEN registration END) primers, "
+        f"COUNT(DISTINCT CASE WHEN livery_category = 'white' THEN registration END) whites, "
         f"SUM(military) military, COUNT(DISTINCT substr(date,1,10)) days, "
         f"SUM(CASE WHEN atc_audio IS NOT NULL THEN 1 ELSE 0 END) audio FROM spotting WHERE {w}", p)
 
@@ -47,13 +50,13 @@ def stats(year: str = ""):
     for a in top_airports:
         info = geo.airport(a["k"])
         a["name"] = info["name"] if info else None
-    gear = q(f"SELECT camera, lens, COUNT(*) n, COUNT(DISTINCT registration) regs FROM spotting WHERE {w} "
+    gear = q(f"SELECT camera, lens, COUNT(*) n, COUNT(DISTINCT known(registration)) regs FROM spotting WHERE {w} "
              f"AND camera IS NOT NULL GROUP BY camera, lens ORDER BY n DESC LIMIT 10", p)
     focal = q(f"SELECT CASE WHEN focal < 35 THEN '<35' WHEN focal < 100 THEN '35-99' WHEN focal < 200 THEN '100-199' "
               f"WHEN focal < 300 THEN '200-299' WHEN focal < 400 THEN '300-399' WHEN focal < 600 THEN '400-599' "
               f"ELSE '600+' END k, COUNT(*) n, MIN(focal) mn FROM spotting WHERE {w} AND focal IS NOT NULL "
               f"GROUP BY k ORDER BY mn", p)
-    by_month = q(f"SELECT substr(date,1,7) k, COUNT(*) n, COUNT(DISTINCT registration) regs FROM spotting "
+    by_month = q(f"SELECT substr(date,1,7) k, COUNT(*) n, COUNT(DISTINCT known(registration)) regs FROM spotting "
                  f"WHERE {w} AND date IS NOT NULL GROUP BY k ORDER BY k", p)
     by_year = q("SELECT substr(date,1,4) k, COUNT(*) n FROM spotting WHERE date IS NOT NULL GROUP BY k ORDER BY k")
     by_hour = q(f"SELECT CAST(substr(date,12,2) AS INTEGER) k, COUNT(*) n FROM spotting WHERE {w} "
@@ -78,7 +81,7 @@ def stats(year: str = ""):
     return {
         "year": year, "totals": totals, "top_registrations": top_regs, "top_airports": top_airports,
         "top_types": top("COALESCE(aircraft_icao, aircraft)", ", MAX(aircraft) label"),
-        "top_airlines": top("COALESCE(airline_icao, owner)", ", MAX(owner) label"),
+        "top_airlines": top("opg(airline_icao, owner)", ", MAX(owner) label"),
         "top_countries": top("country"), "top_tags": q(
             f"SELECT t.name k, t.color, COUNT(*) n FROM spotting_tags st JOIN tags t USING(id_tag) "
             f"JOIN spotting s USING(id_spotting) WHERE {w.replace('date', 's.date')} GROUP BY t.id_tag ORDER BY n DESC LIMIT 10", p),
@@ -140,12 +143,12 @@ def dashboard():
     from datetime import date
 
     today = date.today()
-    totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT registration) regs, "
-                "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, COUNT(DISTINCT COALESCE(airline_icao, owner)) airlines, "
+    totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT known(registration)) regs, "
+                "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, COUNT(DISTINCT opg(airline_icao, owner)) airlines, "
                 "COUNT(DISTINCT NULLIF(airport,'')) airports, COUNT(DISTINCT country) countries FROM spotting")
     month = q1("SELECT COUNT(*) n FROM spotting WHERE substr(date,1,7) = ?", (today.strftime("%Y-%m"),))["n"]
     year_totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
-                     "COUNT(DISTINCT registration) regs, COUNT(DISTINCT substr(date,1,10)) days FROM spotting WHERE substr(date,1,4) = ?",
+                     "COUNT(DISTINCT known(registration)) regs, COUNT(DISTINCT substr(date,1,10)) days FROM spotting WHERE substr(date,1,4) = ?",
                      (str(today.year),))
     last_year = q1("SELECT COUNT(*) spots FROM spotting WHERE substr(date,1,4) = ? AND substr(date,6,5) <= ?",
                    (str(today.year - 1), today.strftime("%m-%d")))["spots"]
@@ -161,7 +164,7 @@ def dashboard():
     months = q("SELECT substr(date,1,7) k, COUNT(*) n FROM spotting WHERE date >= date('now','-11 months','start of month') "
                "GROUP BY k ORDER BY k")
     flights = q1("SELECT COUNT(*) n, COALESCE(SUM(distance_km),0) km FROM flights")
-    watch = q("SELECT registration, airborne, last_status, last_seen_at FROM watchlist ORDER BY airborne DESC, registration LIMIT 6")
+    watch = q("SELECT value registration, airborne, last_status, last_seen_at FROM wishes WHERE kind='aircraft' AND status='open' AND track=1 ORDER BY airborne DESC, value LIMIT 6")
     for wr in watch:
         wr["last_status"] = json.loads(wr["last_status"] or "null")
     from ..services import gamification
@@ -173,7 +176,7 @@ def dashboard():
     ach_total = {"total": len(gamification.DEFINITIONS), "unlocked": len(unl), "points": pts, "rank": gamification.rank(pts)}
     drafts_hint = q1("SELECT COUNT(*) n FROM spotting WHERE weather_status = 'pending'")["n"]
     return {"totals": totals, "month": month, "year": year, "recent": recent, "on_this_day": on_this_day,
-            "hero": hero, "top_types": top_types, "months": months, "flights": flights, "watchlist": watch,
+            "hero": hero, "top_types": top_types, "months": months, "flights": flights, "watchlist": watch, "wishlist": wishes.summary(),
             "achievements": ach, "achievements_total": ach_total, "pending_weather": drafts_hint,
             "year_totals": year_totals, "last_year_same_day": last_year, "today": today.isoformat(),
             "streak": streaks(q("SELECT DISTINCT substr(date,1,10) d FROM spotting WHERE date IS NOT NULL"), today)}
@@ -185,9 +188,11 @@ def dashboard():
 @router.get("/api/airframe/{reg}")
 def airframe(reg: str):
     r = regs.normalize(reg)
-    spots = q(f"SELECT {LIST_COLS}, s.date_utc FROM spotting s WHERE s.registration = ? ORDER BY s.date", (r,))
+    ids = airframes.group(r)          # immatriculations de la même cellule (essai ↔ définitive, via le MSN)
+    ph = ",".join("?" * len(ids))
+    spots = q(f"SELECT {LIST_COLS}, s.date_utc, s.test_registration FROM spotting s WHERE s.registration IN ({ph}) ORDER BY s.date", ids)
     decorate(spots)
-    flights = q("SELECT * FROM flights WHERE registration = ? ORDER BY date", (r,))
+    flights = q(f"SELECT * FROM flights WHERE registration IN ({ph}) ORDER BY date", ids)
     cached = q1("SELECT data, fetched_at, source FROM aircraft_cache WHERE registration = ?", (r,))
     info = json.loads(cached["data"]) if cached else {}
     if spots:
@@ -200,10 +205,11 @@ def airframe(reg: str):
     events = []
     for s in spots:
         a = geo.airport(s["airport"])
-        events.append({"kind": "spot", "date": s["date"], "id": s["id_spotting"], "airport": s["airport"],
+        events.append({"kind": "spot", "date": s["date"], "id": s["id_spotting"], "airport": s["airport"], "place": s.get("place"),
                        "lat": s["lat"] if s["lat"] is not None else (a or {}).get("lat"),
                        "lng": s["lng"] if s["lng"] is not None else (a or {}).get("lng"),
                        "thumb": s["thumb"], "livery": s["livery"], "owner": s["owner"],
+                       "registration": s["registration"], "test_registration": s.get("test_registration"),
                        "airport_name": (a or {}).get("name"), "badges": s["badges"], "tags": s["tags"]})
     for f in flights:
         d, a = geo.airport(f["dep_icao"]), geo.airport(f["arr_icao"])
@@ -220,8 +226,10 @@ def airframe(reg: str):
             changes.append({"date": s["date"], "owner": cur[0], "livery": cur[1]})
         prev = cur
     airports = sorted({s["airport"] for s in spots if s["airport"]})
-    in_watch = q1("SELECT id FROM watchlist WHERE registration = ?", (r,))
-    return {"info": info, "events": events, "spots": len(spots), "flights": len(flights),
+    in_watch = q1("SELECT id FROM wishes WHERE kind='aircraft' AND status='open' AND UPPER(value) = ?", (r,))
+    counts = {i: sum(1 for s in spots if s["registration"] == i) for i in ids}
+    return {"info": info, "aliases": [{"registration": i, "spots": counts[i]} for i in ids if i != r],
+            "tests": sorted({s["test_registration"] for s in spots if s.get("test_registration")} - {r}), "events": events, "spots": len(spots), "flights": len(flights),
             "first_seen": spots[0]["date"] if spots else None, "last_seen": spots[-1]["date"] if spots else None,
             "airports": airports, "changes": changes, "watch_id": in_watch["id"] if in_watch else None,
             "cover": next((s["image"] for s in reversed(spots) if s.get("image")), None)}
@@ -234,7 +242,7 @@ def liveries():
     groups: dict = {}
     for r in rows:
         groups.setdefault(r["livery_category"], []).append(r)
-    order = ["retro", "alliance", "commemorative", "logojet", "cause", "special"]
+    order = ["retro", "alliance", "commemorative", "logojet", "cause", "special", "primer", "white"]
     return [{"category": c, "items": groups[c], "count": len(groups[c]),
              "unique": len({i["registration"] for i in groups[c]})} for c in order if c in groups]
 

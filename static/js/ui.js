@@ -6,6 +6,13 @@ import { mediaUrl } from './api.js';
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+/** Texte à afficher pour une immatriculation (les spots sans immatriculation portent une valeur de substitution). */
+export const regText = (r) => (typeof r === 'string' && r.startsWith('SANS-IMMAT-') ? t('spot.no_reg') : r || '');
+/** Lieu d'un spot : l'aéroport, sinon le lieu libre (plage, meeting, ville…). */
+/** Titre d'un spot : le nom de la patrouille (mode simple) ou l'immatriculation. */
+export const regLabel = (s) => (s && s.is_patrol && s.patrol_name) || regText(s && s.registration);
+export const placeText = (s) => (s && (s.airport || s.place)) || '';
+
 export function esc(v) {
   if (v === null || v === undefined) return '';
   return String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -223,7 +230,7 @@ export function regFlag(country) {
 
 const BADGE_STYLE = {
   first_type: ['accent', 'sparkles'], first_airline: ['violet', 'building-2'], first_airport: ['green', 'map-pin'],
-  seen_again: ['slate', 'history'], most_spotted: ['gold', 'trophy'], special_livery: ['rose', 'palette'],
+  seen_again: ['slate', 'history'], most_spotted: ['gold', 'trophy'], special_livery: ['rose', 'palette'], primer: ['green', 'paint-bucket'], white: ['slate', 'paint-bucket'],
   flown: ['violet', 'ticket'], military: ['slate', 'shield'], night: ['night', 'moon'], golden_hour: ['gold', 'sunset'],
 };
 
@@ -244,16 +251,17 @@ export function tagChips(tags = []) {
 
 export function spotTile(s, { href = `#/spots/${s.id_spotting}` } = {}) {
   const corner = [s.favorite ? `<span class="badge">${icon('star', '', 11)}</span>` : '', s.atc_audio ? `<span class="badge">${icon('radio', '', 11)}</span>` : '',
-    s.livery_category ? `<span class="badge">${icon('palette', '', 11)}</span>` : ''].join('');
-  const sub = `${esc(s.aircraft_icao || s.aircraft || '')}${s.owner ? ' · ' + esc(s.owner) : ''}`;
+    s.livery_category ? `<span class="badge">${icon(['primer', 'white'].includes(s.livery_category) ? 'paint-bucket' : 'palette', '', 11)}</span>` : '',
+    s.patrol_id ? `<span class="badge" title="${esc(s.patrol_name || t('patrol.title'))}">${icon('users', '', 11)}</span>` : ''].join('');
+  const sub = `${s.is_patrol && s.patrol_size ? esc(t('patrol.n_aircraft', { n: s.patrol_size })) + ' · ' : ''}${esc(s.aircraft_icao || s.aircraft || '')}${s.owner ? ' · ' + esc(s.owner) : ''}`;
   if (s.thumb) {
-    return `<a class="tile" href="${href}"><img loading="lazy" src="${mediaUrl('thumbs', s.thumb)}" alt="${esc(s.registration)}"><div class="corner">${corner}</div>
-      <div class="cap"><b class="mono">${esc(s.registration)}</b> ${regFlag(s.country)}<small class="ellipsis">${sub}</small></div></a>`;
+    return `<a class="tile" href="${href}"><img loading="lazy" src="${mediaUrl('thumbs', s.thumb)}" alt="${esc(regLabel(s))}"><div class="corner">${corner}</div>
+      <div class="cap"><b class="mono">${esc(regLabel(s))}</b> ${regFlag(s.country)}<small class="ellipsis">${sub}</small></div></a>`;
   }
   // Spot sans photo : vignette typographique
   return `<a class="tile noimg" href="${href}">${icon('plane', '', 20)}<div class="corner">${corner}</div>
-    <div class="cap"><b class="mono" style="font-size:17px">${esc(s.registration)}</b> ${regFlag(s.country)}<small class="ellipsis">${sub}</small>
-    <small class="ellipsis">${esc(s.airport || '')}${s.date ? ' · ' + fmtDate(s.date, { time: false, short: true }) : ''}</small></div></a>`;
+    <div class="cap"><b class="mono" style="font-size:17px">${esc(regLabel(s))}</b> ${regFlag(s.country)}<small class="ellipsis">${sub}</small>
+    <small class="ellipsis">${esc(placeText(s))}${s.date ? ' · ' + fmtDate(s.date, { time: false, short: true }) : ''}</small></div></a>`;
 }
 
 export function spotRow(s, { selectable = false, selected = false } = {}) {
@@ -263,9 +271,9 @@ export function spotRow(s, { selectable = false, selected = false } = {}) {
     ${selectable ? `<span class="check">${selected ? icon('check', '', 14) : ''}</span>` : ''}
     ${thumb}
     <div class="grow">
-      <div class="ttl"><span class="mono">${esc(s.registration)}</span>${regFlag(s.country)}${s.favorite ? `<span style="color:#d97706">${icon('star', '', 14)}</span>` : ''}</div>
-      <div class="meta ellipsis">${esc(s.aircraft || s.aircraft_icao || '—')}${s.owner ? ' · ' + esc(s.owner) : ''}</div>
-      <div class="meta ellipsis">${esc(s.airport || '')}${s.airport ? ' · ' : ''}${fmtDate(s.date)}</div>
+      <div class="ttl"><span class="mono">${esc(regLabel(s))}</span>${regFlag(s.country)}${s.favorite ? `<span style="color:#d97706">${icon('star', '', 14)}</span>` : ''}${s.patrol_id ? `<span class="muted" title="${esc(s.patrol_name || t('patrol.title'))}">${icon('users', '', 14)}</span>` : ''}</div>
+      <div class="meta ellipsis">${s.is_patrol && s.patrol_size ? esc(t('patrol.n_aircraft', { n: s.patrol_size })) + ' · ' : ''}${esc(s.aircraft || s.aircraft_icao || '—')}${s.owner ? ' · ' + esc(s.owner) : ''}</div>
+      <div class="meta ellipsis">${esc(placeText(s))}${placeText(s) ? ' · ' : ''}${fmtDate(s.date)}</div>
     </div>
     <div class="hide-sm" style="max-width:40%">${badgesHtml(s.badges, 3)}</div>
   </a>`;

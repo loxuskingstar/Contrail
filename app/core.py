@@ -18,7 +18,11 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
+<<<<<<< HEAD
 APP_VERSION = "1.4.5"
+=======
+APP_VERSION = "2.1.0"
+>>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -107,6 +111,11 @@ ENV_KEYS = {
     "ntfy_url": "NTFY_URL",
     "webhook_url": "WEBHOOK_URL",
     "public_base_url": "PUBLIC_BASE_URL",
+    # Copie des sauvegardes hors de la machine
+    "backup_remote_path": "BACKUP_REMOTE_PATH",
+    "backup_webdav_url": "BACKUP_WEBDAV_URL",
+    "backup_webdav_user": "BACKUP_WEBDAV_USER",
+    "backup_webdav_password": "BACKUP_WEBDAV_PASSWORD",
 }
 
 _config_lock = threading.Lock()
@@ -175,6 +184,11 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout = 10000")
     from app.services import operators
     operators.register(conn)
+<<<<<<< HEAD
+=======
+    from app.services import registration as _regs
+    conn.create_function("known", 1, _regs.known, deterministic=True)
+>>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
     return conn
 
 
@@ -231,6 +245,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "units": "metric",             # metric | imperial (distances vols)
     "home_airports": [],           # ex. ["LFBO"]
     "default_airport": "",
+    "patrol_mode": "simple",       # simple : une patrouille = un spot (nommé) | detailed : un spot par avion
     "dashboard_widgets": [
         "hero", "quick", "goals", "recent", "on_this_day", "top_types",
         "achievements", "month_chart", "watchlist",

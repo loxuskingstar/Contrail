@@ -40,6 +40,7 @@ SPOT_SYNONYMS = {
     "tags": ["tags", "étiquettes", "etiquettes", "keywords", "labels", "etiquetas", "タグ"],
     "military": ["military", "militaire", "militar"],
     "flight_type": ["flight type", "type de vol", "tipo de vuelo"],
+    "test_registration": ["test registration", "test reg", "immat d'essai", "immatriculation d'essai", "matrícula de prueba"],
 }
 
 FLIGHT_SYNONYMS = {
@@ -191,6 +192,8 @@ def import_commit(bg: BackgroundTasks, token: str = Form(...), kind: str = Form(
         h = m.get(field)
         return (row.get(h) or "").strip() if h else ""
 
+    patrols_seen: dict[tuple, int] = {}      # (nom, jour, lieu) → patrouille : les lignes d'une même patrouille se regroupent
+
     for i, row in enumerate(rows, start=2):
         try:
             if kind == "spots":
@@ -206,10 +209,21 @@ def import_commit(bg: BackgroundTasks, token: str = Form(...), kind: str = Form(
                     "date": parse_date(get(row, "date"), get(row, "time"), dayfirst),
                     "description": get(row, "description") or None,
                     "flight_type": get(row, "flight_type") or None,
+                    "test_registration": get(row, "test_registration") or None,
                     "military": get(row, "military").lower() in ("1", "true", "yes", "oui", "x", "sí", "si"),
                 }
+                place_h = next((h for h in row if h and h.strip().lower() in ("place", "lieu", "lugar") and h != m.get("airport")), None)
+                if place_h and (row.get(place_h) or "").strip():
+                    data["place"] = row[place_h].strip()
+                    data["airport"] = None if not get(row, "airport") else data["airport"]
                 out = prepare(data)
-                if skip_duplicates and find_duplicates(out["registration"], out.get("airport"), out.get("date")):
+                patrol_name = (row.get("patrol") or "").strip()
+                if patrol_name:
+                    key = (patrol_name, (out.get("date") or "")[:10], out.get("airport") or out.get("place"))
+                    if key not in patrols_seen:
+                        patrols_seen[key] = execute("INSERT INTO patrols(name, created_at) VALUES(?, ?)", (patrol_name[:80], now_iso())).lastrowid
+                    out["patrol_id"] = patrols_seen[key]
+                if skip_duplicates and find_duplicates(out["registration"], out.get("airport"), out.get("date"), place=out.get("place")):
                     skipped += 1
                     continue
                 out["created_at"] = out["updated_at"] = now_iso()
@@ -272,8 +286,8 @@ def import_commit(bg: BackgroundTasks, token: str = Form(...), kind: str = Form(
 # Export
 # --------------------------------------------------------------------------- #
 SPOT_EXPORT = ["id_spotting", "registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner",
-               "airline_icao", "livery", "livery_category", "military", "flight_type", "date", "date_utc", "airport",
-               "lat", "lng", "country", "description", "favorite", "rating", "camera", "lens", "focal", "aperture",
+               "airline_icao", "livery", "livery_category", "military", "flight_type", "test_registration", "date", "date_utc", "airport",
+               "place", "lat", "lng", "country", "description", "favorite", "rating", "camera", "lens", "focal", "aperture",
                "iso", "shutter", "metar", "image", "atc_audio", "created_at"]
 
 
@@ -289,9 +303,9 @@ def _csv_response(rows: list[dict], cols: list[str], name: str) -> Response:
 
 @router.get("/api/export/spots.csv")
 def export_spots():
-    rows = q(f"SELECT {', '.join(SPOT_EXPORT)}, (SELECT group_concat(t.name, '|') FROM spotting_tags st "
+    rows = q(f"SELECT {', '.join(SPOT_EXPORT)}, (SELECT name FROM patrols WHERE id_patrol = spotting.patrol_id) AS patrol, (SELECT group_concat(t.name, '|') FROM spotting_tags st "
              f"JOIN tags t USING(id_tag) WHERE st.id_spotting = spotting.id_spotting) AS tags FROM spotting ORDER BY date")
-    return _csv_response(rows, SPOT_EXPORT + ["tags"], f"contrail-spots-{datetime.now():%Y%m%d}.csv")
+    return _csv_response(rows, SPOT_EXPORT + ["patrol", "tags"], f"contrail-spots-{datetime.now():%Y%m%d}.csv")
 
 
 @router.get("/api/export/flights.csv")
@@ -306,7 +320,7 @@ def export_flights():
 @router.get("/api/export/full.json")
 def export_full():
     tables = ["spotting", "tags", "spotting_tags", "flights", "spot_locations", "achievements", "user_settings",
-              "watchlist", "airlines", "fleets", "shares"]
+              "wishes", "airlines", "fleets", "shares"]
     payload = {"app": "contrail", "version": APP_VERSION, "exported_at": now_iso(),
                "tables": {t: q(f"SELECT * FROM {t}") for t in tables}}
     data = json.dumps(payload, ensure_ascii=False, indent=1)
@@ -320,7 +334,13 @@ def export_full():
 @router.get("/api/backups")
 def backups_list():
     last = backup.last_backup_time()
-    return {"items": backup.list_backups(), "last": last.isoformat(timespec="seconds") if last else None}
+    return {"items": backup.list_backups(), "last": last.isoformat(timespec="seconds") if last else None,
+            "remote": backup.remote_status()}
+
+
+@router.post("/api/backups/remote-test")
+def backups_remote_test():
+    return backup.test_remote()
 
 
 @router.post("/api/backups")

@@ -40,6 +40,8 @@ SERIES: list[tuple[str, str, list[int], str, str, list[str] | None]] = [
     ("manufacturers", "manufacturers", [3, 5, 10, 20, 30], "🏭", "collection", ["bronze", "silver", "gold", "platinum", "diamond"]),
     ("liveries", "special_liveries", [1, 5, 10, 25, 50, 100], "✨", "collection", None),
     ("livery_kinds", "livery_kinds", [3, 5], "🎭", "collection", ["silver", "gold"]),
+    ("primer", "primers", [1, 3, 5, 10, 20], "🟩", "collection", None),
+    ("white", "whites", [1, 3, 5, 10, 20], "⬜", "collection", None),
     ("military", "military", [1, 10, 50, 100, 250], "🎖️", "collection", None),
     ("heavies", "heavies", [1, 10, 50, 100, 250], "🐋", "collection", None),
     ("queens", "queens", [1, 5, 25], "👑", "collection", ["silver", "gold", "platinum"]),
@@ -54,6 +56,7 @@ SERIES: list[tuple[str, str, list[int], str, str, list[str] | None]] = [
     ("fleet_half", "fleet_half", [1, 5], "📊", "collection", ["gold", "platinum"]),
     ("fleet_complete", "fleet_complete", [1, 3, 10], "🧩", "collection", ["gold", "platinum", "diamond"]),
     # --- Terrain
+    ("wishes", "wishes_done", [1, 5, 10, 25, 50], "🎯", "field", None),
     ("airports", "airports", [1, 5, 10, 25, 50, 100], "📍", "field", None),
     ("abroad", "airport_countries", [2, 5, 10, 20, 40], "🧳", "field", None),
     ("globe", "airport_span", [500, 2000, 5000, 10000, 18000], "🌐", "field", None),
@@ -147,13 +150,15 @@ def _km(a: tuple[float, float], b: tuple[float, float]) -> float:
 def metrics() -> dict[str, float]:
     m: dict[str, float] = {}
     r = q1(
-        "SELECT COUNT(*) spots, COUNT(DISTINCT registration) regs, "
+        "SELECT COUNT(*) spots, COUNT(DISTINCT known(registration)) regs, "
         "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
-        "COUNT(DISTINCT CASE WHEN military = 0 THEN COALESCE(airline_icao, owner) END) airlines, "
+        "COUNT(DISTINCT CASE WHEN military = 0 THEN opg(airline_icao, owner) END) airlines, "
         "COUNT(DISTINCT NULLIF(airport,'')) airports, COUNT(DISTINCT country) countries, "
         "COUNT(DISTINCT NULLIF(manufacturer,'')) manufacturers, "
-        "SUM(CASE WHEN livery_category IS NOT NULL THEN 1 ELSE 0 END) special_liveries, "
-        "COUNT(DISTINCT livery_category) livery_kinds, "
+        "SUM(CASE WHEN livery_category IS NOT NULL AND livery_category NOT IN ('primer', 'white') THEN 1 ELSE 0 END) special_liveries, "
+        "COUNT(DISTINCT CASE WHEN livery_category NOT IN ('primer', 'white') THEN livery_category END) livery_kinds, "
+        "COUNT(DISTINCT CASE WHEN livery_category = 'primer' THEN registration END) primers, "
+        "COUNT(DISTINCT CASE WHEN livery_category = 'white' THEN registration END) whites, "
         "COUNT(DISTINCT CASE WHEN military = 1 THEN registration END) military, "
         "SUM(CASE WHEN sun_elevation < -6 THEN 1 ELSE 0 END) night, "
         "SUM(CASE WHEN sun_elevation BETWEEN -4 AND 8 THEN 1 ELSE 0 END) golden, "
@@ -195,7 +200,7 @@ def metrics() -> dict[str, float]:
     m["oddities"] = sum(cls_count.get(k, 0) for k in ("glider", "balloon", "drone"))
 
     # Alphabet : dernières lettres d'immatriculation différentes (A à Z)
-    m["alphabet"] = len({(r["registration"] or "")[-1:] for r in q("SELECT DISTINCT registration FROM spotting")} &
+    m["alphabet"] = len({(r["registration"] or "")[-1:] for r in q("SELECT DISTINCT registration FROM spotting WHERE known(registration) IS NOT NULL AND is_patrol = 0")} &
                         set("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
 
     # Aéroports : pays et étendue géographique
@@ -229,6 +234,7 @@ def metrics() -> dict[str, float]:
                "FROM fleets f WHERE NOT EXISTS (SELECT 1 FROM fleet_exclusions x WHERE x.airline_key = f.airline_key "
                "AND x.registration = f.registration) GROUP BY f.airline_key")
     m["fleet_complete"] = sum(1 for f in fleets if f["total"] >= 5 and f["seen"] == f["total"])
+    m["wishes_done"] = (q1("SELECT COUNT(*) n FROM wishes WHERE status = 'done'") or {}).get("n", 0)
     m["fleet_half"] = sum(1 for f in fleets if f["total"] >= 10 and f["seen"] * 2 >= f["total"])
 
     # Vols
@@ -242,7 +248,7 @@ def metrics() -> dict[str, float]:
     fa = {r["c"] for r in q("SELECT dep_icao c FROM flights UNION SELECT arr_icao FROM flights")}
     m["flight_airports"] = len(fa)
     m["flight_countries"] = len({(geo.airport(c) or {}).get("country") for c in fa} - {None})
-    m["flown_spotted"] = _n("SELECT COUNT(DISTINCT s.registration) FROM spotting s JOIN flights f ON f.registration = s.registration")
+    m["flown_spotted"] = _n("SELECT COUNT(DISTINCT known(s.registration)) FROM spotting s JOIN flights f ON f.registration = s.registration")
     return m
 
 

@@ -4,7 +4,7 @@ import { store } from '../app.js';
 import { t, fmtNum, fmtDate, fmtMonth, fmtRelative } from '../i18n.js';
 import { icon } from '../lib/icons.js';
 import { achName } from '../lib/ach.js';
-import { esc, sheet, spotTile, hbars, vbars, emptyState, toast } from '../ui.js';
+import { esc, regText, sheet, spotTile, hbars, vbars, emptyState, toast } from '../ui.js';
 
 export const WIDGETS = ['hero', 'quick', 'goals', 'recent', 'on_this_day', 'month_chart', 'top_types', 'achievements', 'watchlist', 'flights', 'map', 'sun'];
 
@@ -61,8 +61,8 @@ function renderWidget(w, d) {
         return `<div class="grid kpis">${k.map(([ic, v, l]) => `<div class="card kpi">${icon(ic)}<div class="v">${fmtNum(v)}</div><div class="l">${esc(t(l))}</div></div>`).join('')}</div>`;
       }
       return `<a class="hero" href="#/spots/${h.id_spotting}"><img src="${mediaUrl('images', h.image)}" alt="">
-        <div class="in"><div class="small" style="opacity:.85">${esc(h.airport || '')} · ${fmtDate(h.date, { time: false })}</div>
-        <h2 class="mono">${esc(h.registration)}</h2><div style="opacity:.9">${esc(h.aircraft || '')}${h.owner ? ' · ' + esc(h.owner) : ''}</div>${strip}</div></a>`;
+        <div class="in"><div class="small" style="opacity:.85">${esc(h.airport || h.place || '')} · ${fmtDate(h.date, { time: false })}</div>
+        <h2 class="mono">${esc(regText(h.registration))}</h2><div style="opacity:.9">${esc(h.aircraft || '')}${h.owner ? ' · ' + esc(h.owner) : ''}</div>${strip}</div></a>`;
     }
     case 'quick': {
       const items = [
@@ -110,13 +110,21 @@ function renderWidget(w, d) {
         <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap">${d.achievements.map((a) => `<span class="ach-medal t-${a.tier}" style="width:34px;height:34px;font-size:17px;border-radius:10px" title="${esc(achName(a.code, a.level))}"><span>${a.icon}</span></span>`).join('')}</div></div>
         ${icon('chevron-right')}</a>`;
     }
-    case 'watchlist':
-      if (!store.mod('watchlist') || !d.watchlist.length) return '';
-      return `<div class="card"><div class="card-title">${esc(t('nav.watchlist'))}<a href="#/watchlist">${esc(t('common.see_all'))}</a></div>
-        <div class="list">${d.watchlist.map((w) => `<a class="list-row" href="#/airframe/${encodeURIComponent(w.registration)}">
-          <span class="legend-dot" style="background:${w.airborne ? 'var(--ok)' : 'var(--muted)'}"></span>
-          <b class="mono grow">${esc(w.registration)}</b>
-          <span class="small muted">${w.airborne ? esc(t('watch.airborne')) + (w.last_status?.callsign ? ' · ' + esc(w.last_status.callsign) : '') : (w.last_seen_at ? esc(t('watch.seen', { when: fmtRelative(w.last_seen_at) })) : esc(t('watch.not_seen')))}</span></a>`).join('')}</div></div>`;
+    case 'watchlist': {
+      const W = d.wishlist || { open: 0, events: [], top: [] };
+      const live = (d.watchlist || []).filter((w) => w.airborne);
+      if (!store.mod('watchlist') || (!W.open && !live.length)) return '';
+      const KI = { aircraft: 'plane', type: 'layers', airline: 'building-2', livery: 'palette', airport: 'map-pin', event: 'calendar-days', other: 'sparkles' };
+      const cd = (w) => (w.ongoing ? t('wish.badge.ongoing') : w.days_to_start === 0 ? t('wish.badge.today') : t('wish.badge.in_days', { n: w.days_to_start }));
+      return `<div class="card"><div class="card-title">${esc(t('nav.watchlist'))}<a href="#/wishlist">${esc(t('common.see_all'))}</a></div>
+        <div class="list">
+          ${live.map((w) => `<a class="list-row" href="#/airframe/${encodeURIComponent(w.registration)}"><span class="legend-dot" style="background:var(--ok)"></span>
+            <b class="mono grow">${esc(w.registration)}</b><span class="small muted">${esc(t('watch.airborne'))}${w.last_status?.callsign ? ' · ' + esc(w.last_status.callsign) : ''}</span></a>`).join('')}
+          ${W.events.map((w) => `<a class="list-row" href="#/wishlist">${icon(KI.event, '', 18)}<span class="grow ellipsis"><b>${esc(w.title)}</b></span><span class="badge accent">${esc(cd(w))}</span></a>`).join('')}
+          ${W.top.map((w) => `<a class="list-row" href="#/wishlist">${icon(KI[w.kind] || 'star', '', 18)}<span class="grow ellipsis"><b>${esc(w.title)}</b></span>
+            <span class="small muted">${w.goal_count > 1 ? esc(t('wish.progress', { n: fmtNum(w.progress), total: fmtNum(w.goal_count) })) : esc(t(`wish.k.${w.kind}`))}</span></a>`).join('')}
+        </div></div>`;
+    }
     case 'flights':
       if (!store.mod('flights') || !d.flights.n) return '';
       return `<a class="card" href="#/flights" style="display:flex;gap:14px;align-items:center">${icon('globe', '', 34)}

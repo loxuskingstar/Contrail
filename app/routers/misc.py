@@ -7,7 +7,8 @@ from pydantic import BaseModel
 
 from ..core import (APP_VERSION, ENV_KEYS, config_source, db, execute, get_config, get_settings, q, q1,
                     safe_media_path, save_config, set_settings)
-from ..services import aircraft, gamification, geo, media
+from ..services import aircraft, gamification, geo, media, storage
+from ..services import airframes as airframes_svc
 from ..services import registration as regs
 
 router = APIRouter(tags=["misc"])
@@ -16,6 +17,20 @@ router = APIRouter(tags=["misc"])
 @router.get("/api/health")
 def health():
     return {"ok": True, "version": APP_VERSION}
+
+
+class MaintenanceIn(BaseModel):
+    purge_orphans: bool = False
+
+
+@router.get("/api/storage")
+def storage_report():
+    return storage.report()
+
+
+@router.post("/api/maintenance")
+def maintenance(body: MaintenanceIn | None = None):
+    return storage.maintain(bool(body and body.purge_orphans))
 
 
 # --------------------------------------------------------------------------- #
@@ -128,6 +143,11 @@ def airports_search(q_: str = "", limit: int = 12, q: str = ""):  # noqa: A002 -
     return geo.search_airports(q or q_, limit)
 
 
+@router.get("/api/places/search")
+def places_search(q: str = "", lang: str = ""):
+    return geo.search_places(q, lang or get_settings().get("language") or "fr")
+
+
 @router.get("/api/airports/{code}")
 def airport_info(code: str):
     a = geo.airport(code)
@@ -164,7 +184,7 @@ def rank_candidates(cands: list[dict], airport: str | None) -> list[dict]:
     for c in cands:
         reg = c["registration"]
         if q1("SELECT 1 FROM spotting WHERE registration = ? UNION SELECT 1 FROM aircraft_cache WHERE registration = ? "
-              "UNION SELECT 1 FROM fleets WHERE registration = ? UNION SELECT 1 FROM watchlist WHERE registration = ?",
+              "UNION SELECT 1 FROM fleets WHERE registration = ? UNION SELECT 1 FROM wishes WHERE kind = 'aircraft' AND value = ?",
               (reg, reg, reg, reg)):
             c["score"] = round(c["score"] + 0.5, 2)
             c["known"] = True
@@ -269,7 +289,7 @@ def _mask(v: str) -> str:
     return (v[:3] + "•" * 6 + v[-2:]) if len(v) > 8 else ("•" * len(v) if v else "")
 
 
-SECRET_KEYS = {"airlabs_api_key", "aviationstack_api_key", "opensky_client_secret"}
+SECRET_KEYS = {"airlabs_api_key", "aviationstack_api_key", "opensky_client_secret", "backup_webdav_password"}
 
 
 @router.get("/api/config")
@@ -342,13 +362,18 @@ def global_search(q_: str = "", q: str = ""):  # noqa: A002
         return {"spots": [], "airframes": [], "flights": [], "airports": [], "tags": []}
     like = f"%{term}%"
     conn = db()
+    # Une ancienne immatriculation ramène aussi les spots du même avion
+    sib = airframes_svc.group(term) if len(regs.normalize(term)) >= 3 else []
+    sib = sib if len(sib) > 1 else []
+    in_sib = f" OR registration IN ({','.join('?' * len(sib))})" if sib else ""
     spots = conn.execute(
-        "SELECT id_spotting, registration, aircraft_icao, aircraft, owner, airport, date, thumb FROM spotting "
-        "WHERE registration LIKE ? OR owner LIKE ? OR aircraft LIKE ? OR livery LIKE ? OR description LIKE ? "
-        "ORDER BY date DESC LIMIT 8", (like,) * 5).fetchall()
+        "SELECT id_spotting, registration, test_registration, aircraft_icao, aircraft, owner, airport, place, date, thumb FROM spotting "
+        "WHERE registration LIKE ? OR test_registration LIKE ? OR msn LIKE ? OR owner LIKE ? OR aircraft LIKE ? "
+        f"OR livery LIKE ? OR description LIKE ? OR place LIKE ?{in_sib} ORDER BY date DESC LIMIT 8", (like,) * 8 + tuple(sib)).fetchall()
     airframes = conn.execute(
-        "SELECT registration, MAX(aircraft) aircraft, COUNT(*) n FROM spotting WHERE registration LIKE ? "
-        "GROUP BY registration ORDER BY n DESC LIMIT 6", (like,)).fetchall()
+        "SELECT registration, MAX(aircraft) aircraft, COUNT(*) n FROM spotting "
+        f"WHERE registration LIKE ? OR test_registration LIKE ? OR msn LIKE ?{in_sib} "
+        "GROUP BY registration ORDER BY n DESC LIMIT 6", (like,) * 3 + tuple(sib)).fetchall()
     flights = conn.execute(
         "SELECT id_flight, date, dep_icao, arr_icao, flight_number, airline FROM flights WHERE flight_number LIKE ? "
         "OR airline LIKE ? OR registration LIKE ? OR dep_icao LIKE ? OR arr_icao LIKE ? ORDER BY date DESC LIMIT 6",

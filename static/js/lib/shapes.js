@@ -14,6 +14,8 @@ export function loadTypes() {
   }
   return typesPromise;
 }
+/** Liste des types connus (pour les listes de saisie assistée). */
+export const typeList = () => Object.entries(TYPES).map(([code, e]) => ({ code, name: e[0] }));
 export const typeName = (code) => (code && TYPES[code.toUpperCase()]?.[0]) || null;
 
 const DESC = [

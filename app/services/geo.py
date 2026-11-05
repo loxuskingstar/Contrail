@@ -54,6 +54,45 @@ def resolve_icao(code: str | None) -> str | None:
     return a["icao"] if a else (code.strip().upper() if code else None)
 
 
+def search_places(query: str, lang: str = "fr", limit: int = 6) -> list[dict]:
+    """Villes et localités (Open-Meteo Geocoding, sans clé) pour situer un spot hors aéroport. Renvoie [] hors ligne."""
+    from .aircraft import client
+    q = query.strip()
+    if len(q) < 2:
+        return []
+    try:
+        with client() as c:
+            r = c.get("https://geocoding-api.open-meteo.com/v1/search",
+                      params={"name": q, "count": limit, "language": lang if lang in ("fr", "en", "es", "ja") else "en", "format": "json"})
+            r.raise_for_status()
+            rows = r.json().get("results") or []
+    except Exception:  # noqa: BLE001 — réseau, quota ou service indisponible : on propose seulement les aéroports
+        return []
+    out = []
+    for x in rows:
+        parts = []
+        for p in (x.get("name"), x.get("admin1"), x.get("country")):
+            if p and p not in parts:
+                parts.append(p)
+        out.append({"label": ", ".join(parts), "name": x.get("name"), "lat": x.get("latitude"), "lng": x.get("longitude"),
+                    "country": x.get("country_code"), "tz": x.get("timezone")})
+    return out
+
+
+def tz_at(lat: float | None, lng: float | None) -> str:
+    """Fuseau horaire d'un point : celui de l'aéroport le plus proche (aucune base de fuseaux embarquée)."""
+    if lat is None or lng is None:
+        return "UTC"
+    best, best_d = None, 1e9
+    for a in _airports().values():
+        if abs(a["lat"] - lat) > 6 or abs(a["lon"] - lng) > 8:    # préfiltre : l'essentiel de la planète est écarté sans calcul
+            continue
+        d = haversine_km(lat, lng, a["lat"], a["lon"])
+        if d < best_d and a.get("tz"):
+            best, best_d = a, d
+    return best["tz"] if best else "UTC"
+
+
 def search_airports(query: str, limit: int = 12) -> list[dict]:
     qf = _fold(query.strip())
     if not qf:
