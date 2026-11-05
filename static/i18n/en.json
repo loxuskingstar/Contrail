@@ -1420,5 +1420,15 @@
 "spot.airport_or_place": "Airport or place",
 "spot.place_ph": "KJFK, Paris… or a city, a beach, an airshow",
 "spot.place_city": "City / place",
-"spot.place": "Place"
+"spot.place": "Place",
+"patrol.title": "Formation",
+"patrol.name": "Formation name",
+"patrol.name_ph": "Red Arrows, Breitling Jet Team…",
+"patrol.members": "Aircraft in the formation",
+"patrol.add": "Add an aircraft",
+"patrol.reg_ph": "Registration",
+"patrol.unknown": "Unknown",
+"patrol.hint": "Each aircraft becomes a spot of its own (counted in the stats) with the same photo, date and place. Tick “Unknown” for an aircraft in the photo you could not identify; you can fill it in later.",
+"patrol.leave": "Remove this aircraft from the formation",
+"patrol.view_all": "See all {n} aircraft"
 }

@@ -1420,5 +1420,15 @@
 "spot.airport_or_place": "Aéroport ou lieu",
 "spot.place_ph": "LFBO, Toulouse… ou une ville, une plage, un meeting",
 "spot.place_city": "Ville / lieu",
-"spot.place": "Lieu"
+"spot.place": "Lieu",
+"patrol.title": "Patrouille",
+"patrol.name": "Nom de la patrouille",
+"patrol.name_ph": "Patrouille de France, Breitling Jet Team…",
+"patrol.members": "Avions de la patrouille",
+"patrol.add": "Ajouter un avion",
+"patrol.reg_ph": "Immatriculation",
+"patrol.unknown": "Inconnue",
+"patrol.hint": "Chaque avion devient un spot à part entière (compté dans les stats), avec la même photo, la même date et le même lieu. Cochez « Inconnue » pour un avion de la photo que vous n'avez pas pu identifier : vous pourrez compléter plus tard.",
+"patrol.leave": "Retirer cet avion de la patrouille",
+"patrol.view_all": "Voir les {n} avions"
 }

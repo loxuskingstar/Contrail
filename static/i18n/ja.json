@@ -1249,5 +1249,15 @@
 "spot.airport_or_place": "空港または場所",
 "spot.place_ph": "RJTT、東京…、または都市・ビーチ・航空ショーの会場",
 "spot.place_city": "都市・場所",
-"spot.place": "場所"
+"spot.place": "場所",
+"patrol.title": "編隊",
+"patrol.name": "編隊名",
+"patrol.name_ph": "ブルーインパルス、ブライトリング・ジェットチーム…",
+"patrol.members": "編隊の機体",
+"patrol.add": "機体を追加",
+"patrol.reg_ph": "登録記号",
+"patrol.unknown": "不明",
+"patrol.hint": "各機は同じ写真・日時・場所を持つ独立したスポットになります（統計にも数えられます）。写真に写っていて識別できなかった機体は「不明」にチェックし、後で補完できます。",
+"patrol.leave": "この機体を編隊から外す",
+"patrol.view_all": "全{n}機を見る"
 }

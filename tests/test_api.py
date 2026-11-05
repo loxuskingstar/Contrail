@@ -751,3 +751,77 @@ def test_spot_without_registration(client):
     assert client.put(f"/api/spots/{ids[0]}", data={"data": json.dumps({"registration": ""})}).status_code == 422
     up = client.put(f"/api/spots/{ids[0]}", data={"data": json.dumps({"registration": "", "unknown_registration": True})}).json()
     assert (up.get("spot") or up)["registration"].startswith("SANS-IMMAT-")
+
+
+def test_patrol_lifecycle(client):
+    def post(d, **kw):
+        return client.post("/api/spots", data={"data": json.dumps(d)}, files={"image": ("p.jpg", jpeg_bytes((10, 200, 90)), "image/jpeg")}, **kw)
+    base = client.get("/api/stats").json()["totals"]["registrations"]
+    r = post({"registration": "F-TPF01", "aircraft": "Dassault Alpha Jet", "owner": "Patrouille de France", "airport": "LFBO",
+              "date": "2026-07-14T11:00", "tags": [],
+              "patrol": {"name": "Patrouille de France", "members": [
+                  {"registration": "F-TPF02"}, {"registration": "F-TPF03", "aircraft": "Alpha Jet E"},
+                  {"unknown_registration": True}, {"registration": "f-tpf02"}]}})     # doublon dans la saisie ignoré
+    assert r.status_code == 200, r.text
+    main = r.json()["spot"]
+    pat = main["patrol"]
+    assert pat["name"] == "Patrouille de France" and len(pat["members"]) == 4
+    members = {m["registration"]: m for m in pat["members"]}
+    assert "F-TPF02" in members and "F-TPF03" in members and sum(k.startswith("SANS-IMMAT-") for k in members) == 1
+    # un seul fichier photo pour toute la patrouille ; l'avion saisi à part garde son modèle, les autres héritent
+    full = [client.get(f"/api/spots/{m['id_spotting']}").json() for m in pat["members"]]
+    assert len({f["image"] for f in full}) == 1 and all(f["airport"] == "LFBO" and f["date"].startswith("2026-07-14") for f in full)
+    assert {f["registration"]: f["aircraft"] for f in full}["F-TPF03"] == "Alpha Jet E"
+    assert {f["registration"]: f["aircraft"] for f in full}["F-TPF02"] == "Dassault Alpha Jet"
+    # 3 avions identifiés de plus, l'inconnu n'est pas compté
+    assert client.get("/api/stats").json()["totals"]["registrations"] == base + 3
+    # la liste expose la patrouille et se filtre dessus
+    items = client.get("/api/spots", params={"patrol": pat["id"], "limit": 100}).json()["items"]
+    assert len(items) == 4 and all(i["patrol_name"] == "Patrouille de France" for i in items)
+    assert "Patrouille de France" in client.get("/api/spots/patrol-names").json()
+    # une patrouille ne se signale pas comme doublon de photo
+    assert not any(p["a"]["id"] in {m["id_spotting"] for m in pat["members"]} and p["b"]["id"] in {m["id_spotting"] for m in pat["members"]}
+                   for p in client.get("/api/spots/duplicates", params={"limit": 1000}).json()["pairs"])
+    # même avion, même jour, même lieu : refusé (409) tant qu'on ne force pas
+    again = post({"registration": "F-TPF09", "airport": "LFBO", "date": "2026-07-14T12:00",
+                  "patrol": {"members": [{"registration": "F-TPF02"}]}})
+    assert again.status_code == 409
+    # renommer et ajouter un avion depuis la fiche
+    up = client.put(f"/api/spots/{main['id_spotting']}", data={"data": json.dumps({"patrol": {"name": "PAF", "members": [{"registration": "F-TPF04"}]}})}).json()
+    assert up["spot"]["patrol"]["name"] == "PAF" and len(up["spot"]["patrol"]["members"]) == 5
+    # supprimer un membre garde la photo des autres
+    victim = next(m for m in up["spot"]["patrol"]["members"] if m["registration"] == "F-TPF04")
+    img = main["image"]
+    assert client.delete(f"/api/spots/{victim['id_spotting']}").status_code == 200
+    assert media_file_exists(img)
+    # retirer un avion de la patrouille
+    sid = next(m["id_spotting"] for m in client.get(f"/api/spots/{main['id_spotting']}").json()["patrol"]["members"] if m["registration"] == "F-TPF03")
+    assert client.put(f"/api/spots/{sid}", data={"data": json.dumps({"patrol": None})}).json()["spot"]["patrol"] is None
+    # quand il n'en reste qu'un, la patrouille se dissout
+    for m in client.get(f"/api/spots/{main['id_spotting']}").json()["patrol"]["members"][1:]:
+        client.delete(f"/api/spots/{m['id_spotting']}")
+    assert client.get(f"/api/spots/{main['id_spotting']}").json()["patrol"] is None
+    assert media_file_exists(img)
+    client.delete(f"/api/spots/{main['id_spotting']}")
+    assert media_file_exists(img)                                  # l'avion détaché garde la photo
+    client.delete(f"/api/spots/{sid}")
+    assert not media_file_exists(img)
+
+
+def media_file_exists(rel):
+    from app.services.media import DIRS
+    return (DIRS["images"] / rel).is_file()
+
+
+def test_patrol_import_export_roundtrip(client):
+    csv_data = ("registration,airport,place,date,patrol\n"
+                "F-ZPA1,,Plage de Biscarrosse,2026-08-01T15:00,Patrouille Test\n"
+                "F-ZPA2,,Plage de Biscarrosse,2026-08-01T15:00,Patrouille Test\n"
+                "F-ZPA3,,Plage de Biscarrosse,2026-08-02T15:00,Patrouille Test\n").encode()
+    prev = client.post("/api/import/preview", files={"file": ("p.csv", csv_data, "text/csv")}, data={"kind": "spots"}).json()
+    res = client.post("/api/import/commit", data={"token": prev["token"], "kind": "spots", "mapping": json.dumps(prev["mapping"])}).json()
+    assert res["imported"] == 3, res
+    a, b, c = (client.get("/api/spots", params={"registration": r}).json()["items"][0] for r in ("F-ZPA1", "F-ZPA2", "F-ZPA3"))
+    assert a["place"] == "Plage de Biscarrosse" and a["patrol_id"] == b["patrol_id"] != c["patrol_id"]     # une patrouille par jour
+    out = client.get("/api/export/spots.csv").text
+    assert "patrol" in out.splitlines()[0] and "Patrouille Test" in out and "Plage de Biscarrosse" in out

@@ -1420,5 +1420,15 @@
 "spot.airport_or_place": "Aeropuerto o lugar",
 "spot.place_ph": "LEMD, Madrid… o una ciudad, una playa, un festival aéreo",
 "spot.place_city": "Ciudad / lugar",
-"spot.place": "Lugar"
+"spot.place": "Lugar",
+"patrol.title": "Patrulla",
+"patrol.name": "Nombre de la patrulla",
+"patrol.name_ph": "Patrulla Águila, Breitling Jet Team…",
+"patrol.members": "Aviones de la patrulla",
+"patrol.add": "Añadir un avión",
+"patrol.reg_ph": "Matrícula",
+"patrol.unknown": "Desconocida",
+"patrol.hint": "Cada avión se convierte en un spot propio (cuenta en las estadísticas) con la misma foto, fecha y lugar. Marca «Desconocida» para un avión de la foto que no pudiste identificar; podrás completarlo después.",
+"patrol.leave": "Quitar este avión de la patrulla",
+"patrol.view_all": "Ver los {n} aviones"
 }

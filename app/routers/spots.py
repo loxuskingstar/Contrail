@@ -85,6 +85,9 @@ def build_filters(f: dict) -> tuple[str, list]:
         where.append("s.image IS NOT NULL")
     if f.get("has_audio"):
         where.append("s.atc_audio IS NOT NULL")
+    if f.get("patrol"):
+        where.append("s.patrol_id = ?")
+        params.append(int(f["patrol"]))
     if f.get("location_id"):
         where.append("s.location_id = ?")
         params.append(int(f["location_id"]))
@@ -121,7 +124,8 @@ def decorate(rows: list[dict], ctx: dict | None = None) -> list[dict]:
 LIST_COLS = ("s.id_spotting, s.registration, s.aircraft, s.aircraft_icao, s.owner, s.airline_icao, s.livery, "
              "s.livery_category, s.military, s.flight_type, s.date, s.airport, s.thumb, s.image, s.image_w, "
              "s.image_h, s.atc_audio, s.country, s.favorite, s.rating, s.sun_elevation, s.msn, s.camera, s.lens, "
-             "s.description, s.lat, s.lng, s.location_id, s.place, s.test_registration")
+             "s.description, s.lat, s.lng, s.location_id, s.place, s.test_registration, s.patrol_id, "
+             "(SELECT name FROM patrols WHERE id_patrol = s.patrol_id) AS patrol_name")
 
 
 @router.get("")
@@ -130,7 +134,7 @@ def list_spots(
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
-    location_id: int | None = None, date_from: str = "", date_to: str = "",
+    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None,
     sort: str = "date_desc", limit: int = Query(60, le=500), offset: int = 0,
 ):
     f = dict(locals())
@@ -265,8 +269,9 @@ def check_photo(image: UploadFile = File(...), exclude_id: int | None = Form(Non
     except Exception as e:  # noqa: BLE001
         raise HTTPException(422, "invalid_image") from e
     out = []
-    for r in q("SELECT id_spotting, registration, date, airport, thumb, phash FROM spotting WHERE phash IS NOT NULL AND id_spotting <> ?",
-               (exclude_id or -1,)):
+    mine = q1("SELECT patrol_id FROM spotting WHERE id_spotting = ?", (exclude_id,)) if exclude_id else None
+    for r in q("SELECT id_spotting, registration, date, airport, thumb, phash FROM spotting WHERE phash IS NOT NULL AND id_spotting <> ? "
+               "AND (patrol_id IS NULL OR patrol_id IS NOT ?)", (exclude_id or -1, mine and mine["patrol_id"])):
         d = media.hamming(h, r["phash"])
         if d <= PHOTO_DUP_MAX:
             out.append({**{k: r[k] for k in ("id_spotting", "registration", "date", "airport", "thumb")}, "distance": d})
@@ -276,17 +281,35 @@ def check_photo(image: UploadFile = File(...), exclude_id: int | None = Form(Non
 @router.get("/duplicates")
 def photo_duplicates(limit: int = 50):
     """Paires de spots dont les photos sont quasi identiques."""
-    rows = q("SELECT id_spotting id, registration, date, airport, thumb, phash FROM spotting WHERE phash IS NOT NULL ORDER BY id_spotting")
+    rows = q("SELECT id_spotting id, registration, date, airport, thumb, phash, patrol_id FROM spotting WHERE phash IS NOT NULL ORDER BY id_spotting")
     vals = [(int(r["phash"], 16), r) for r in rows]
     pairs = []
     for i, (a, ra) in enumerate(vals):
         for b, rb in vals[i + 1:]:
             d = (a ^ b).bit_count()
-            if d <= PHOTO_DUP_MAX:
+            if d <= PHOTO_DUP_MAX and not (ra["patrol_id"] and ra["patrol_id"] == rb["patrol_id"]):   # une patrouille partage sa photo
                 pairs.append({"distance": d, "a": {k: ra[k] for k in ("id", "registration", "date", "airport", "thumb")},
                               "b": {k: rb[k] for k in ("id", "registration", "date", "airport", "thumb")}})
     pairs.sort(key=lambda p: p["distance"])
     return {"count": len(pairs), "pairs": pairs[:limit]}
+
+
+@router.get("/patrol-names")
+def patrol_names():
+    """Noms de patrouilles déjà utilisés, du plus récent au plus ancien (suggestions de saisie)."""
+    return [r["name"] for r in q("SELECT name FROM patrols WHERE name IS NOT NULL AND name <> '' GROUP BY name "
+                                 "ORDER BY MAX(id_patrol) DESC LIMIT 50")]
+
+
+def patrol_of(s: dict) -> dict | None:
+    if not s.get("patrol_id"):
+        return None
+    p = q1("SELECT id_patrol id, name FROM patrols WHERE id_patrol = ?", (s["patrol_id"],))
+    if not p:
+        return None
+    p["members"] = q("SELECT id_spotting, registration, test_registration, aircraft, owner, thumb FROM spotting "
+                     "WHERE patrol_id = ? ORDER BY id_spotting", (p["id"],))
+    return p
 
 
 @router.get("/{spot_id}")
@@ -302,6 +325,7 @@ def get_spot(spot_id: int, sort: str = "date_desc"):
     s["airport_info"] = geo.airport(s["airport"])
     s["location"] = q1("SELECT * FROM spot_locations WHERE id_location = ?", (s["location_id"],)) if s["location_id"] else None
     s["flights"] = collection.crossref_for_spot(s["registration"])
+    s["patrol"] = patrol_of(s)
     ids = airframes.group(s["registration"])
     s["encounters"] = q1(f"SELECT COUNT(*) n FROM spotting WHERE registration IN ({','.join('?' * len(ids))})", ids)["n"]
     s["aliases"] = [i for i in ids if i != s["registration"]]
@@ -471,6 +495,86 @@ def _post_save(spot_id: int, reg: str, is_new: bool, weather_needed: bool, bg: B
     return extra
 
 
+
+# --------------------------------------------------------------------------- #
+# Patrouilles : un spot par avion, photo partagée, reliés par patrol_id
+# --------------------------------------------------------------------------- #
+MEMBER_FIELDS = ("registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner", "airline_icao", "livery",
+                 "test_registration")
+INHERIT = ("aircraft", "aircraft_icao", "manufacturer", "owner", "airline_icao", "livery", "military", "flight_type",
+           "date", "airport", "place", "location_id", "lat", "lng", "description", "camera", "lens", "focal", "aperture",
+           "iso", "shutter")
+INHERIT_RAW = ("exif_json", "image", "thumb", "image_w", "image_h", "phash")
+
+
+def _prepare_members(base: dict, members: list | None) -> list[dict]:
+    """Lignes prêtes à insérer pour les autres avions d'une patrouille (hérite de la photo, de la date, du lieu)."""
+    rows: list[dict] = []
+    seen = {base.get("registration")} if not regs.is_unknown(base.get("registration")) else set()
+    for m in members or []:
+        if not isinstance(m, dict):
+            continue
+        inp = {k: base[k] for k in INHERIT if base.get(k) not in (None, "")}
+        inp.update({k: v for k, v in m.items() if k in MEMBER_FIELDS and v not in (None, "")})
+        inp["unknown_registration"] = bool(m.get("unknown_registration"))
+        row = prepare(inp)
+        if row["registration"] in seen:
+            continue
+        seen.add(row["registration"])
+        row.update({k: base[k] for k in INHERIT_RAW if base.get(k) is not None})
+        rows.append(row)
+    return rows
+
+
+def _gc_patrols() -> None:
+    """Une patrouille qui n'a plus qu'un avion (ou aucun) n'existe plus."""
+    for r in q("SELECT p.id_patrol FROM patrols p LEFT JOIN spotting s ON s.patrol_id = p.id_patrol "
+               "GROUP BY p.id_patrol HAVING COUNT(s.id_spotting) < 2"):
+        execute("UPDATE spotting SET patrol_id = NULL WHERE patrol_id = ?", (r["id_patrol"],))
+        execute("DELETE FROM patrols WHERE id_patrol = ?", (r["id_patrol"],))
+
+
+def _free_files(s: dict) -> None:
+    """Supprime les fichiers d'un spot ; la photo reste si un autre spot (patrouille) la partage encore."""
+    if s.get("image") and q1("SELECT 1 FROM spotting WHERE image = ? LIMIT 1", (s["image"],)):
+        media.delete_audio(s.get("atc_audio"))
+        return
+    delete_spot_files(s)
+
+
+def _insert_members(rows: list[dict], patrol_id: int, tags: list, bg: BackgroundTasks) -> dict:
+    extra: dict = {"crossref": [], "achievements": [], "wishes": []}
+    for row in rows:
+        row["patrol_id"] = patrol_id
+        row["created_at"] = row["updated_at"] = now_iso()
+        if row.get("military") is None:
+            row["military"] = 1 if regs.looks_military(row.get("owner"), row.get("aircraft")) else 0
+        cur = execute(f"INSERT INTO spotting({', '.join(row)}) VALUES({', '.join('?' * len(row))})", list(row.values()))
+        set_tags(cur.lastrowid, tags)
+        e = _post_save(cur.lastrowid, row["registration"], True, bool(row.get("airport") and row.get("date_utc")), bg)
+        for k, v in e.items():
+            extra[k] = extra.get(k, []) + v
+    return extra
+
+
+def _patrol_id(spot: dict | None, info: dict) -> int:
+    """Patrouille du spot : renomme l'existante ou en crée une."""
+    name = (info.get("name") or "").strip()[:80] or None
+    pid = (spot or {}).get("patrol_id")
+    if pid:
+        if "name" in info:
+            execute("UPDATE patrols SET name = ? WHERE id_patrol = ?", (name, pid))
+        return pid
+    return execute("INSERT INTO patrols(name, created_at) VALUES(?, ?)", (name, now_iso())).lastrowid
+
+
+def _duplicates_of(rows: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for r in rows:
+        out += find_duplicates(r["registration"], r.get("airport"), r.get("date"), place=r.get("place"))
+    return out
+
+
 @router.post("")
 def create_spot(
     bg: BackgroundTasks,
@@ -490,8 +594,18 @@ def create_spot(
     if not merged_input.get("airport") and not merged_input.get("place") and get_settings().get("default_airport"):
         merged_input["airport"] = get_settings()["default_airport"]
     out.update(prepare(merged_input))
+    patrol_in = payload.get("patrol") if isinstance(payload.get("patrol"), dict) else None
+    member_rows: list[dict] = []
+    if patrol_in:
+        if out.get("military") is None:
+            out["military"] = 1 if regs.looks_military(out.get("owner"), out.get("aircraft")) else 0
+        try:
+            member_rows = _prepare_members(out, patrol_in.get("members"))
+        except HTTPException:
+            media.delete_image(out.get("image"), out.get("thumb"))
+            raise
     if not force:
-        dups = find_duplicates(out["registration"], out.get("airport"), out.get("date"), place=out.get("place"))
+        dups = find_duplicates(out["registration"], out.get("airport"), out.get("date"), place=out.get("place")) + _duplicates_of(member_rows)
         if dups:
             media.delete_image(out.get("image"), out.get("thumb"))
             raise HTTPException(409, detail={"code": "duplicate", "duplicates": dups})
@@ -504,11 +618,17 @@ def create_spot(
         out["military"] = 1 if regs.looks_military(out.get("owner"), out.get("aircraft")) else 0
     out["draft_uuid"] = payload.get("draft_uuid")
     out["created_at"] = out["updated_at"] = now_iso()
+    if patrol_in:
+        out["patrol_id"] = _patrol_id(None, patrol_in)
     cols = ", ".join(out.keys())
     cur = execute(f"INSERT INTO spotting({cols}) VALUES({', '.join('?' * len(out))})", list(out.values()))
     spot_id = cur.lastrowid
     set_tags(spot_id, payload.get("tags") or [])
     extra = _post_save(spot_id, out["registration"], True, bool(out.get("airport") and out.get("date_utc")), bg)
+    if member_rows:
+        more = _insert_members(member_rows, out["patrol_id"], payload.get("tags") or [], bg)
+        for k, v in more.items():
+            extra[k] = extra.get(k, []) + v
     return {"spot": get_spot(spot_id), **extra}
 
 
@@ -525,12 +645,12 @@ def update_spot(
         raise HTTPException(404, "not_found")
     payload = json.loads(data or "{}")
     out: dict = {}
+    drop_old: tuple | None = None
     if image and image.filename:
-        old = (existing.get("image"), existing.get("thumb"))
+        drop_old = (existing.get("image"), existing.get("thumb"))
         _apply_image(out, image, payload)
-        media.delete_image(*old)
     elif payload.get("remove_image"):
-        media.delete_image(existing.get("image"), existing.get("thumb"))
+        drop_old = (existing.get("image"), existing.get("thumb"))
         out.update({"image": None, "thumb": None, "image_w": None, "image_h": None, "phash": None})
     if audio and audio.filename:
         try:
@@ -545,9 +665,31 @@ def update_spot(
     out.update(prepare({**{k: v for k, v in out.items() if k in EDITABLE}, **payload}, existing))
     out["updated_at"] = now_iso()
     sets = ", ".join(f"{k} = ?" for k in out)
+    patrol_in = payload.get("patrol") if isinstance(payload.get("patrol"), dict) else None
+    member_rows: list[dict] = []
+    if patrol_in and patrol_in.get("members"):
+        member_rows = _prepare_members({**existing, **out}, patrol_in["members"])
+        dups = _duplicates_of(member_rows)
+        if dups and not payload.get("force"):
+            raise HTTPException(409, detail={"code": "duplicate", "duplicates": dups})
+    if patrol_in is not None:
+        out["patrol_id"] = _patrol_id(existing, patrol_in)
+        sets = ", ".join(f"{k} = ?" for k in out)
+    elif "patrol" in payload and payload["patrol"] is None:
+        out["patrol_id"] = None
+        sets = ", ".join(f"{k} = ?" for k in out)
     execute(f"UPDATE spotting SET {sets} WHERE id_spotting = ?", list(out.values()) + [spot_id])
+    if drop_old and drop_old[0]:
+        if q1("SELECT 1 FROM spotting WHERE image = ? LIMIT 1", (drop_old[0],)):
+            pass                           # la photo reste utilisée par un autre avion de la patrouille
+        else:
+            media.delete_image(*drop_old)
     if "tags" in payload:
         set_tags(spot_id, payload["tags"])
+    if member_rows:
+        _insert_members(member_rows, out["patrol_id"], payload.get("tags") or [t["id_tag"] for t in q(
+            "SELECT id_tag FROM spotting_tags WHERE id_spotting = ?", (spot_id,))], bg)
+    _gc_patrols()
     changed_wx = (out.get("date_utc") != existing.get("date_utc") or out.get("airport", existing["airport"]) != existing["airport"])
     extra = _post_save(spot_id, out.get("registration", existing["registration"]), False, changed_wx, bg)
     return {"spot": get_spot(spot_id), **extra}
@@ -583,7 +725,8 @@ def delete_spot(spot_id: int):
     if not s:
         raise HTTPException(404, "not_found")
     execute("DELETE FROM spotting WHERE id_spotting = ?", (spot_id,))
-    delete_spot_files(s)
+    _free_files(s)
+    _gc_patrols()
     return {"deleted": spot_id}
 
 
@@ -604,7 +747,8 @@ def bulk(body: Bulk):
         conn.execute(f"DELETE FROM spotting WHERE id_spotting IN ({marks})", body.ids)
         conn.commit()
         for r in rows:
-            delete_spot_files(r)
+            _free_files(r)
+        _gc_patrols()
     elif body.action in ("add_tag", "remove_tag"):
         tag_id = int(body.value)
         for i in body.ids:

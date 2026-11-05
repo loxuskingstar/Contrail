@@ -4,7 +4,7 @@ import { store, navigate } from '../app.js';
 import { t, fmtDate, flag, countryName } from '../i18n.js';
 import { icon } from '../lib/icons.js';
 import { airportInput, tagPicker, rememberAirport } from '../lib/fields.js';
-import { esc, toast, errorToast, confirmDialog, stars, bindStars, pageHead, debounce } from '../ui.js';
+import { esc, toast, errorToast, confirmDialog, stars, bindStars, pageHead, debounce, regText } from '../ui.js';
 import { saveDraft, uuid } from '../offline.js';
 
 const FLIGHT_TYPES = ['commercial', 'cargo', 'test', 'delivery', 'ferry', 'military', 'business', 'general', 'helicopter', 'medical', 'training', 'airshow', 'government', 'other'];
@@ -70,6 +70,19 @@ export async function render(root, params, query) {
         </div>
         <div class="field"><span>${esc(t('spot.tags'))}</span><div data-tags></div></div>
       </div>
+
+      <details class="card fold" data-patrol ${s.patrol ? 'open' : ''}>
+        <summary>${icon('users', '', 18)} ${esc(t('patrol.title'))} ${icon('chevron-down', 'chev', 18)}</summary>
+        <div class="fold-body stack">
+          <label class="field"><span>${esc(t('patrol.name'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
+            <input name="patrol_name" list="patrol-names" value="${esc(s.patrol?.name)}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off"><datalist id="patrol-names"></datalist></label>
+          ${s.patrol ? `<div class="stack" style="gap:6px"><span class="tiny muted">${esc(t('patrol.members'))}</span><div class="row wrap" style="gap:6px">${s.patrol.members.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}
+          <div class="stack" style="gap:8px" data-pat-rows></div>
+          <div><button type="button" class="btn sm" data-pat-add>${icon('plus', '', 16)} ${esc(t('patrol.add'))}</button></div>
+          <p class="tiny muted">${esc(t('patrol.hint'))}</p>
+          ${s.patrol ? `<label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" name="patrol_leave"> <span>${esc(t('patrol.leave'))}</span></label>` : ''}
+        </div>
+      </details>
 
       <details class="card fold" ${s.livery || s.description || s.flight_type || s.test_registration || s.location_id ? 'open' : ''}>
         <summary>${icon('sliders-horizontal', '', 18)} ${esc(t('spot.more_details'))} ${icon('chevron-down', 'chev', 18)}</summary>
@@ -311,6 +324,28 @@ export async function render(root, params, query) {
     } catch { toast(esc(t('spot.mic_denied')), { type: 'error' }); }
   };
 
+  // ------------------------------------------------------------ patrouille : autres avions de la photo
+  const patRows = root.querySelector('[data-pat-rows]');
+  const addPatRow = () => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.style.gap = '8px';
+    row.innerHTML = `<input class="grow" data-pr placeholder="${esc(t('patrol.reg_ph'))}" autocapitalize="characters" autocomplete="off" spellcheck="false" style="min-width:0">
+      <label class="row tiny" style="gap:4px;white-space:nowrap;cursor:pointer"><input type="checkbox" data-pu> ${esc(t('patrol.unknown'))}</label>
+      <button type="button" class="btn sm ghost" data-px aria-label="${esc(t('common.remove'))}">${icon('x', '', 16)}</button>`;
+    const inp = row.querySelector('[data-pr]'), unkBox = row.querySelector('[data-pu]');
+    unkBox.onchange = () => { inp.disabled = unkBox.checked; if (unkBox.checked) inp.value = ''; };
+    row.querySelector('[data-px]').onclick = () => row.remove();
+    patRows.append(row);
+    inp.focus();
+  };
+  root.querySelector('[data-pat-add]').onclick = () => { root.querySelector('[data-patrol]').open = true; addPatRow(); };
+  root.querySelector('[data-patrol]').addEventListener('toggle', function once() {
+    if (!this.open || this.dataset.loaded) return;
+    this.dataset.loaded = '1';
+    api('/api/spots/patrol-names').then((names) => { root.querySelector('#patrol-names').innerHTML = names.map((n) => `<option value="${esc(n)}">`).join(''); }).catch(() => {});
+  });
+
   // ------------------------------------------------------------ enregistrement
   form.onsubmit = async (e) => {
     e.preventDefault();
@@ -328,6 +363,11 @@ export async function render(root, params, query) {
     data.favorite = F('favorite').checked;
     data.rating = rating || null;
     data.tags = picker.value();
+    const members = [...patRows.children].map((r) => ({ registration: r.querySelector('[data-pr]').value.trim(), unknown_registration: r.querySelector('[data-pu]').checked }))
+      .filter((m) => m.registration || m.unknown_registration);
+    const patName = F('patrol_name').value.trim();
+    if (editing && s.patrol && F('patrol_leave')?.checked) data.patrol = null;
+    else if (members.length || patName || (editing && s.patrol)) data.patrol = { name: patName, members };
     if (removeImage) data.remove_image = true;
     if (removeAudio) data.remove_audio = true;
     if (!editing) data.draft_uuid = uuid();
@@ -343,7 +383,7 @@ export async function render(root, params, query) {
     if (!editing && !navigator.onLine) { await asDraft(); return; }
     const send = async (force = false) => {
       const fd = new FormData();
-      fd.append('data', JSON.stringify(data));
+      fd.append('data', JSON.stringify({ ...data, force }));
       if (imageFile) fd.append('image', imageFile, imageFile.name || 'photo.jpg');
       if (audioFile) fd.append('audio', audioFile, audioFile.name || 'audio.webm');
       return api(editing ? `/api/spots/${s.id_spotting}` : '/api/spots', { method: editing ? 'PUT' : 'POST', form: fd, query: { force } });

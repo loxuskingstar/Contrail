@@ -255,7 +255,18 @@ SCHEMA_V6 = """
 ALTER TABLE spotting ADD COLUMN place TEXT;
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6]
+SCHEMA_V7 = """
+-- Patrouille : plusieurs avions vus ensemble (un spot par avion, photo partagée), reliés par patrol_id
+CREATE TABLE IF NOT EXISTS patrols (
+    id_patrol  INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT,
+    created_at TEXT NOT NULL
+);
+ALTER TABLE spotting ADD COLUMN patrol_id INTEGER REFERENCES patrols(id_patrol) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_spot_patrol ON spotting(patrol_id);
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7]
 
 
 def init_db() -> None:

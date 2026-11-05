@@ -249,7 +249,8 @@ export function tagChips(tags = []) {
 
 export function spotTile(s, { href = `#/spots/${s.id_spotting}` } = {}) {
   const corner = [s.favorite ? `<span class="badge">${icon('star', '', 11)}</span>` : '', s.atc_audio ? `<span class="badge">${icon('radio', '', 11)}</span>` : '',
-    s.livery_category ? `<span class="badge">${icon(['primer', 'white'].includes(s.livery_category) ? 'paint-bucket' : 'palette', '', 11)}</span>` : ''].join('');
+    s.livery_category ? `<span class="badge">${icon(['primer', 'white'].includes(s.livery_category) ? 'paint-bucket' : 'palette', '', 11)}</span>` : '',
+    s.patrol_id ? `<span class="badge" title="${esc(s.patrol_name || t('patrol.title'))}">${icon('users', '', 11)}</span>` : ''].join('');
   const sub = `${esc(s.aircraft_icao || s.aircraft || '')}${s.owner ? ' · ' + esc(s.owner) : ''}`;
   if (s.thumb) {
     return `<a class="tile" href="${href}"><img loading="lazy" src="${mediaUrl('thumbs', s.thumb)}" alt="${esc(regText(s.registration))}"><div class="corner">${corner}</div>
@@ -268,7 +269,7 @@ export function spotRow(s, { selectable = false, selected = false } = {}) {
     ${selectable ? `<span class="check">${selected ? icon('check', '', 14) : ''}</span>` : ''}
     ${thumb}
     <div class="grow">
-      <div class="ttl"><span class="mono">${esc(regText(s.registration))}</span>${regFlag(s.country)}${s.favorite ? `<span style="color:#d97706">${icon('star', '', 14)}</span>` : ''}</div>
+      <div class="ttl"><span class="mono">${esc(regText(s.registration))}</span>${regFlag(s.country)}${s.favorite ? `<span style="color:#d97706">${icon('star', '', 14)}</span>` : ''}${s.patrol_id ? `<span class="muted" title="${esc(s.patrol_name || t('patrol.title'))}">${icon('users', '', 14)}</span>` : ''}</div>
       <div class="meta ellipsis">${esc(s.aircraft || s.aircraft_icao || '—')}${s.owner ? ' · ' + esc(s.owner) : ''}</div>
       <div class="meta ellipsis">${esc(placeText(s))}${placeText(s) ? ' · ' : ''}${fmtDate(s.date)}</div>
     </div>
