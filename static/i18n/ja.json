@@ -1280,5 +1280,6 @@
 "ach.step_next": "次の段階",
 "ach.step_first": "最初の段階",
 "ach.step_todo": "今後",
-"ach.remaining": "あと{n}"
+"ach.remaining": "あと{n}",
+"spot.preview_map": "地図で確認"
 }

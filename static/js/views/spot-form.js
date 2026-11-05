@@ -177,7 +177,7 @@ export async function render(root, params, query) {
   bindStars(root, (v) => (rating = v));
   // Ville choisie dans les suggestions : ses coordonnées alimentent la carte et le fuseau horaire
   let placeLL = null;
-  airportInput(F('airport'), { onPick: (a) => {
+  airportInput(F('airport'), { getLL: () => ((F('airport').dataset.kind === 'place' || (s.place && F('airport').value === s.place)) && F('lat').value && F('lng').value ? [Number(F('lat').value), Number(F('lng').value)] : null), onPick: (a) => {
     if (a.label && a.lat != null) { F('lat').value = a.lat; F('lng').value = a.lng; placeLL = [String(a.lat), String(a.lng)]; }
     else if (placeLL && F('lat').value === placeLL[0]) { F('lat').value = ''; F('lng').value = ''; placeLL = null; }
     checkDup();

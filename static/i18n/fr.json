@@ -1451,5 +1451,6 @@
 "ach.step_next": "Prochain palier",
 "ach.step_first": "Premier palier",
 "ach.step_todo": "À venir",
-"ach.remaining": "Encore {n}"
+"ach.remaining": "Encore {n}",
+"spot.preview_map": "Aperçu sur la carte"
 }

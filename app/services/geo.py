@@ -54,7 +54,7 @@ def resolve_icao(code: str | None) -> str | None:
     return a["icao"] if a else (code.strip().upper() if code else None)
 
 
-def search_places(query: str, lang: str = "fr", limit: int = 6) -> list[dict]:
+def search_places(query: str, lang: str = "fr", limit: int = 8) -> list[dict]:
     """Villes et localités (Open-Meteo Geocoding, sans clé) pour situer un spot hors aéroport. Renvoie [] hors ligne."""
     from .aircraft import client
     q = query.strip()
@@ -70,11 +70,12 @@ def search_places(query: str, lang: str = "fr", limit: int = 6) -> list[dict]:
         return []
     out = []
     for x in rows:
-        parts = []
-        for p in (x.get("name"), x.get("admin1"), x.get("country")):
-            if p and p not in parts:
-                parts.append(p)
-        out.append({"label": ", ".join(parts), "name": x.get("name"), "lat": x.get("latitude"), "lng": x.get("longitude"),
+        name = x.get("name")
+        # Le département (ou, à défaut, la région) distingue les homonymes : « Saint-Pierre (Manche) » ≠ « Saint-Pierre (Cantal) »
+        sub = next((v for v in (x.get("admin2"), x.get("admin1")) if v and v != name), None)
+        label = ", ".join(p for p in (f"{name} ({sub})" if sub else name, x.get("country")) if p)
+        detail = " · ".join(dict.fromkeys(p for p in (x.get("admin2"), x.get("admin1"), x.get("country")) if p and p != name))
+        out.append({"label": label, "name": name, "detail": detail, "lat": x.get("latitude"), "lng": x.get("longitude"),
                     "country": x.get("country_code"), "tz": x.get("timezone")})
     return out
 

@@ -718,10 +718,13 @@ def test_places_search_uses_geocoder(client, monkeypatch):
     def handler(req):
         assert req.url.params["name"] == "Biscarrosse" and req.url.params["language"] == "fr"
         return httpx.Response(200, json={"results": [{"name": "Biscarrosse", "latitude": 44.39, "longitude": -1.17, "country_code": "FR",
-                                                       "country": "France", "admin1": "Nouvelle-Aquitaine", "timezone": "Europe/Paris"}]})
+                                                       "country": "France", "admin1": "Nouvelle-Aquitaine", "admin2": "Landes", "timezone": "Europe/Paris"},
+                                                      {"name": "Biscarrosse", "latitude": 1.0, "longitude": 2.0, "country_code": "XX", "country": "Ailleurs", "admin1": "Région X"}]})
     monkeypatch.setattr(aircraft, "client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
     r = client.get("/api/places/search", params={"q": "Biscarrosse", "lang": "fr"}).json()
-    assert r == [{"label": "Biscarrosse, Nouvelle-Aquitaine, France", "name": "Biscarrosse", "lat": 44.39, "lng": -1.17, "country": "FR", "tz": "Europe/Paris"}]
+    assert r[0] == {"label": "Biscarrosse (Landes), France", "name": "Biscarrosse", "detail": "Landes · Nouvelle-Aquitaine · France",
+                    "lat": 44.39, "lng": -1.17, "country": "FR", "tz": "Europe/Paris"}
+    assert r[1]["label"] == "Biscarrosse (Région X), Ailleurs"          # sans département : la région distingue l'homonyme
     monkeypatch.undo()
     assert client.get("/api/places/search", params={"q": "Biscarrosse"}).json() == []      # hors ligne : pas d'erreur, aéroports seulement
 

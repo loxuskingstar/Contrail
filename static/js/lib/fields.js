@@ -1,7 +1,7 @@
 // Champs réutilisables : autocomplétion d'aéroport, sélecteur d'étiquettes
 import { api } from '../api.js';
 import { t } from '../i18n.js';
-import { esc, debounce } from '../ui.js';
+import { esc, debounce, sheet } from '../ui.js';
 import { icon } from './icons.js';
 
 const RECENT_KEY = 'contrail.recentAirports';
@@ -28,12 +28,46 @@ function offlineSearch(q) {
   return Object.values(c).filter((a) => `${a.icao} ${a.iata || ''} ${a.name} ${a.city}`.toLowerCase().includes(ql)).slice(0, 8);
 }
 
+/** Aperçu d'un lieu sur une carte (feuille). */
+export function previewPlace({ lat, lng, label = '' }) {
+  if (lat == null || lng == null) return;
+  const node = sheet({ title: esc(label), body: `<div data-pm style="height:320px;border-radius:12px;overflow:hidden;background:var(--bg)"></div>
+    <p class="tiny muted" style="margin-top:8px">${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}</p>` });
+  setTimeout(async () => {
+    const host = document.querySelector('.sheet [data-pm]');
+    if (!host) return;
+    try {
+      const { createMap } = await import('./map.js');
+      const m = await createMap(host, { center: [lat, lng], zoom: 11 });
+      m.marker([lat, lng], { kind: 'pin', label: '' });
+    } catch { host.innerHTML = `<div class="muted small" style="padding:20px">${esc(t('err.generic'))}</div>`; }
+  }, 60);
+  return node;
+}
+
 /** Transforme un <input> en champ aéroport avec suggestions (en ligne et hors-ligne). */
-export function airportInput(input, { onPick } = {}) {
+export function airportInput(input, { onPick, getLL } = {}) {
   const wrap = input.closest('.input-wrap') || input.parentElement;
   wrap.style.position = 'relative';
   let list = null, items = [], sel = -1;
   const close = () => { list?.remove(); list = null; };
+  // Petite icône carte à droite du champ : aperçu du lieu choisi (ville ou lieu situé)
+  let mapBtn = null;
+  const syncMap = () => {
+    const ll = getLL?.();
+    if (ll && !mapBtn) {
+      mapBtn = document.createElement('button');
+      mapBtn.type = 'button';
+      mapBtn.className = 'btn-icon ac-map';
+      mapBtn.title = t('spot.preview_map');
+      mapBtn.setAttribute('aria-label', t('spot.preview_map'));
+      mapBtn.innerHTML = icon('map', '', 18);
+      mapBtn.onclick = () => { const p = getLL?.(); if (p) previewPlace({ lat: p[0], lng: p[1], label: input.value }); };
+      wrap.append(mapBtn);
+    }
+    if (mapBtn) mapBtn.hidden = !ll;
+    if (getLL) input.style.paddingRight = ll ? '44px' : '';
+  };
   const pick = (a) => {
     if (a.label) {                       // ville ou lieu : on garde son libellé et ses coordonnées pour l'enregistrement
       input.value = a.label;
@@ -48,6 +82,7 @@ export function airportInput(input, { onPick } = {}) {
     close();
     onPick?.(a);
     input.dispatchEvent(new Event('change', { bubbles: true }));
+    syncMap();
   };
   const show = (arr) => {
     items = arr;
@@ -57,9 +92,14 @@ export function airportInput(input, { onPick } = {}) {
     list = document.createElement('div');
     list.className = 'ac-list';
     list.innerHTML = arr.map((a, i) => a.label
-      ? `<div class="ac-item" data-i="${i}"><b>${icon('map-pin', '', 16)}</b><span class="grow ellipsis">${esc(a.label)}<br><span class="tiny muted">${esc(t('spot.place_city'))}</span></span></div>`
+      ? `<div class="ac-item" data-i="${i}"><b>${icon('map-pin', '', 16)}</b><span class="grow ellipsis">${esc(a.label)}<br><span class="tiny muted">${esc(a.detail || t('spot.place_city'))}</span></span><button type="button" class="btn-icon ac-pv" data-pv="${i}" title="${esc(t('spot.preview_map'))}" aria-label="${esc(t('spot.preview_map'))}">${icon('map', '', 18)}</button></div>`
       : `<div class="ac-item" data-i="${i}"><b>${esc(a.icao)}</b><span class="grow ellipsis">${esc(a.name)}<br><span class="tiny muted">${esc(a.city || '')}${a.iata ? ' · ' + esc(a.iata) : ''}</span></span></div>`).join('');
-    list.querySelectorAll('.ac-item').forEach((n) => n.addEventListener('mousedown', (e) => { e.preventDefault(); pick(items[Number(n.dataset.i)]); }));
+    list.querySelectorAll('.ac-item').forEach((n) => n.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const pv = e.target.closest('[data-pv]');
+      if (pv) { const a = items[Number(pv.dataset.pv)]; previewPlace({ lat: a.lat, lng: a.lng, label: a.label }); return; }   // aperçu sans choisir
+      pick(items[Number(n.dataset.i)]);
+    }));
     wrap.append(list);
   };
   const search = debounce(async () => {
@@ -82,8 +122,9 @@ export function airportInput(input, { onPick } = {}) {
       } catch { /* service de géocodage indisponible : les aéroports suffisent */ }
     }
   }, 180);
-  input.addEventListener('input', () => { delete input.dataset.kind; });   // le texte modifié à la main n'est plus un lieu choisi
+  input.addEventListener('input', () => { delete input.dataset.kind; syncMap(); });   // le texte modifié à la main n'est plus un lieu choisi
   input.addEventListener('input', search);
+  syncMap();
   input.addEventListener('focus', () => {
     if (input.value.trim()) return;
     const recents = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');

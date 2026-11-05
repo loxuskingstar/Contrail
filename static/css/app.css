@@ -839,3 +839,8 @@ body.radar-mode .main { padding: 0; }
 .ach-step.todo { opacity: .55; }
 .ach-step.next { background: color-mix(in srgb, var(--accent) 7%, transparent); margin: 0 -10px; padding: 12px 10px; border-radius: 12px; border-top-color: transparent; }
 .ach-medal.sm { width: 42px; height: 42px; flex: none; font-size: 18px; }
+
+/* Aperçu carte d'un lieu */
+.input-wrap .ac-item .ac-pv { position: static; transform: none; flex: none; width: 36px; height: 36px; color: var(--accent); }
+.input-wrap .ac-map { color: var(--accent); }
+.ac-list { min-width: min(340px, calc(100vw - 48px)); }
