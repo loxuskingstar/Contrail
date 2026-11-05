@@ -1355,5 +1355,14 @@
 "ach.s.wishes.desc": {
 "one": "Un premier souhait réalisé",
 "other": "{n} souhaits réalisés"
+},
+"livery.primer": "Primer (non peint)",
+"livery.primer_chip": "Primer (non peint)",
+"livery.primer_hint": "Avions d'essai pas encore peints. Cette catégorie est comptée à part des livrées spéciales.",
+"badge.primer": "Primer",
+"ach.s.primer.name": "Avions en apprêt",
+"ach.s.primer.desc": {
+"one": "Un avion en primer repéré",
+"other": "{n} avions en primer différents"
 }
 }

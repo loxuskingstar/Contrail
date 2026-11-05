@@ -1355,5 +1355,14 @@
 "ach.s.wishes.desc": {
 "one": "Un primer deseo cumplido",
 "other": "{n} deseos cumplidos"
+},
+"livery.primer": "Primer (sin pintar)",
+"livery.primer_chip": "Primer (sin pintar)",
+"livery.primer_hint": "Aviones de pruebas aún sin pintar. Se cuentan aparte de las libreas especiales.",
+"badge.primer": "Primer",
+"ach.s.primer.name": "Cazador de primer",
+"ach.s.primer.desc": {
+"one": "Un avión en primer avistado",
+"other": "{n} aviones en primer distintos"
 }
 }

@@ -1355,5 +1355,14 @@
 "ach.s.wishes.desc": {
 "one": "A first wish fulfilled",
 "other": "{n} wishes fulfilled"
+},
+"livery.primer": "Primer (unpainted)",
+"livery.primer_chip": "Primer (unpainted)",
+"livery.primer_hint": "Test aircraft not yet painted. Counted separately from special liveries.",
+"badge.primer": "Primer",
+"ach.s.primer.name": "Primer hunter",
+"ach.s.primer.desc": {
+"one": "One primer aircraft spotted",
+"other": "{n} different primer aircraft"
 }
 }

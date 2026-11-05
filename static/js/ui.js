@@ -223,7 +223,7 @@ export function regFlag(country) {
 
 const BADGE_STYLE = {
   first_type: ['accent', 'sparkles'], first_airline: ['violet', 'building-2'], first_airport: ['green', 'map-pin'],
-  seen_again: ['slate', 'history'], most_spotted: ['gold', 'trophy'], special_livery: ['rose', 'palette'],
+  seen_again: ['slate', 'history'], most_spotted: ['gold', 'trophy'], special_livery: ['rose', 'palette'], primer: ['green', 'paint-bucket'],
   flown: ['violet', 'ticket'], military: ['slate', 'shield'], night: ['night', 'moon'], golden_hour: ['gold', 'sunset'],
 };
 
@@ -244,7 +244,7 @@ export function tagChips(tags = []) {
 
 export function spotTile(s, { href = `#/spots/${s.id_spotting}` } = {}) {
   const corner = [s.favorite ? `<span class="badge">${icon('star', '', 11)}</span>` : '', s.atc_audio ? `<span class="badge">${icon('radio', '', 11)}</span>` : '',
-    s.livery_category ? `<span class="badge">${icon('palette', '', 11)}</span>` : ''].join('');
+    s.livery_category ? `<span class="badge">${icon(s.livery_category === 'primer' ? 'paint-bucket' : 'palette', '', 11)}</span>` : ''].join('');
   const sub = `${esc(s.aircraft_icao || s.aircraft || '')}${s.owner ? ' · ' + esc(s.owner) : ''}`;
   if (s.thumb) {
     return `<a class="tile" href="${href}"><img loading="lazy" src="${mediaUrl('thumbs', s.thumb)}" alt="${esc(s.registration)}"><div class="corner">${corner}</div>

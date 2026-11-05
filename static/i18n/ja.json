@@ -1184,5 +1184,14 @@
 "ach.s.wishes.desc": {
 "one": "最初のウィッシュを達成",
 "other": "ウィッシュを {n} 件達成"
+},
+"livery.primer": "プライマー（未塗装）",
+"livery.primer_chip": "プライマー（未塗装）",
+"livery.primer_hint": "まだ塗装されていない試験機。特別塗装とは別に集計されます。",
+"badge.primer": "プライマー",
+"ach.s.primer.name": "プライマー狩り",
+"ach.s.primer.desc": {
+"one": "プライマー機を1機撮影",
+"other": "異なるプライマー機を {n} 機撮影"
 }
 }

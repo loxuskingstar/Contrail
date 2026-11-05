@@ -85,8 +85,8 @@ def suggestions():
             airlines.append({"key": r["key"], "name": r["name"] or r["key"], "n": 0})
     return {
         "airlines": airlines,
-        "liveries": [r["livery"] for r in q("SELECT livery, COUNT(*) n FROM spotting WHERE livery IS NOT NULL AND livery <> '' "
-                                           "GROUP BY livery ORDER BY n DESC")],
+        "liveries": list(dict.fromkeys(["Primer"] + [r["livery"] for r in q(
+            "SELECT livery, COUNT(*) n FROM spotting WHERE livery IS NOT NULL AND livery <> '' GROUP BY livery ORDER BY n DESC")])),
         "airports": [r["airport"] for r in q("SELECT airport, COUNT(*) n FROM spotting WHERE airport IS NOT NULL AND airport <> '' "
                                             "GROUP BY airport ORDER BY n DESC")],
         "events": q("SELECT id, title, start_date, end_date FROM wishes WHERE kind='event' AND status='open' ORDER BY start_date"),

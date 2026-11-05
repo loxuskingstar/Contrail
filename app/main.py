@@ -16,7 +16,7 @@ import asyncio
 from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs, set_profile, _profile
 from .db import init_db
 from .routers import field, fleets, flights, io, misc, share, spots, stats, wishes
-from .services import gamification, sandbox, scheduler
+from .services import collection, gamification, sandbox, scheduler
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -27,6 +27,7 @@ log = logging.getLogger("contrail")
 async def lifespan(app: FastAPI):
     ensure_dirs()
     init_db()
+    collection.recategorize()
     gamification.sync_definitions()
     tasks = scheduler.start()
     log.info("%s %s prêt — authentification %s", APP_NAME, APP_VERSION,

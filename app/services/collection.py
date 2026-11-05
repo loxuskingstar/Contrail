@@ -5,6 +5,11 @@ import re
 
 from ..core import q
 
+# Avion d'essai pas encore peint (apprêt vert ou métal nu) : catégorie à part, jamais comptée comme livrée spéciale
+PRIMER_RX = re.compile(r"\bprimers?\b|appr[eê]ts?\b|non\s?peint|pas\s?(encore\s?)?peint|unpainted|bare\s?metal|"
+                       r"green\s?(aircraft|primer)|zinc\s?chromate|sin\s?pintar|imprimaci[oó]n|"
+                       r"lackiert\s?nicht|grundierung|プライマー|未塗装|下地", re.I)
+
 LIVERY_RULES: list[tuple[str, re.Pattern]] = [
     ("alliance", re.compile(r"star\s?alliance|sky\s?team|one\s?world|alianza|alliance", re.I)),
     ("retro", re.compile(r"r[ée]tro|heritage|vintage|classic|historic|throwback|ancienne|old\s?colou?rs?|"
@@ -19,13 +24,19 @@ LIVERY_RULES: list[tuple[str, re.Pattern]] = [
 ]
 
 
+def is_primer(livery: str | None) -> bool:
+    return bool(livery and PRIMER_RX.search(livery))
+
+
 def is_special_livery(livery: str | None) -> bool:
-    if not livery:
+    if not livery or is_primer(livery):
         return False
     return livery.strip().lower() not in ("", "none", "standard", "classique", "classic livery", "normal", "-")
 
 
 def livery_category(livery: str | None) -> str | None:
+    if is_primer(livery):
+        return "primer"
     if not is_special_livery(livery):
         return None
     for cat, rx in LIVERY_RULES:
@@ -81,7 +92,9 @@ def badges_for(spot: dict, ctx: dict) -> list[dict]:
         b.append({"code": "seen_again", "n": rank})
     if reg in ctx["most_spotted"]:
         b.append({"code": "most_spotted", "n": n})
-    if is_special_livery(spot.get("livery")):
+    if is_primer(spot.get("livery")):
+        b.append({"code": "primer"})
+    elif is_special_livery(spot.get("livery")):
         b.append({"code": "special_livery", "cat": spot.get("livery_category") or "special"})
     if reg in ctx["flown"]:
         b.append({"code": "flown"})
@@ -103,3 +116,15 @@ def crossref_for_spot(reg: str) -> list[dict]:
 
 def crossref_for_flight(reg: str) -> list[dict]:
     return q("SELECT id_spotting, date, airport, thumb FROM spotting WHERE registration = ? ORDER BY date", (reg,))
+
+
+def recategorize() -> int:
+    """Recalcule la catégorie de livrée des spots dont elle a changé (ex. « Primer » ne compte plus comme livrée spéciale)."""
+    from ..core import execute
+    n = 0
+    for r in q("SELECT id_spotting id, livery, livery_category cat FROM spotting WHERE livery IS NOT NULL AND livery <> ''"):
+        new = livery_category(r["livery"])
+        if new != r["cat"]:
+            execute("UPDATE spotting SET livery_category = ? WHERE id_spotting = ?", (new, r["id"]))
+            n += 1
+    return n
