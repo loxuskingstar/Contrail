@@ -357,12 +357,13 @@ def global_search(q_: str = "", q: str = ""):  # noqa: A002
     like = f"%{term}%"
     conn = db()
     spots = conn.execute(
-        "SELECT id_spotting, registration, aircraft_icao, aircraft, owner, airport, date, thumb FROM spotting "
-        "WHERE registration LIKE ? OR owner LIKE ? OR aircraft LIKE ? OR livery LIKE ? OR description LIKE ? "
-        "ORDER BY date DESC LIMIT 8", (like,) * 5).fetchall()
+        "SELECT id_spotting, registration, test_registration, aircraft_icao, aircraft, owner, airport, date, thumb FROM spotting "
+        "WHERE registration LIKE ? OR test_registration LIKE ? OR msn LIKE ? OR owner LIKE ? OR aircraft LIKE ? "
+        "OR livery LIKE ? OR description LIKE ? ORDER BY date DESC LIMIT 8", (like,) * 7).fetchall()
     airframes = conn.execute(
-        "SELECT registration, MAX(aircraft) aircraft, COUNT(*) n FROM spotting WHERE registration LIKE ? "
-        "GROUP BY registration ORDER BY n DESC LIMIT 6", (like,)).fetchall()
+        "SELECT registration, MAX(aircraft) aircraft, COUNT(*) n FROM spotting "
+        "WHERE registration LIKE ? OR test_registration LIKE ? OR msn LIKE ? "
+        "GROUP BY registration ORDER BY n DESC LIMIT 6", (like,) * 3).fetchall()
     flights = conn.execute(
         "SELECT id_flight, date, dep_icao, arr_icao, flight_number, airline FROM flights WHERE flight_number LIKE ? "
         "OR airline LIKE ? OR registration LIKE ? OR dep_icao LIKE ? OR arr_icao LIKE ? ORDER BY date DESC LIMIT 6",

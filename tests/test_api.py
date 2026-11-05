@@ -667,3 +667,13 @@ def test_photo_duplicates_by_perceptual_hash(client):
     from app.core import execute
     execute("UPDATE spotting SET phash = NULL WHERE id_spotting = ?", (sid,))
     assert media.backfill_phash() >= 1 and client.get(f"/api/spots/{sid}").json()["phash"]
+
+
+def test_global_search_finds_test_registration_and_msn(client):
+    _post_spot(client, registration="F-HSRC", aircraft="Airbus A321neo", aircraft_icao="A21N", msn="7777", flight_type="test", test_registration="F-WWSR")
+    for term, field in (("F-WWSR", "test_registration"), ("wwsr", "test_registration"), ("7777", "msn")):
+        r = client.get("/api/search", params={"q": term}).json()
+        assert any(s["registration"] == "F-HSRC" for s in r["spots"]), term
+        assert any(a["registration"] == "F-HSRC" for a in r["airframes"]), term
+    hit = next(s for s in client.get("/api/search", params={"q": "F-WWSR"}).json()["spots"] if s["registration"] == "F-HSRC")
+    assert hit["test_registration"] == "F-WWSR"
