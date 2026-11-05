@@ -211,7 +211,7 @@ def import_commit(bg: BackgroundTasks, token: str = Form(...), kind: str = Form(
                     "military": get(row, "military").lower() in ("1", "true", "yes", "oui", "x", "sí", "si"),
                 }
                 out = prepare(data)
-                if skip_duplicates and find_duplicates(out["registration"], out.get("airport"), out.get("date")):
+                if skip_duplicates and find_duplicates(out["registration"], out.get("airport"), out.get("date"), place=out.get("place")):
                     skipped += 1
                     continue
                 out["created_at"] = out["updated_at"] = now_iso()

@@ -1413,5 +1413,12 @@
 "backup.remote_fail": "Destination injoignable : {err}",
 "backup.remote_last_ok": "Dernière copie réussie : {date}",
 "backup.remote_last_fail": "Dernière copie en échec : {date}",
-"common.optional": "facultatif"
+"common.optional": "facultatif",
+"spot.no_reg": "Immat. inconnue",
+"spot.unknown_reg": "Immatriculation inconnue",
+"spot.unknown_reg_hint": "Avion non identifié : à compléter plus tard en modifiant le spot.",
+"spot.airport_or_place": "Aéroport ou lieu",
+"spot.place_ph": "LFBO, Toulouse… ou une ville, une plage, un meeting",
+"spot.place_city": "Ville / lieu",
+"spot.place": "Lieu"
 }

@@ -3,7 +3,7 @@ import { api, mediaUrl } from '../api.js';
 import { store, navigate } from '../app.js';
 import { t, fmtDate, fmtNum, countryName, flag } from '../i18n.js';
 import { icon } from '../lib/icons.js';
-import { esc, badgeHtml, tagChips, lightbox, menu, confirmDialog, toast, errorToast } from '../ui.js';
+import { esc, regText, badgeHtml, tagChips, lightbox, menu, confirmDialog, toast, errorToast } from '../ui.js';
 
 const WX_ICON = { clear: 'sun', partly_cloudy: 'cloud-sun', cloudy: 'cloud', overcast: 'cloud', rain: 'cloud-rain', drizzle: 'cloud-rain', snow: 'cloud-snow', thunderstorm: 'cloud-lightning', fog: 'cloud-fog', mist: 'cloud-fog', haze: 'cloud-fog' };
 
@@ -33,13 +33,13 @@ export async function render(root, params) {
   const settings = [s.focal && `${s.focal} mm`, s.aperture && `f/${s.aperture}`, s.shutter && `${s.shutter} s`, s.iso && `ISO ${s.iso}`].filter(Boolean).join(' · ');
 
   root.innerHTML = `
-    ${s.image ? `<div class="detail-hero"><img src="${mediaUrl('images', s.image)}" alt="${esc(s.registration)}" data-zoom>
+    ${s.image ? `<div class="detail-hero"><img src="${mediaUrl('images', s.image)}" alt="${esc(regText(s.registration))}" data-zoom>
       <div class="nav-btns">${s.prev_id ? `<a class="btn-icon" href="#/spots/${s.prev_id}" title="${esc(t('spot.newer'))}">${icon('chevron-left')}</a>` : ''}${s.next_id ? `<a class="btn-icon" href="#/spots/${s.next_id}" title="${esc(t('spot.older'))}">${icon('chevron-right')}</a>` : ''}</div></div>` : ''}
     <header class="page-head" style="${s.image ? 'padding-top:20px' : ''}">
       <div class="grow" style="min-width:0">
-        <div class="row" style="gap:12px"><h1 class="reg-title">${esc(s.registration)}</h1><span class="flag" style="font-size:30px" title="${esc(countryName(s.country))}">${flag(s.country)}</span></div>
+        <div class="row" style="gap:12px"><h1 class="reg-title">${esc(regText(s.registration))}</h1><span class="flag" style="font-size:30px" title="${esc(countryName(s.country))}">${flag(s.country)}</span></div>
         <div class="sub" style="font-size:17px;color:var(--text-2)">${esc(s.aircraft || s.aircraft_icao || t('spot.unknown_aircraft'))}${s.owner ? ` · <b>${esc(s.owner)}</b>` : ''}</div>
-        <div class="sub">${icon('map-pin', '', 15)} ${esc(ap ? `${ap.name} (${ap.icao})` : s.airport || '—')} · ${icon('calendar', '', 15)} ${fmtDate(s.date)}</div>
+        <div class="sub">${icon('map-pin', '', 15)} ${esc(ap ? `${ap.name} (${ap.icao})` : s.airport || s.place || '—')} · ${icon('calendar', '', 15)} ${fmtDate(s.date)}</div>
       </div>
       <div class="actions">
         <button class="btn-icon glassy" data-fav title="${esc(t('spot.favorite'))}" style="${s.favorite ? 'color:#f59e0b' : ''}">${icon('star')}</button>
@@ -127,7 +127,7 @@ export async function render(root, params) {
     { icon: 'image', label: t('share_img.title'), onClick: () => navigate(`#/spots/${s.id_spotting}/share`) },
     { icon: 'link', label: t('share.this_spot'), onClick: async () => (await import('./shares.js')).createShareFlow({ kind: 'spot', target: String(s.id_spotting) }) },
     store.mod('watchlist') && { icon: 'eye', label: t('watch.add'), onClick: async () => { try { await api('/api/watchlist', { method: 'POST', body: { registration: s.registration } }); toast(esc(t('watch.added')), { type: 'success' }); } catch (err) { errorToast(err); } } },
-    { icon: 'copy', label: t('spot.duplicate'), onClick: () => navigate(`#/spots/new?airport=${encodeURIComponent(s.airport || '')}`) },
+    { icon: 'copy', label: t('spot.duplicate'), onClick: () => navigate(`#/spots/new?airport=${encodeURIComponent(s.airport || s.place || '')}`) },
     s.image && { icon: 'download', label: t('spot.download_photo'), onClick: () => { const a = document.createElement('a'); a.href = mediaUrl('images', s.image); a.download = `${s.registration}.webp`; a.click(); } },
     '-',
     { icon: 'trash-2', label: t('common.delete'), danger: true, onClick: async () => {

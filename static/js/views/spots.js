@@ -6,7 +6,7 @@ import { icon } from '../lib/icons.js';
 import { esc, sheet, spotRow, spotTile, emptyState, confirmDialog, toast, errorToast, enableSwipe, menu, debounce, $ } from '../ui.js';
 
 const PAGE = 60;
-const FILTER_KEYS = ['search', 'tag', 'airport', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'sort'];
+const FILTER_KEYS = ['search', 'tag', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'sort'];
 
 export async function render(root, _p, query) {
   const filters = Object.fromEntries(FILTER_KEYS.filter((k) => query[k] !== undefined && query[k] !== '').map((k) => [k, query[k]]));
@@ -326,6 +326,7 @@ async function openFilters(filters, onApply) {
       ${tags.length ? `<div class="field"><span>${esc(t('spot.tags'))}</span><div class="chips">${tags.map((tg) => `<button class="chip ${String(f.tag) === String(tg.id_tag) ? 'on' : ''}" data-tag="${tg.id_tag}"><span class="sw" style="background:${esc(tg.color)}"></span>${esc(tg.name)}</button>`).join('')}</div></div>` : ''}
       <div class="field-row">
         <label class="field"><span>${esc(t('spot.airport'))}</span><select data-k="airport">${opt(facets.airports, f.airport)}</select></label>
+        ${(facets.places || []).length ? `<label class="field"><span>${esc(t('spot.place'))}</span><select data-k="place">${opt(facets.places, f.place)}</select></label>` : ''}
         <label class="field"><span>${esc(t('spot.type'))}</span><select data-k="type">${opt(facets.types, f.type)}</select></label>
       </div>
       <div class="field-row">

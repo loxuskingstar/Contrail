@@ -28,7 +28,7 @@ def _period(year: str) -> tuple[str, list]:
 def stats(year: str = ""):
     w, p = _period(year)
     totals = q1(
-        f"SELECT COUNT(*) spots, COUNT(DISTINCT registration) registrations, "
+        f"SELECT COUNT(*) spots, COUNT(DISTINCT known(registration)) registrations, "
         f"COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
         f"COUNT(DISTINCT opg(airline_icao, owner)) airlines, COUNT(DISTINCT NULLIF(airport,'')) airports, "
         f"COUNT(DISTINCT country) countries, SUM(CASE WHEN image IS NOT NULL THEN 1 ELSE 0 END) photos, "
@@ -50,13 +50,13 @@ def stats(year: str = ""):
     for a in top_airports:
         info = geo.airport(a["k"])
         a["name"] = info["name"] if info else None
-    gear = q(f"SELECT camera, lens, COUNT(*) n, COUNT(DISTINCT registration) regs FROM spotting WHERE {w} "
+    gear = q(f"SELECT camera, lens, COUNT(*) n, COUNT(DISTINCT known(registration)) regs FROM spotting WHERE {w} "
              f"AND camera IS NOT NULL GROUP BY camera, lens ORDER BY n DESC LIMIT 10", p)
     focal = q(f"SELECT CASE WHEN focal < 35 THEN '<35' WHEN focal < 100 THEN '35-99' WHEN focal < 200 THEN '100-199' "
               f"WHEN focal < 300 THEN '200-299' WHEN focal < 400 THEN '300-399' WHEN focal < 600 THEN '400-599' "
               f"ELSE '600+' END k, COUNT(*) n, MIN(focal) mn FROM spotting WHERE {w} AND focal IS NOT NULL "
               f"GROUP BY k ORDER BY mn", p)
-    by_month = q(f"SELECT substr(date,1,7) k, COUNT(*) n, COUNT(DISTINCT registration) regs FROM spotting "
+    by_month = q(f"SELECT substr(date,1,7) k, COUNT(*) n, COUNT(DISTINCT known(registration)) regs FROM spotting "
                  f"WHERE {w} AND date IS NOT NULL GROUP BY k ORDER BY k", p)
     by_year = q("SELECT substr(date,1,4) k, COUNT(*) n FROM spotting WHERE date IS NOT NULL GROUP BY k ORDER BY k")
     by_hour = q(f"SELECT CAST(substr(date,12,2) AS INTEGER) k, COUNT(*) n FROM spotting WHERE {w} "
@@ -143,12 +143,12 @@ def dashboard():
     from datetime import date
 
     today = date.today()
-    totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT registration) regs, "
+    totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT known(registration)) regs, "
                 "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, COUNT(DISTINCT opg(airline_icao, owner)) airlines, "
                 "COUNT(DISTINCT NULLIF(airport,'')) airports, COUNT(DISTINCT country) countries FROM spotting")
     month = q1("SELECT COUNT(*) n FROM spotting WHERE substr(date,1,7) = ?", (today.strftime("%Y-%m"),))["n"]
     year_totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
-                     "COUNT(DISTINCT registration) regs, COUNT(DISTINCT substr(date,1,10)) days FROM spotting WHERE substr(date,1,4) = ?",
+                     "COUNT(DISTINCT known(registration)) regs, COUNT(DISTINCT substr(date,1,10)) days FROM spotting WHERE substr(date,1,4) = ?",
                      (str(today.year),))
     last_year = q1("SELECT COUNT(*) spots FROM spotting WHERE substr(date,1,4) = ? AND substr(date,6,5) <= ?",
                    (str(today.year - 1), today.strftime("%m-%d")))["spots"]
@@ -205,7 +205,7 @@ def airframe(reg: str):
     events = []
     for s in spots:
         a = geo.airport(s["airport"])
-        events.append({"kind": "spot", "date": s["date"], "id": s["id_spotting"], "airport": s["airport"],
+        events.append({"kind": "spot", "date": s["date"], "id": s["id_spotting"], "airport": s["airport"], "place": s.get("place"),
                        "lat": s["lat"] if s["lat"] is not None else (a or {}).get("lat"),
                        "lng": s["lng"] if s["lng"] is not None else (a or {}).get("lng"),
                        "thumb": s["thumb"], "livery": s["livery"], "owner": s["owner"],

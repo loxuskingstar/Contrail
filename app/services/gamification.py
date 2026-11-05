@@ -150,7 +150,7 @@ def _km(a: tuple[float, float], b: tuple[float, float]) -> float:
 def metrics() -> dict[str, float]:
     m: dict[str, float] = {}
     r = q1(
-        "SELECT COUNT(*) spots, COUNT(DISTINCT registration) regs, "
+        "SELECT COUNT(*) spots, COUNT(DISTINCT known(registration)) regs, "
         "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
         "COUNT(DISTINCT CASE WHEN military = 0 THEN opg(airline_icao, owner) END) airlines, "
         "COUNT(DISTINCT NULLIF(airport,'')) airports, COUNT(DISTINCT country) countries, "
@@ -200,7 +200,7 @@ def metrics() -> dict[str, float]:
     m["oddities"] = sum(cls_count.get(k, 0) for k in ("glider", "balloon", "drone"))
 
     # Alphabet : dernières lettres d'immatriculation différentes (A à Z)
-    m["alphabet"] = len({(r["registration"] or "")[-1:] for r in q("SELECT DISTINCT registration FROM spotting")} &
+    m["alphabet"] = len({(r["registration"] or "")[-1:] for r in q("SELECT DISTINCT registration FROM spotting WHERE known(registration) IS NOT NULL")} &
                         set("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
 
     # Aéroports : pays et étendue géographique
@@ -248,7 +248,7 @@ def metrics() -> dict[str, float]:
     fa = {r["c"] for r in q("SELECT dep_icao c FROM flights UNION SELECT arr_icao FROM flights")}
     m["flight_airports"] = len(fa)
     m["flight_countries"] = len({(geo.airport(c) or {}).get("country") for c in fa} - {None})
-    m["flown_spotted"] = _n("SELECT COUNT(DISTINCT s.registration) FROM spotting s JOIN flights f ON f.registration = s.registration")
+    m["flown_spotted"] = _n("SELECT COUNT(DISTINCT known(s.registration)) FROM spotting s JOIN flights f ON f.registration = s.registration")
     return m
 
 

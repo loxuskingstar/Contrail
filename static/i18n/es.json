@@ -1413,5 +1413,12 @@
 "backup.remote_fail": "Destino inaccesible: {err}",
 "backup.remote_last_ok": "Última copia correcta: {date}",
 "backup.remote_last_fail": "Última copia fallida: {date}",
-"common.optional": "opcional"
+"common.optional": "opcional",
+"spot.no_reg": "Matrícula desconocida",
+"spot.unknown_reg": "Matrícula desconocida",
+"spot.unknown_reg_hint": "Avión no identificado: complételo más tarde editando el avistamiento.",
+"spot.airport_or_place": "Aeropuerto o lugar",
+"spot.place_ph": "LEMD, Madrid… o una ciudad, una playa, un festival aéreo",
+"spot.place_city": "Ciudad / lugar",
+"spot.place": "Lugar"
 }

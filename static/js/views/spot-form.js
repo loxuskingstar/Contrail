@@ -21,6 +21,8 @@ export async function render(root, params, query) {
     registration: query.reg || '', airport: query.airport || store.settings.default_airport || '', date: nowLocal(),
     icao24: query.icao24 || '', tags: [], military: 0, favorite: 0, rating: null,
   };
+  const isUnknown = typeof s.registration === 'string' && s.registration.startsWith('SANS-IMMAT-');
+  if (isUnknown) s.registration = '';
   const [tags, locations] = await Promise.all([
     store.tags ? Promise.resolve(store.tags) : store.refreshTags().catch(() => []),
     store.mod('locations') ? api('/api/locations').catch(() => []) : Promise.resolve([]),
@@ -43,6 +45,7 @@ export async function render(root, params, query) {
         <label class="field"><span>${esc(t('spot.registration'))}</span>
           <div class="input-wrap"><input class="input big" name="registration" value="${esc(s.registration)}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="F-HBXA" required>
           <button type="button" class="btn-icon" data-lookup title="${esc(t('spot.lookup'))}">${icon('wand-sparkles')}</button></div></label>
+        <label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" name="unknown_registration" ${isUnknown ? 'checked' : ''}> <span>${esc(t('spot.unknown_reg'))}</span> <span class="tiny muted">${esc(t('spot.unknown_reg_hint'))}</span></label>
         <div data-lookup-res></div>
         <div data-dup></div>
         <div data-photodup></div>
@@ -62,7 +65,7 @@ export async function render(root, params, query) {
 
       <div class="card stack">
         <div class="field-row">
-          <label class="field"><span>${esc(t('spot.airport'))}</span><div class="input-wrap"><input name="airport" value="${esc(s.airport)}" placeholder="LFBO / TLS / Toulouse" autocomplete="off"></div></label>
+          <label class="field"><span>${esc(t('spot.airport_or_place'))}</span><div class="input-wrap"><input name="airport" value="${esc(s.airport || s.place)}" ${!s.airport && s.place ? 'data-kind="place"' : ''} placeholder="${esc(t('spot.place_ph'))}" autocomplete="off"></div></label>
           <label class="field"><span>${esc(t('spot.date'))}</span><input type="datetime-local" name="date" value="${esc((s.date || '').slice(0, 16))}"></label>
         </div>
         <div class="field"><span>${esc(t('spot.tags'))}</span><div data-tags></div></div>
@@ -135,7 +138,19 @@ export async function render(root, params, query) {
   let rating = s.rating || 0;
   root.querySelector('[data-stars]').dataset.value = rating;
   bindStars(root, (v) => (rating = v));
-  airportInput(F('airport'), { onPick: () => checkDup() });
+  // Ville choisie dans les suggestions : ses coordonnées alimentent la carte et le fuseau horaire
+  let placeLL = null;
+  airportInput(F('airport'), { onPick: (a) => {
+    if (a.label && a.lat != null) { F('lat').value = a.lat; F('lng').value = a.lng; placeLL = [String(a.lat), String(a.lng)]; }
+    else if (placeLL && F('lat').value === placeLL[0]) { F('lat').value = ''; F('lng').value = ''; placeLL = null; }
+    checkDup();
+  } });
+  F('airport').addEventListener('input', () => { if (placeLL && F('lat').value === placeLL[0]) { F('lat').value = ''; F('lng').value = ''; placeLL = null; } });
+  // Immatriculation inconnue : on désactive le champ (l'avion pourra être identifié plus tard en modifiant le spot)
+  const unk = F('unknown_registration');
+  const syncUnknown = () => { F('registration').disabled = unk.checked; F('registration').required = !unk.checked; if (unk.checked) F('registration').value = ''; };
+  unk.addEventListener('change', syncUnknown);
+  syncUnknown();
   F('date').addEventListener('input', () => (dateTouched = true));
 
   // ------------------------------------------------------------ photo
@@ -300,9 +315,14 @@ export async function render(root, params, query) {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const reg = F('registration').value.trim();
-    if (!reg) { F('registration').focus(); toast(esc(t('err.registration_required')), { type: 'error' }); return; }
+    if (!reg && !unk.checked) { F('registration').focus(); toast(esc(t('err.registration_required')), { type: 'error' }); return; }
     const data = {};
     for (const k of ['registration', 'aircraft', 'aircraft_icao', 'owner', 'airline_icao', 'msn', 'manufacturer', 'airport', 'date', 'livery', 'flight_type', 'description', 'camera', 'lens', 'focal', 'aperture', 'iso', 'shutter', 'icao24', 'lat', 'lng', 'test_registration']) data[k] = F(k).value.trim();
+    data.unknown_registration = unk.checked;
+    // Lieu choisi dans les suggestions : on l'enregistre comme lieu ; un texte libre est classé par le serveur
+    const isPlace = F('airport').dataset.kind === 'place';
+    data.place = isPlace ? data.airport : '';
+    if (isPlace) data.airport = '';
     data.location_id = F('location_id')?.value || null;
     data.military = F('military').checked;
     data.favorite = F('favorite').checked;
@@ -311,7 +331,7 @@ export async function render(root, params, query) {
     if (removeImage) data.remove_image = true;
     if (removeAudio) data.remove_audio = true;
     if (!editing) data.draft_uuid = uuid();
-    rememberAirport(data.airport.toUpperCase());
+    if (data.airport) rememberAirport(data.airport.toUpperCase());
     const btn = form.querySelector('[type=submit]');
     btn.disabled = true;
 

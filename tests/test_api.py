@@ -680,3 +680,74 @@ def test_global_search_finds_test_registration_and_msn(client):
         assert any(a["registration"] == "F-HSRC" for a in r["airframes"]), term
     hit = next(s for s in client.get("/api/search", params={"q": "F-WWSR"}).json()["spots"] if s["registration"] == "F-HSRC")
     assert hit["test_registration"] == "F-WWSR"
+
+
+def test_free_place_instead_of_airport(client):
+    # texte libre dans le champ « aéroport » : devient un lieu, avec le fuseau de l'aéroport le plus proche des coordonnées
+    s = _post_spot(client, registration="F-PLG1", airport="Plage du Touquet", lat=50.52, lng=1.59, date="2026-06-10T10:00")
+    assert s["airport"] is None and s["place"] == "Plage du Touquet"
+    assert s["date_utc"] == "2026-06-10T08:00:00Z"                          # Europe/Paris, heure d'été
+    # ville choisie dans les suggestions : lieu + coordonnées, aéroport vide
+    s2 = _post_spot(client, registration="F-PLG2", airport="", place="Biscarrosse, Nouvelle-Aquitaine, France", lat=44.39, lng=-1.17)
+    assert s2["airport"] is None and s2["place"].startswith("Biscarrosse") and s2["lat"] == 44.39
+    # un aéroport reconnu reste un aéroport, et efface un éventuel lieu
+    s3 = _post_spot(client, registration="F-PLG3", airport="lfbo")
+    assert s3["airport"] == "LFBO" and s3["place"] is None
+    upd = client.put(f"/api/spots/{s2['id_spotting']}", data={"data": json.dumps({"airport": "LFBO", "place": ""})}).json()
+    assert (upd.get("spot") or upd)["airport"] == "LFBO" and (upd.get("spot") or upd)["place"] is None
+    # le réglage « aéroport par défaut » ne s'applique pas quand un lieu est donné
+    client.put("/api/settings", json={"default_airport": "LFPG"})
+    s4 = _post_spot(client, registration="F-PLG4", place="Meeting de La Baule", lat=47.28, lng=-2.39)
+    s5 = _post_spot(client, registration="F-PLG5")
+    client.put("/api/settings", json={"default_airport": ""})
+    assert s4["airport"] is None and s4["place"] == "Meeting de La Baule" and s5["airport"] == "LFPG"
+    # recherche, filtre, carte, doublon
+    assert s["id_spotting"] in {x["id_spotting"] for x in client.get("/api/spots", params={"search": "Touquet"}).json()["items"]}
+    assert s["id_spotting"] in {x["id_spotting"] for x in client.get("/api/spots", params={"place": "Plage du Touquet"}).json()["items"]}
+    assert "Plage du Touquet" in client.get("/api/spots/facets").json()["places"]
+    assert any(p["name"] == "Plage du Touquet" for p in client.get("/api/spots/map").json()["places"])
+    assert any(x["registration"] == "F-PLG1" for x in client.get("/api/search", params={"q": "Touquet"}).json()["spots"])
+    dup = client.post("/api/spots/check-duplicate", json={"registration": "F-PLG1", "airport": "Plage du Touquet", "date": "2026-06-10T15:00"}).json()
+    assert len(dup["duplicates"]) == 1
+
+
+def test_places_search_uses_geocoder(client, monkeypatch):
+    import httpx
+    from app.services import aircraft
+
+    def handler(req):
+        assert req.url.params["name"] == "Biscarrosse" and req.url.params["language"] == "fr"
+        return httpx.Response(200, json={"results": [{"name": "Biscarrosse", "latitude": 44.39, "longitude": -1.17, "country_code": "FR",
+                                                       "country": "France", "admin1": "Nouvelle-Aquitaine", "timezone": "Europe/Paris"}]})
+    monkeypatch.setattr(aircraft, "client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+    r = client.get("/api/places/search", params={"q": "Biscarrosse", "lang": "fr"}).json()
+    assert r == [{"label": "Biscarrosse, Nouvelle-Aquitaine, France", "name": "Biscarrosse", "lat": 44.39, "lng": -1.17, "country": "FR", "tz": "Europe/Paris"}]
+    monkeypatch.undo()
+    assert client.get("/api/places/search", params={"q": "Biscarrosse"}).json() == []      # hors ligne : pas d'erreur, aéroports seulement
+
+
+def test_spot_without_registration(client):
+    base = client.get("/api/stats").json()["totals"]["registrations"]
+    r = client.post("/api/spots", data={"data": json.dumps({"aircraft": "Dassault Rafale", "aircraft_icao": "RFAL", "airport": "Plage du Touquet",
+                                                            "date": "2026-06-11T10:00"})}, files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")})
+    assert r.status_code == 422                                              # jamais par accident : il faut le demander explicitement
+    ids = []
+    for _ in range(2):
+        s = client.post("/api/spots", data={"data": json.dumps({"unknown_registration": True, "aircraft": "Dassault Rafale", "aircraft_icao": "RFAL",
+                                                                "place": "Meeting de La Baule", "date": "2026-06-11T10:00"})},
+                        files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")}).json()["spot"]
+        assert s["registration"].startswith("SANS-IMMAT-") and s["country"] is None
+        ids.append(s["id_spotting"])
+    assert client.get("/api/stats").json()["totals"]["registrations"] == base          # pas des « avions identifiés »
+    assert client.get("/api/stats").json()["totals"]["spots"] >= 2
+    regs_ = {client.get(f"/api/spots/{i}").json()["registration"] for i in ids}
+    assert len(regs_) == 2                                                   # deux spots anonymes ne sont jamais fusionnés
+    assert client.get(f"/api/airframe/{sorted(regs_)[0]}").json()["spots"] == 1
+    # identifier l'avion plus tard : il prend sa vraie immatriculation et compte comme avion
+    up = client.put(f"/api/spots/{ids[0]}", data={"data": json.dumps({"registration": "F-RAFA"})}).json()
+    assert (up.get("spot") or up)["registration"] == "F-RAFA" and (up.get("spot") or up)["country"] == "FR"
+    assert client.get("/api/stats").json()["totals"]["registrations"] == base + 1
+    # vider l'immatriculation d'un avion identifié sans le demander est refusé ; avec la case, on repasse en « inconnu »
+    assert client.put(f"/api/spots/{ids[0]}", data={"data": json.dumps({"registration": ""})}).status_code == 422
+    up = client.put(f"/api/spots/{ids[0]}", data={"data": json.dumps({"registration": "", "unknown_registration": True})}).json()
+    assert (up.get("spot") or up)["registration"].startswith("SANS-IMMAT-")

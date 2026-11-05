@@ -4,7 +4,7 @@ import { store } from '../app.js';
 import { t, fmtNum, fmtDate, fmtMonth, fmtRelative } from '../i18n.js';
 import { icon } from '../lib/icons.js';
 import { achName } from '../lib/ach.js';
-import { esc, sheet, spotTile, hbars, vbars, emptyState, toast } from '../ui.js';
+import { esc, regText, sheet, spotTile, hbars, vbars, emptyState, toast } from '../ui.js';
 
 export const WIDGETS = ['hero', 'quick', 'goals', 'recent', 'on_this_day', 'month_chart', 'top_types', 'achievements', 'watchlist', 'flights', 'map', 'sun'];
 
@@ -61,8 +61,8 @@ function renderWidget(w, d) {
         return `<div class="grid kpis">${k.map(([ic, v, l]) => `<div class="card kpi">${icon(ic)}<div class="v">${fmtNum(v)}</div><div class="l">${esc(t(l))}</div></div>`).join('')}</div>`;
       }
       return `<a class="hero" href="#/spots/${h.id_spotting}"><img src="${mediaUrl('images', h.image)}" alt="">
-        <div class="in"><div class="small" style="opacity:.85">${esc(h.airport || '')} · ${fmtDate(h.date, { time: false })}</div>
-        <h2 class="mono">${esc(h.registration)}</h2><div style="opacity:.9">${esc(h.aircraft || '')}${h.owner ? ' · ' + esc(h.owner) : ''}</div>${strip}</div></a>`;
+        <div class="in"><div class="small" style="opacity:.85">${esc(h.airport || h.place || '')} · ${fmtDate(h.date, { time: false })}</div>
+        <h2 class="mono">${esc(regText(h.registration))}</h2><div style="opacity:.9">${esc(h.aircraft || '')}${h.owner ? ' · ' + esc(h.owner) : ''}</div>${strip}</div></a>`;
     }
     case 'quick': {
       const items = [

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, UploadFile
@@ -22,7 +23,7 @@ FLIGHT_TYPES = ["commercial", "cargo", "test", "delivery", "ferry", "military", 
                 "helicopter", "medical", "training", "airshow", "government", "other"]
 
 EDITABLE = ("registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner", "airline_icao",
-            "livery", "military", "flight_type", "test_registration", "date", "airport", "location_id", "lat", "lng",
+            "livery", "military", "flight_type", "test_registration", "date", "airport", "place", "location_id", "lat", "lng",
             "description", "icao24", "favorite", "rating", "camera", "lens", "focal", "aperture", "iso",
             "shutter")
 
@@ -44,9 +45,9 @@ def build_filters(f: dict) -> tuple[str, list]:
         like = f"%{f['search'].strip()}%"
         where.append("(s.registration LIKE ? OR s.aircraft LIKE ? OR s.aircraft_icao LIKE ? OR s.owner LIKE ? "
                      "OR s.airport LIKE ? OR s.livery LIKE ? OR s.description LIKE ? OR s.msn LIKE ? OR s.date LIKE ? "
-                     "OR s.test_registration LIKE ?)")
-        params += [like] * 10
-    for key, col in (("registration", "s.registration"), ("airport", "s.airport"), ("country", "s.country"),
+                     "OR s.test_registration LIKE ? OR s.place LIKE ?)")
+        params += [like] * 11
+    for key, col in (("registration", "s.registration"), ("airport", "s.airport"), ("place", "s.place"), ("country", "s.country"),
                      ("flight_type", "s.flight_type"), ("camera", "s.camera"), ("lens", "s.lens"),
                      ("livery_category", "s.livery_category")):
         if f.get(key):
@@ -120,12 +121,12 @@ def decorate(rows: list[dict], ctx: dict | None = None) -> list[dict]:
 LIST_COLS = ("s.id_spotting, s.registration, s.aircraft, s.aircraft_icao, s.owner, s.airline_icao, s.livery, "
              "s.livery_category, s.military, s.flight_type, s.date, s.airport, s.thumb, s.image, s.image_w, "
              "s.image_h, s.atc_audio, s.country, s.favorite, s.rating, s.sun_elevation, s.msn, s.camera, s.lens, "
-             "s.description, s.lat, s.lng, s.location_id")
+             "s.description, s.lat, s.lng, s.location_id, s.place, s.test_registration")
 
 
 @router.get("")
 def list_spots(
-    search: str = "", tag: int | None = None, airport: str = "", type: str = "", airline: str = "",
+    search: str = "", tag: int | None = None, airport: str = "", place: str = "", type: str = "", airline: str = "",
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
@@ -142,7 +143,7 @@ def list_spots(
 
 @router.get("/map")
 def spots_map(
-    search: str = "", tag: int | None = None, airport: str = "", type: str = "", airline: str = "",
+    search: str = "", tag: int | None = None, airport: str = "", place: str = "", type: str = "", airline: str = "",
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
@@ -151,7 +152,7 @@ def spots_map(
     """Spots regroupés par lieu (point de vue, coordonnées GPS ou aéroport), puis par appareil."""
     f = dict(locals())
     where, params = build_filters(f)
-    rows = q(f"SELECT s.id_spotting, s.registration, s.aircraft_icao, s.aircraft, s.owner, s.thumb, s.airport, "
+    rows = q(f"SELECT s.id_spotting, s.registration, s.aircraft_icao, s.aircraft, s.owner, s.thumb, s.airport, s.place, "
              f"s.lat, s.lng, s.location_id, s.date, s.livery_category, s.military, s.favorite, "
              f"l.name AS loc_name, l.lat AS loc_lat, l.lng AS loc_lng "
              f"FROM spotting s LEFT JOIN spot_locations l ON l.id_location = s.location_id "
@@ -163,7 +164,7 @@ def spots_map(
             lat, lng, kind, name = r["loc_lat"], r["loc_lng"], "location", r["loc_name"]
             key = ("L", r["location_id"])
         elif r["lat"] is not None and r["lng"] is not None:
-            lat, lng, kind, name = r["lat"], r["lng"], "gps", None
+            lat, lng, kind, name = r["lat"], r["lng"], "gps", r["place"]
             key = ("G", round(r["lat"], 3), round(r["lng"], 3))
         elif ap:
             lat, lng, kind, name = ap["lat"], ap["lng"], "airport", ap["name"]
@@ -217,6 +218,7 @@ def facets():
         return [r["v"] for r in q(sql) if r["v"]]
     return {
         "airports": col("SELECT airport v, COUNT(*) n FROM spotting GROUP BY airport ORDER BY n DESC"),
+        "places": col("SELECT place v, COUNT(*) n FROM spotting WHERE place IS NOT NULL GROUP BY place ORDER BY n DESC"),
         "types": col("SELECT COALESCE(aircraft_icao, aircraft) v, COUNT(*) n FROM spotting GROUP BY v ORDER BY n DESC"),
         "airlines": q("SELECT opg(airline_icao, owner) v, MAX(owner) name, COUNT(*) n FROM spotting "
                       "WHERE opg(airline_icao, owner) IS NOT NULL GROUP BY v ORDER BY n DESC"),
@@ -231,21 +233,25 @@ def facets():
 class DupCheck(BaseModel):
     registration: str
     airport: str | None = None
+    place: str | None = None
     date: str | None = None
     exclude_id: int | None = None
 
 
-def find_duplicates(reg: str, airport: str | None, date: str | None, exclude_id: int | None = None) -> list[dict]:
-    if not reg or not airport or not date:
-        return []
+def find_duplicates(reg: str, airport: str | None, date: str | None, exclude_id: int | None = None,
+                    place: str | None = None) -> list[dict]:
+    if not reg or regs.is_unknown(regs.normalize(reg)) or not (airport or place) or not date:
+        return []                     # sans immatriculation, deux spots ne sont jamais « le même avion »
     return q("SELECT id_spotting, registration, airport, date, thumb FROM spotting WHERE registration = ? "
-             "AND airport = ? AND substr(date,1,10) = ? AND id_spotting <> ?",
-             (regs.normalize(reg), geo.resolve_icao(airport), date[:10], exclude_id or -1))
+             "AND ((? IS NOT NULL AND airport = ?) OR (? IS NOT NULL AND place = ?)) AND substr(date,1,10) = ? AND id_spotting <> ?",
+             (regs.normalize(reg), airport and geo.resolve_icao(airport), airport and geo.resolve_icao(airport), place, place,
+              date[:10], exclude_id or -1))
 
 
 @router.post("/check-duplicate")
 def check_duplicate(body: DupCheck):
-    return {"duplicates": find_duplicates(body.registration, body.airport, body.date, body.exclude_id)}
+    ap, pl = _split_place(body.airport, body.place)
+    return {"duplicates": find_duplicates(body.registration, ap, body.date, body.exclude_id, place=pl)}
 
 
 PHOTO_DUP_MAX = 6      # distance de Hamming (sur 64 bits) : au-delà, ce sont deux photos différentes du même avion
@@ -318,6 +324,19 @@ def _to_float(v):
         return None
 
 
+def _split_place(airport_raw: str | None, place_raw: str | None) -> tuple[str | None, str | None]:
+    """Le champ « aéroport » accepte aussi un lieu libre (plage, meeting, ville) : un aéroport reconnu reste un aéroport,
+    tout autre texte devient un lieu. Renvoie (code OACI, lieu)."""
+    a = geo.airport(airport_raw) if airport_raw else None
+    if a:
+        return a["icao"], None
+    if airport_raw and not place_raw:
+        if re.fullmatch(r"[A-Z]{4}", airport_raw):        # code OACI en majuscules mais absent de la base : conservé tel quel
+            return airport_raw, None
+        return None, airport_raw[:120]
+    return None, (place_raw or "")[:120] or None
+
+
 def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
     out = {k: data.get(k) for k in EDITABLE if k in data}
     for k, v in list(out.items()):
@@ -327,11 +346,15 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
     if "registration" in out or not existing:
         reg = regs.normalize(merged.get("registration"))
         if not reg:
-            raise HTTPException(422, "registration_required")
+            if not data.get("unknown_registration"):
+                raise HTTPException(422, "registration_required")
+            # Sans immatriculation lisible : on garde celle de substitution déjà attribuée, sinon on en crée une
+            old = (existing or {}).get("registration")
+            reg = old if regs.is_unknown(old) else regs.new_unknown()
         out["registration"] = reg
         out["country"] = regs.country_of(reg)
-    if "airport" in out:
-        out["airport"] = geo.resolve_icao(out["airport"]) if out["airport"] else None
+    if "airport" in out or "place" in out:
+        out["airport"], out["place"] = _split_place(out.get("airport"), out.get("place"))
     if "aircraft_icao" in out and out["aircraft_icao"]:
         out["aircraft_icao"] = out["aircraft_icao"].upper()
     if "airline_icao" in out and out["airline_icao"]:
@@ -370,8 +393,10 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
             if not merged.get("airport") and loc["airport"]:
                 out["airport"] = loc["airport"]
     merged = {**(existing or {}), **out}
-    if any(k in out for k in ("date", "airport")) or not existing:
-        out["date_utc"] = geo.local_to_utc(merged.get("date"), merged.get("airport"))
+    if any(k in out for k in ("date", "airport", "place", "lat", "lng")) or not existing:
+        # Sans aéroport, l'heure locale est celle du fuseau de l'aéroport le plus proche des coordonnées
+        tz = "UTC" if geo.airport(merged.get("airport")) else geo.tz_at(merged.get("lat"), merged.get("lng"))
+        out["date_utc"] = geo.local_to_utc(merged.get("date"), merged.get("airport"), fallback_tz=tz)
     merged = {**(existing or {}), **out}
     lat, lng = merged.get("lat"), merged.get("lng")
     if lat is None:
@@ -462,11 +487,11 @@ def create_spot(
     out: dict = {}
     _apply_image(out, image, payload)
     merged_input = {**payload, **{k: v for k, v in out.items() if k in EDITABLE and not payload.get(k)}}
-    if not merged_input.get("airport") and get_settings().get("default_airport"):
+    if not merged_input.get("airport") and not merged_input.get("place") and get_settings().get("default_airport"):
         merged_input["airport"] = get_settings()["default_airport"]
     out.update(prepare(merged_input))
     if not force:
-        dups = find_duplicates(out["registration"], out.get("airport"), out.get("date"))
+        dups = find_duplicates(out["registration"], out.get("airport"), out.get("date"), place=out.get("place"))
         if dups:
             media.delete_image(out.get("image"), out.get("thumb"))
             raise HTTPException(409, detail={"code": "duplicate", "duplicates": dups})

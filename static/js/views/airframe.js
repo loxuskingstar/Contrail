@@ -3,7 +3,7 @@ import { api, mediaUrl } from '../api.js';
 import { store } from '../app.js';
 import { t, fmtDate, countryName, flag, fmtNum } from '../i18n.js';
 import { icon } from '../lib/icons.js';
-import { esc, badgesHtml, toast, errorToast, emptyState } from '../ui.js';
+import { esc, regText, badgesHtml, toast, errorToast, emptyState } from '../ui.js';
 import { planespottersPhoto, photoBlock } from '../lib/photos.js';
 
 export async function render(root, params) {
@@ -11,10 +11,10 @@ export async function render(root, params) {
   const i = a.info;
   root.innerHTML = `
     ${a.cover ? `<div class="hero" style="min-height:240px;margin-top:12px"><img src="${mediaUrl('images', a.cover)}" alt=""><div class="in">
-      <div class="row"><h2 class="mono" style="font-size:38px">${esc(i.registration)}</h2><span class="flag" style="font-size:30px">${flag(i.country)}</span></div>
+      <div class="row"><h2 class="mono" style="font-size:38px">${esc(regText(i.registration))}</h2><span class="flag" style="font-size:30px">${flag(i.country)}</span></div>
       <div style="opacity:.9">${esc(i.aircraft || i.aircraft_icao || '')}${i.owner ? ' · ' + esc(i.owner) : ''}</div></div></div>` : ''}
     <header class="page-head" style="${a.cover ? 'padding-top:18px' : ''}">
-      <div>${a.cover ? '' : `<h1 class="reg-title">${esc(i.registration)} <span class="flag">${flag(i.country)}</span></h1>`}
+      <div>${a.cover ? '' : `<h1 class="reg-title">${esc(regText(i.registration))} <span class="flag">${flag(i.country)}</span></h1>`}
         <h1 class="${a.cover ? '' : 'sr'}" style="font-size:22px">${esc(t('airframe.title'))}</h1>
         <div class="sub">${esc([i.aircraft || i.aircraft_icao, i.owner, i.country && countryName(i.country), i.msn && `MSN ${i.msn}`].filter(Boolean).join(' · '))}</div>
         ${a.aliases.length ? `<div class="small" style="margin-top:6px">${icon('link', '', 14)} ${esc(t('airframe.aliases'))} ${a.aliases.map((x) => `<a class="chip mono" style="height:26px;font-size:12px" href="#/airframe/${encodeURIComponent(x.registration)}">${esc(x.registration)} · ${x.spots}</a>`).join(' ')}
@@ -61,7 +61,7 @@ export async function render(root, params) {
         if (e.kind === 'spot' && e.lat != null) {
           n++;
           pts.push([e.lat, e.lng]);
-          items.push({ lat: e.lat, lng: e.lng, label: n, popup: `<b>${esc(e.airport_name || e.airport)}</b><br>${fmtDate(e.date)}<br><a href="#/spots/${e.id}">${esc(t('common.open'))} →</a>` });
+          items.push({ lat: e.lat, lng: e.lng, label: n, popup: `<b>${esc(e.airport_name || e.airport || e.place || '')}</b><br>${fmtDate(e.date)}<br><a href="#/spots/${e.id}">${esc(t('common.open'))} →</a>` });
         }
       }
       m.clusters('spots', items);
@@ -91,6 +91,6 @@ function evHtml(e, reg) {
   return `<div class="tl-item"><div class="tl-date">${fmtDate(e.date)}</div>
     <a href="#/spots/${e.id}" class="row" style="align-items:flex-start;margin-top:4px">
       ${e.thumb ? `<img src="${mediaUrl('thumbs', e.thumb)}" style="width:92px;height:64px;object-fit:cover;border-radius:12px" alt="">` : ''}
-      <div class="grow"><b>${icon('camera', '', 15)} ${esc(e.airport_name || e.airport || '—')}</b>
+      <div class="grow"><b>${icon('camera', '', 15)} ${esc(e.airport_name || e.airport || e.place || '—')}</b>
       <div class="small muted">${e.registration && e.registration !== reg ? `<span class="mono">${esc(e.registration)}</span> · ` : ''}${e.test_registration && e.test_registration !== e.registration ? `<span class="mono">${esc(e.test_registration)}</span> · ` : ''}${esc(e.owner || '')}${e.livery && e.livery !== 'None' ? ` · ${esc(e.livery)}` : ''}</div>${badgesHtml(e.badges, 3)}</div></a></div>`;
 }

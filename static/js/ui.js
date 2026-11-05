@@ -6,6 +6,11 @@ import { mediaUrl } from './api.js';
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+/** Texte à afficher pour une immatriculation (les spots sans immatriculation portent une valeur de substitution). */
+export const regText = (r) => (typeof r === 'string' && r.startsWith('SANS-IMMAT-') ? t('spot.no_reg') : r || '');
+/** Lieu d'un spot : l'aéroport, sinon le lieu libre (plage, meeting, ville…). */
+export const placeText = (s) => (s && (s.airport || s.place)) || '';
+
 export function esc(v) {
   if (v === null || v === undefined) return '';
   return String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -247,13 +252,13 @@ export function spotTile(s, { href = `#/spots/${s.id_spotting}` } = {}) {
     s.livery_category ? `<span class="badge">${icon(['primer', 'white'].includes(s.livery_category) ? 'paint-bucket' : 'palette', '', 11)}</span>` : ''].join('');
   const sub = `${esc(s.aircraft_icao || s.aircraft || '')}${s.owner ? ' · ' + esc(s.owner) : ''}`;
   if (s.thumb) {
-    return `<a class="tile" href="${href}"><img loading="lazy" src="${mediaUrl('thumbs', s.thumb)}" alt="${esc(s.registration)}"><div class="corner">${corner}</div>
-      <div class="cap"><b class="mono">${esc(s.registration)}</b> ${regFlag(s.country)}<small class="ellipsis">${sub}</small></div></a>`;
+    return `<a class="tile" href="${href}"><img loading="lazy" src="${mediaUrl('thumbs', s.thumb)}" alt="${esc(regText(s.registration))}"><div class="corner">${corner}</div>
+      <div class="cap"><b class="mono">${esc(regText(s.registration))}</b> ${regFlag(s.country)}<small class="ellipsis">${sub}</small></div></a>`;
   }
   // Spot sans photo : vignette typographique
   return `<a class="tile noimg" href="${href}">${icon('plane', '', 20)}<div class="corner">${corner}</div>
-    <div class="cap"><b class="mono" style="font-size:17px">${esc(s.registration)}</b> ${regFlag(s.country)}<small class="ellipsis">${sub}</small>
-    <small class="ellipsis">${esc(s.airport || '')}${s.date ? ' · ' + fmtDate(s.date, { time: false, short: true }) : ''}</small></div></a>`;
+    <div class="cap"><b class="mono" style="font-size:17px">${esc(regText(s.registration))}</b> ${regFlag(s.country)}<small class="ellipsis">${sub}</small>
+    <small class="ellipsis">${esc(placeText(s))}${s.date ? ' · ' + fmtDate(s.date, { time: false, short: true }) : ''}</small></div></a>`;
 }
 
 export function spotRow(s, { selectable = false, selected = false } = {}) {
@@ -263,9 +268,9 @@ export function spotRow(s, { selectable = false, selected = false } = {}) {
     ${selectable ? `<span class="check">${selected ? icon('check', '', 14) : ''}</span>` : ''}
     ${thumb}
     <div class="grow">
-      <div class="ttl"><span class="mono">${esc(s.registration)}</span>${regFlag(s.country)}${s.favorite ? `<span style="color:#d97706">${icon('star', '', 14)}</span>` : ''}</div>
+      <div class="ttl"><span class="mono">${esc(regText(s.registration))}</span>${regFlag(s.country)}${s.favorite ? `<span style="color:#d97706">${icon('star', '', 14)}</span>` : ''}</div>
       <div class="meta ellipsis">${esc(s.aircraft || s.aircraft_icao || '—')}${s.owner ? ' · ' + esc(s.owner) : ''}</div>
-      <div class="meta ellipsis">${esc(s.airport || '')}${s.airport ? ' · ' : ''}${fmtDate(s.date)}</div>
+      <div class="meta ellipsis">${esc(placeText(s))}${placeText(s) ? ' · ' : ''}${fmtDate(s.date)}</div>
     </div>
     <div class="hide-sm" style="max-width:40%">${badgesHtml(s.badges, 3)}</div>
   </a>`;

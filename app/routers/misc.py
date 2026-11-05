@@ -142,6 +142,11 @@ def airports_search(q_: str = "", limit: int = 12, q: str = ""):  # noqa: A002 -
     return geo.search_airports(q or q_, limit)
 
 
+@router.get("/api/places/search")
+def places_search(q: str = "", lang: str = ""):
+    return geo.search_places(q, lang or get_settings().get("language") or "fr")
+
+
 @router.get("/api/airports/{code}")
 def airport_info(code: str):
     a = geo.airport(code)
@@ -357,9 +362,9 @@ def global_search(q_: str = "", q: str = ""):  # noqa: A002
     like = f"%{term}%"
     conn = db()
     spots = conn.execute(
-        "SELECT id_spotting, registration, test_registration, aircraft_icao, aircraft, owner, airport, date, thumb FROM spotting "
+        "SELECT id_spotting, registration, test_registration, aircraft_icao, aircraft, owner, airport, place, date, thumb FROM spotting "
         "WHERE registration LIKE ? OR test_registration LIKE ? OR msn LIKE ? OR owner LIKE ? OR aircraft LIKE ? "
-        "OR livery LIKE ? OR description LIKE ? ORDER BY date DESC LIMIT 8", (like,) * 7).fetchall()
+        "OR livery LIKE ? OR description LIKE ? OR place LIKE ? ORDER BY date DESC LIMIT 8", (like,) * 8).fetchall()
     airframes = conn.execute(
         "SELECT registration, MAX(aircraft) aircraft, COUNT(*) n FROM spotting "
         "WHERE registration LIKE ? OR test_registration LIKE ? OR msn LIKE ? "

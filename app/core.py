@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-APP_VERSION = "1.7.2"
+APP_VERSION = "1.8.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -180,6 +180,8 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout = 10000")
     from app.services import operators
     operators.register(conn)
+    from app.services import registration as _regs
+    conn.create_function("known", 1, _regs.known, deterministic=True)
     return conn
 
 

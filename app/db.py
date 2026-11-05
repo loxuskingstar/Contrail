@@ -250,7 +250,12 @@ SCHEMA_V5 = """
 ALTER TABLE spotting ADD COLUMN phash TEXT;
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5]
+SCHEMA_V6 = """
+-- Lieu libre (plage, meeting, ville…) quand le spot n'est pas rattaché à un aéroport ; les coordonnées sont dans lat/lng
+ALTER TABLE spotting ADD COLUMN place TEXT;
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6]
 
 
 def init_db() -> None:

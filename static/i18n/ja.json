@@ -1242,5 +1242,12 @@
 "backup.remote_fail": "接続できません: {err}",
 "backup.remote_last_ok": "前回のコピーは成功: {date}",
 "backup.remote_last_fail": "前回のコピーは失敗: {date}",
-"common.optional": "任意"
+"common.optional": "任意",
+"spot.no_reg": "登録記号不明",
+"spot.unknown_reg": "登録記号が不明",
+"spot.unknown_reg_hint": "機体を特定できていません。あとでスポットを編集して補えます。",
+"spot.airport_or_place": "空港または場所",
+"spot.place_ph": "RJTT、東京…、または都市・ビーチ・航空ショーの会場",
+"spot.place_city": "都市・場所",
+"spot.place": "場所"
 }

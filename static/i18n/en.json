@@ -1413,5 +1413,12 @@
 "backup.remote_fail": "Destination unreachable: {err}",
 "backup.remote_last_ok": "Last copy succeeded: {date}",
 "backup.remote_last_fail": "Last copy failed: {date}",
-"common.optional": "optional"
+"common.optional": "optional",
+"spot.no_reg": "Unknown reg.",
+"spot.unknown_reg": "Registration unknown",
+"spot.unknown_reg_hint": "Unidentified aircraft: complete it later by editing the spot.",
+"spot.airport_or_place": "Airport or place",
+"spot.place_ph": "KJFK, Paris… or a city, a beach, an airshow",
+"spot.place_city": "City / place",
+"spot.place": "Place"
 }
