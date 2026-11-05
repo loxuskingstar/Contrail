@@ -16,7 +16,9 @@ export async function render(root, params) {
     <header class="page-head" style="${a.cover ? 'padding-top:18px' : ''}">
       <div>${a.cover ? '' : `<h1 class="reg-title">${esc(i.registration)} <span class="flag">${flag(i.country)}</span></h1>`}
         <h1 class="${a.cover ? '' : 'sr'}" style="font-size:22px">${esc(t('airframe.title'))}</h1>
-        <div class="sub">${esc([i.aircraft || i.aircraft_icao, i.owner, i.country && countryName(i.country), i.msn && `MSN ${i.msn}`].filter(Boolean).join(' · '))}</div></div>
+        <div class="sub">${esc([i.aircraft || i.aircraft_icao, i.owner, i.country && countryName(i.country), i.msn && `MSN ${i.msn}`].filter(Boolean).join(' · '))}</div>
+        ${a.aliases.length ? `<div class="small" style="margin-top:6px">${icon('link', '', 14)} ${esc(t('airframe.aliases'))} ${a.aliases.map((x) => `<a class="chip mono" style="height:26px;font-size:12px" href="#/airframe/${encodeURIComponent(x.registration)}">${esc(x.registration)} · ${x.spots}</a>`).join(' ')}
+          <div class="tiny muted" style="margin-top:3px">${esc(t('airframe.aliases_hint'))}</div></div>` : ''}</div>
       <div class="actions">
         ${store.mod('watchlist') ? `<button class="btn" data-watch>${icon(a.watch_id ? 'eye-off' : 'eye', '', 18)} ${esc(t(a.watch_id ? 'watch.remove' : 'watch.add'))}</button>` : ''}
         <button class="btn-icon glassy" data-share title="${esc(t('share.title'))}">${icon('share-2')}</button>
@@ -32,7 +34,7 @@ export async function render(root, params) {
       <div class="card kpi">${icon('history')}<div class="v" style="font-size:16px">${a.last_seen ? fmtDate(a.last_seen, { time: false }) : '—'}</div><div class="l">${esc(t('airframe.last_seen'))}</div></div>
     </div>
     ${a.events.length ? `<div class="grid two">
-      <div class="card"><div class="card-title">${esc(t('airframe.timeline'))}</div><div class="timeline">${a.events.map(evHtml).join('')}</div></div>
+      <div class="card"><div class="card-title">${esc(t('airframe.timeline'))}</div><div class="timeline">${a.events.map((e) => evHtml(e, i.registration)).join('')}</div></div>
       <div class="stack"><div class="card flush"><div class="map" style="height:380px;border-radius:0" data-map></div></div>
         ${a.changes.length ? `<div class="card"><div class="card-title">${esc(t('airframe.changes'))}</div>${a.changes.map((c) => `<div class="small" style="padding:6px 0;border-bottom:1px solid var(--hair)"><b>${fmtDate(c.date, { time: false })}</b> — ${esc(c.owner || '?')}${c.livery ? ` · ${esc(c.livery)}` : ''}</div>`).join('')}</div>` : ''}
       </div></div>` : `<div class="card">${emptyState('plane', t('airframe.empty'), t('airframe.empty_text'))}</div>`}`;
@@ -80,7 +82,7 @@ export async function render(root, params) {
   return () => mp.then((m) => m?.remove());
 }
 
-function evHtml(e) {
+function evHtml(e, reg) {
   if (e.kind === 'flight') {
     return `<div class="tl-item flight"><div class="tl-date">${fmtDate(e.date)}</div>
       <a href="#/flights/${e.id}" style="display:block"><b>${icon('ticket', '', 15)} ${esc(e.dep)} → ${esc(e.arr)}</b>
@@ -90,5 +92,5 @@ function evHtml(e) {
     <a href="#/spots/${e.id}" class="row" style="align-items:flex-start;margin-top:4px">
       ${e.thumb ? `<img src="${mediaUrl('thumbs', e.thumb)}" style="width:92px;height:64px;object-fit:cover;border-radius:12px" alt="">` : ''}
       <div class="grow"><b>${icon('camera', '', 15)} ${esc(e.airport_name || e.airport || '—')}</b>
-      <div class="small muted">${esc(e.owner || '')}${e.livery && e.livery !== 'None' ? ` · ${esc(e.livery)}` : ''}</div>${badgesHtml(e.badges, 3)}</div></a></div>`;
+      <div class="small muted">${e.registration && e.registration !== reg ? `<span class="mono">${esc(e.registration)}</span> · ` : ''}${e.test_registration && e.test_registration !== e.registration ? `<span class="mono">${esc(e.test_registration)}</span> · ` : ''}${esc(e.owner || '')}${e.livery && e.livery !== 'None' ? ` · ${esc(e.livery)}` : ''}</div>${badgesHtml(e.badges, 3)}</div></a></div>`;
 }

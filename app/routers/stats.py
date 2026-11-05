@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from ..core import db, execute, get_config, now_iso, q, q1
 from ..services import aircraft as ac
+from ..services import airframes
 from ..services import collection, geo, wishes
 from ..services import registration as regs
 from .spots import decorate, LIST_COLS
@@ -187,9 +188,11 @@ def dashboard():
 @router.get("/api/airframe/{reg}")
 def airframe(reg: str):
     r = regs.normalize(reg)
-    spots = q(f"SELECT {LIST_COLS}, s.date_utc FROM spotting s WHERE s.registration = ? ORDER BY s.date", (r,))
+    ids = airframes.group(r)          # immatriculations de la même cellule (essai ↔ définitive, via le MSN)
+    ph = ",".join("?" * len(ids))
+    spots = q(f"SELECT {LIST_COLS}, s.date_utc, s.test_registration FROM spotting s WHERE s.registration IN ({ph}) ORDER BY s.date", ids)
     decorate(spots)
-    flights = q("SELECT * FROM flights WHERE registration = ? ORDER BY date", (r,))
+    flights = q(f"SELECT * FROM flights WHERE registration IN ({ph}) ORDER BY date", ids)
     cached = q1("SELECT data, fetched_at, source FROM aircraft_cache WHERE registration = ?", (r,))
     info = json.loads(cached["data"]) if cached else {}
     if spots:
@@ -206,6 +209,7 @@ def airframe(reg: str):
                        "lat": s["lat"] if s["lat"] is not None else (a or {}).get("lat"),
                        "lng": s["lng"] if s["lng"] is not None else (a or {}).get("lng"),
                        "thumb": s["thumb"], "livery": s["livery"], "owner": s["owner"],
+                       "registration": s["registration"], "test_registration": s.get("test_registration"),
                        "airport_name": (a or {}).get("name"), "badges": s["badges"], "tags": s["tags"]})
     for f in flights:
         d, a = geo.airport(f["dep_icao"]), geo.airport(f["arr_icao"])
@@ -223,7 +227,9 @@ def airframe(reg: str):
         prev = cur
     airports = sorted({s["airport"] for s in spots if s["airport"]})
     in_watch = q1("SELECT id FROM wishes WHERE kind='aircraft' AND status='open' AND UPPER(value) = ?", (r,))
-    return {"info": info, "events": events, "spots": len(spots), "flights": len(flights),
+    counts = {i: sum(1 for s in spots if s["registration"] == i) for i in ids}
+    return {"info": info, "aliases": [{"registration": i, "spots": counts[i]} for i in ids if i != r],
+            "tests": sorted({s["test_registration"] for s in spots if s.get("test_registration")} - {r}), "events": events, "spots": len(spots), "flights": len(flights),
             "first_seen": spots[0]["date"] if spots else None, "last_seen": spots[-1]["date"] if spots else None,
             "airports": airports, "changes": changes, "watch_id": in_watch["id"] if in_watch else None,
             "cover": next((s["image"] for s in reversed(spots) if s.get("image")), None)}

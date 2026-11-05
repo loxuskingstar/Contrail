@@ -45,6 +45,7 @@ export async function render(root, params, query) {
           <button type="button" class="btn-icon" data-lookup title="${esc(t('spot.lookup'))}">${icon('wand-sparkles')}</button></div></label>
         <div data-lookup-res></div>
         <div data-dup></div>
+        <div data-photodup></div>
         <div class="field-row">
           <label class="field"><span>${esc(t('spot.aircraft'))}</span><input name="aircraft" value="${esc(s.aircraft)}" placeholder="Airbus A320-214"></label>
           <label class="field"><span>${esc(t('spot.type_code'))}</span><input name="aircraft_icao" value="${esc(s.aircraft_icao)}" placeholder="A320" autocapitalize="characters"></label>
@@ -150,6 +151,20 @@ export async function render(root, params, query) {
     drop.querySelector('.dz-in').hidden = true;
     drop.querySelector('.dz-tools').hidden = false;
     analyze(file);
+    checkPhoto(file);
+  };
+  // Photo déjà enregistrée ? (empreinte perceptuelle : fonctionne même si le fichier a été redimensionné ou renommé)
+  const checkPhoto = async (file) => {
+    const box = root.querySelector('[data-photodup]');
+    box.innerHTML = '';
+    if (!navigator.onLine) return;
+    try {
+      const fd = new FormData(); fd.append('image', file); if (s.id_spotting) fd.append('exclude_id', s.id_spotting);
+      const r = await api('/api/spots/check-photo', { method: 'POST', form: fd });
+      box.innerHTML = r.matches.length ? `<div class="ocr-strip warn">${icon('copy', '', 18)}
+        <span class="small grow">${esc(t('spot.photo_dup', { n: r.matches.length }))}</span>
+        ${r.matches.map((d) => `<a class="chip" href="#/spots/${d.id_spotting}" target="_blank">${esc(d.registration)} · ${esc(fmtDate(d.date, { time: false }))}</a>`).join('')}</div>` : '';
+    } catch { box.innerHTML = ''; }
   };
   drop.addEventListener('click', (e) => { if (!e.target.closest('.dz-tools')) fileInput.click(); });
   drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });

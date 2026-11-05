@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.7.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -107,6 +107,11 @@ ENV_KEYS = {
     "ntfy_url": "NTFY_URL",
     "webhook_url": "WEBHOOK_URL",
     "public_base_url": "PUBLIC_BASE_URL",
+    # Copie des sauvegardes hors de la machine
+    "backup_remote_path": "BACKUP_REMOTE_PATH",
+    "backup_webdav_url": "BACKUP_WEBDAV_URL",
+    "backup_webdav_user": "BACKUP_WEBDAV_USER",
+    "backup_webdav_password": "BACKUP_WEBDAV_PASSWORD",
 }
 
 _config_lock = threading.Lock()

@@ -17,7 +17,7 @@ import asyncio
 from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs, set_profile, _profile
 from .db import init_db
 from .routers import field, fleets, flights, io, misc, share, spots, stats, wishes
-from .services import collection, gamification, refdb, sandbox, scheduler
+from .services import collection, gamification, media, refdb, sandbox, scheduler
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
     gamification.sync_definitions()
     tasks = scheduler.start()
     threading.Thread(target=refdb.compact_file, daemon=True, name="refdb-compact").start()   # allège une ancienne base de référence
+    threading.Thread(target=media.backfill_phash, daemon=True, name="phash-backfill").start()   # empreintes des photos déjà enregistrées
     log.info("%s %s prêt — authentification %s", APP_NAME, APP_VERSION,
              "activée" if auth.auth_enabled() else "désactivée")
     yield

@@ -283,7 +283,7 @@ def _mask(v: str) -> str:
     return (v[:3] + "•" * 6 + v[-2:]) if len(v) > 8 else ("•" * len(v) if v else "")
 
 
-SECRET_KEYS = {"airlabs_api_key", "aviationstack_api_key", "opensky_client_secret"}
+SECRET_KEYS = {"airlabs_api_key", "aviationstack_api_key", "opensky_client_secret", "backup_webdav_password"}
 
 
 @router.get("/api/config")

@@ -9,7 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query
 from pydantic import BaseModel
 
 from ..core import db, execute, get_settings, now_iso, q, q1
-from ..services import collection, gamification, geo, media, weather, wishes
+from ..services import airframes, collection, gamification, geo, media, weather, wishes
 from ..services import registration as regs
 from ..services.notify import notify, texts
 
@@ -248,6 +248,41 @@ def check_duplicate(body: DupCheck):
     return {"duplicates": find_duplicates(body.registration, body.airport, body.date, body.exclude_id)}
 
 
+PHOTO_DUP_MAX = 6      # distance de Hamming (sur 64 bits) : au-delà, ce sont deux photos différentes du même avion
+
+
+@router.post("/check-photo")
+def check_photo(image: UploadFile = File(...), exclude_id: int | None = Form(None)):
+    """Spots dont la photo ressemble à celle qu'on s'apprête à enregistrer."""
+    try:
+        h = media.hash_bytes(image.file.read())
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(422, "invalid_image") from e
+    out = []
+    for r in q("SELECT id_spotting, registration, date, airport, thumb, phash FROM spotting WHERE phash IS NOT NULL AND id_spotting <> ?",
+               (exclude_id or -1,)):
+        d = media.hamming(h, r["phash"])
+        if d <= PHOTO_DUP_MAX:
+            out.append({**{k: r[k] for k in ("id_spotting", "registration", "date", "airport", "thumb")}, "distance": d})
+    return {"matches": sorted(out, key=lambda m: m["distance"])[:5]}
+
+
+@router.get("/duplicates")
+def photo_duplicates(limit: int = 50):
+    """Paires de spots dont les photos sont quasi identiques."""
+    rows = q("SELECT id_spotting id, registration, date, airport, thumb, phash FROM spotting WHERE phash IS NOT NULL ORDER BY id_spotting")
+    vals = [(int(r["phash"], 16), r) for r in rows]
+    pairs = []
+    for i, (a, ra) in enumerate(vals):
+        for b, rb in vals[i + 1:]:
+            d = (a ^ b).bit_count()
+            if d <= PHOTO_DUP_MAX:
+                pairs.append({"distance": d, "a": {k: ra[k] for k in ("id", "registration", "date", "airport", "thumb")},
+                              "b": {k: rb[k] for k in ("id", "registration", "date", "airport", "thumb")}})
+    pairs.sort(key=lambda p: p["distance"])
+    return {"count": len(pairs), "pairs": pairs[:limit]}
+
+
 @router.get("/{spot_id}")
 def get_spot(spot_id: int, sort: str = "date_desc"):
     s = q1("SELECT * FROM spotting WHERE id_spotting = ?", (spot_id,))
@@ -261,7 +296,9 @@ def get_spot(spot_id: int, sort: str = "date_desc"):
     s["airport_info"] = geo.airport(s["airport"])
     s["location"] = q1("SELECT * FROM spot_locations WHERE id_location = ?", (s["location_id"],)) if s["location_id"] else None
     s["flights"] = collection.crossref_for_spot(s["registration"])
-    s["encounters"] = q1("SELECT COUNT(*) n FROM spotting WHERE registration = ?", (s["registration"],))["n"]
+    ids = airframes.group(s["registration"])
+    s["encounters"] = q1(f"SELECT COUNT(*) n FROM spotting WHERE registration IN ({','.join('?' * len(ids))})", ids)["n"]
+    s["aliases"] = [i for i in ids if i != s["registration"]]
     key = "COALESCE(date, created_at) || printf('%010d', id_spotting)"
     cur = q1(f"SELECT {key} k FROM spotting WHERE id_spotting = ?", (spot_id,))["k"]
     newer = q1(f"SELECT id_spotting FROM spotting WHERE {key} > ? ORDER BY {key} ASC LIMIT 1", (cur,))
@@ -470,7 +507,7 @@ def update_spot(
         media.delete_image(*old)
     elif payload.get("remove_image"):
         media.delete_image(existing.get("image"), existing.get("thumb"))
-        out.update({"image": None, "thumb": None, "image_w": None, "image_h": None})
+        out.update({"image": None, "thumb": None, "image_w": None, "image_h": None, "phash": None})
     if audio and audio.filename:
         try:
             new_audio = media.save_audio(audio.file.read(), audio.filename)

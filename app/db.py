@@ -245,7 +245,12 @@ ALTER TABLE spotting ADD COLUMN test_registration TEXT;
 CREATE INDEX IF NOT EXISTS idx_spot_testreg ON spotting(test_registration);
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4]
+SCHEMA_V5 = """
+-- Empreinte perceptuelle (dHash 64 bits, hexadécimal) de la photo : repère deux fois la même image
+ALTER TABLE spotting ADD COLUMN phash TEXT;
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5]
 
 
 def init_db() -> None:

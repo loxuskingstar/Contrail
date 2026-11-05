@@ -322,7 +322,13 @@ def export_full():
 @router.get("/api/backups")
 def backups_list():
     last = backup.last_backup_time()
-    return {"items": backup.list_backups(), "last": last.isoformat(timespec="seconds") if last else None}
+    return {"items": backup.list_backups(), "last": last.isoformat(timespec="seconds") if last else None,
+            "remote": backup.remote_status()}
+
+
+@router.post("/api/backups/remote-test")
+def backups_remote_test():
+    return backup.test_remote()
 
 
 @router.post("/api/backups")

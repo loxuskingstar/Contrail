@@ -5,6 +5,10 @@ Le code OACI d'un spot (`airline_icao`) vient souvent d'une base d'appareils qui
 `group_key(icao, owner)` garde le code OACI tant que le propriétaire saisi est compatible avec le nom
 connu de ce code, et bascule sur le nom du propriétaire sinon. Elle est enregistrée dans SQLite sous
 le nom `opg` et remplace `COALESCE(airline_icao, owner)` partout.
+
+Inversement, un propriétaire qui porte le nom d'un *autre* code connu est rattaché à ce code : un spot
+« Ryanair » saisi sous le code MAY (Malta Air) rejoint RYR, et un spot « Air France » sans code rejoint AFR,
+au lieu de former une compagnie à part.
 """
 from __future__ import annotations
 
@@ -79,8 +83,52 @@ def _refs(icao: str) -> frozenset[str]:
     return out
 
 
+_names: dict[str, tuple[float, dict[str, str]]] = {}
+
+
+def _name_index() -> dict[str, str]:
+    """Nom simplifié de référence → code OACI, pour les codes présents dans les spots (le plus fréquent l'emporte)."""
+    path = str(db_path())
+    hit = _names.get(path)
+    now = time.monotonic()
+    if hit and now - hit[0] < TTL:
+        return hit[1]
+    idx: dict[str, tuple[str, int]] = {}
+    try:
+        c = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+        try:
+            codes = c.execute("SELECT airline_icao, COUNT(*) FROM spotting WHERE airline_icao IS NOT NULL AND airline_icao <> '' "
+                              "GROUP BY airline_icao").fetchall()
+        finally:
+            c.close()
+    except sqlite3.Error:
+        codes = []
+    for code, n in codes:
+        for name in _refs(code):
+            if name not in idx or n > idx[name][1]:
+                idx[name] = (code, n)
+    out = {name: code for name, (code, _) in idx.items()}
+    _names[path] = (now, out)
+    return out
+
+
+def _code_for_name(owner: str) -> str | None:
+    """Code OACI connu qui porte ce nom de compagnie (égalité d'abord, puis noms compatibles)."""
+    k = _key(owner)
+    if not k:
+        return None
+    idx = _name_index()
+    if k in idx:
+        return idx[k]
+    for name, code in idx.items():
+        if compatible(k, {name}):
+            return code
+    return None
+
+
 def reset_cache() -> None:
     _cache.clear()
+    _names.clear()
 
 
 def group_key(icao: str | None, owner: str | None) -> str | None:
@@ -89,11 +137,11 @@ def group_key(icao: str | None, owner: str | None) -> str | None:
     if not owner:
         return icao
     if not icao:
-        return owner
+        return _code_for_name(owner) or owner
     refs = _refs(icao)
     if not refs or compatible(_key(owner), refs):
         return icao
-    return owner
+    return _code_for_name(owner) or owner
 
 
 def register(conn: sqlite3.Connection) -> None:

@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 from ..core import DIRS, connect, db_path, q
-from . import refdb
+from . import media, refdb
 
 MEDIA_KINDS = ("images", "thumbs", "audio", "originals")
 ORPHAN_MIN_AGE = 3600   # un fichier de moins d'une heure peut appartenir à un envoi en cours : on n'y touche pas
@@ -89,6 +89,7 @@ def maintain(purge_orphans: bool = False) -> dict:
             conn.execute("PRAGMA optimize")
     finally:
         conn.close()
+    hashed = media.backfill_phash()
     freed = removed = 0
     if purge_orphans:
         for ps in orphans().values():
@@ -100,4 +101,4 @@ def maintain(purge_orphans: bool = False) -> dict:
                 except OSError:
                     pass
     return {"integrity": ok, "db_before": before, "db_after": _file_size(db_path()),
-            "orphans_removed": removed, "orphans_freed": freed}
+            "orphans_removed": removed, "orphans_freed": freed, "hashed": hashed}

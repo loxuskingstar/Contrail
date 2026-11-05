@@ -361,13 +361,14 @@ def test_subsidiary_not_merged_with_parent_airline(client):
     from app.services import operators
     operators.reset_cache()
     groups = {g["key"]: g for g in client.get("/api/fleets").json()}
-    assert groups["AFR"]["regs"] == 2 and groups["Hop!"]["regs"] == 1
+    # AFR = les 2 spots codés AFR + le spot « Air France » saisi sans code (rattaché à AFR par son nom)
+    assert groups["AFR"]["regs"] == 3 and groups["Hop!"]["regs"] == 1
     airlines = {a["v"]: a["n"] for a in client.get("/api/spots/facets").json()["airlines"]}
-    assert airlines["AFR"] == 2 and airlines["Hop!"] == 1
+    assert airlines["AFR"] == 3 and airlines["Hop!"] == 1
     assert len(client.get("/api/spots", params={"airline": "Hop!"}).json()["items"]) == 1
-    assert len(client.get("/api/spots", params={"airline": "AFR"}).json()["items"]) == 2
+    assert len(client.get("/api/spots", params={"airline": "AFR"}).json()["items"]) == 3
     top = {a["k"]: a["n"] for a in client.get("/api/stats").json()["top_airlines"]}
-    assert top["AFR"] == 2 and top["Hop!"] == 1
+    assert top["AFR"] == 3 and top["Hop!"] == 1
 
 
 def test_polluted_registered_name_does_not_merge_subsidiary(client):
@@ -377,7 +378,7 @@ def test_polluted_registered_name_does_not_merge_subsidiary(client):
     execute("INSERT INTO airlines(key, icao, name) VALUES('AFR','AFR','Hop!') ON CONFLICT(key) DO UPDATE SET name='Hop!'")
     operators.reset_cache()
     groups = {g["key"]: g for g in client.get("/api/fleets").json()}
-    assert groups["AFR"]["regs"] == 2 and groups["Hop!"]["regs"] == 1
+    assert groups["AFR"]["regs"] == 3 and groups["Hop!"]["regs"] == 1
     d = client.get("/api/fleets-reference/AFR").json()
     assert d["used"] == ["air france"]
 
@@ -531,3 +532,138 @@ def test_security_headers_and_upload_cap(client, monkeypatch):
     monkeypatch.setattr(m, "_MAX_UPLOAD", 50)
     r = client.post("/api/analyze-photo", files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")})
     assert r.status_code == 413
+
+
+def test_owner_name_of_another_code_is_merged(client):
+    """Un spot « Ryanair » saisi sous le code MAY (Malta Air) rejoint RYR ; « Malta Air » reste à part."""
+    from app.services import operators
+    rows = [("EI-RYA", "RYR", "Ryanair"), ("EI-RYB", "RYR", "Ryanair DAC"), ("9H-MAA", "MAY", "Malta Air"),
+            ("9H-MAB", "MAY", "Malta Air"), ("9H-MAC", "MAY", "Ryanair"), ("EI-RYC", None, "Ryanair")]
+    for reg, code, owner in rows:
+        data = {"registration": reg, "aircraft": "Boeing 737-800", "aircraft_icao": "B738", "owner": owner,
+                "airline_icao": code, "date": "2026-05-02T10:00"}
+        assert client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")}).status_code == 200
+    operators.reset_cache()
+    airlines = {a["v"]: a["n"] for a in client.get("/api/spots/facets").json()["airlines"]}
+    assert airlines["RYR"] == 4 and airlines["MAY"] == 2           # EI-RYA, EI-RYB, 9H-MAC (nom Ryanair) et EI-RYC (sans code)
+    assert not any(k.lower().startswith("ryanair") for k in airlines)
+    assert {s["registration"] for s in client.get("/api/spots", params={"airline": "RYR"}).json()["items"]} >= {"9H-MAC", "EI-RYC"}
+
+
+def test_airframe_groups_test_and_final_registration_by_msn(client):
+    _post_spot(client, registration="F-WWAA", aircraft="Airbus A321neo", aircraft_icao="A21N", msn="9999", flight_type="test", test_registration="F-WWAA", livery="Primer")
+    _post_spot(client, registration="F-HAAA", aircraft="Airbus A321neo", aircraft_icao="A21N", msn="09999", livery="Standard", date="2026-08-01T10:00")
+    _post_spot(client, registration="N99999", aircraft="Boeing 737-800", aircraft_icao="B738", msn="9999")      # même MSN, autre constructeur
+    a = client.get("/api/airframe/F-HAAA").json()
+    assert a["spots"] == 2 and [x["registration"] for x in a["aliases"]] == ["F-WWAA"]
+    assert {e["registration"] for e in a["events"]} == {"F-HAAA", "F-WWAA"}
+    assert client.get("/api/airframe/F-WWAA").json()["spots"] == 2          # depuis l'immat d'essai : même cellule
+    b = client.get("/api/airframe/N99999").json()
+    assert b["spots"] == 1 and b["aliases"] == []                           # un MSN n'est unique que chez un constructeur
+    sid = next(s["id_spotting"] for s in client.get("/api/spots", params={"registration": "F-HAAA"}).json()["items"])
+    assert client.get(f"/api/spots/{sid}").json()["encounters"] == 2
+    # test_registration sur un spot dont l'immat est la définitive
+    _post_spot(client, registration="F-HBBB", aircraft="Airbus A330-900", aircraft_icao="A339", flight_type="test", test_registration="F-WWBB")
+    _post_spot(client, registration="F-WWBB", aircraft="Airbus A330-900", aircraft_icao="A339", flight_type="test")
+    assert client.get("/api/airframe/F-WWBB").json()["spots"] == 2
+
+
+def test_remote_backup_to_directory_and_webdav(client, tmp_path):
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from app.core import CONFIG_PATH, save_config
+    from app.services import backup
+
+    remote = tmp_path / "nas"
+    remote.mkdir()
+    save_config({"backup_remote_path": str(remote)})
+    r = client.post("/api/backups").json()
+    assert r["remote"]["ok"] and (remote / r["name"]).is_file()
+    assert not list(remote.glob("*.part"))                                         # copie atomique : pas de fichier partiel
+    for _ in range(3):                                                             # rotation sur la destination (backup_keep)
+        client.post("/api/backups")
+    keep = int(client.get("/api/settings").json().get("backup_keep") or 7)
+    assert len(list(remote.glob("contrail-backup-*.zip"))) <= keep
+    st = client.get("/api/backups").json()["remote"]
+    assert st["configured"] and st["last"]["ok"]
+    # un montage absent n'est jamais « créé » : échec signalé, sauvegarde locale conservée
+    save_config({"backup_remote_path": str(tmp_path / "absent")})
+    r = client.post("/api/backups").json()
+    assert r["remote"]["ok"] is False and not (tmp_path / "absent").exists() and r["name"]
+    assert any(i["kind"] == "backup" for i in client.get("/api/notifications").json()["items"])
+    assert client.post("/api/backups/remote-test").json()["ok"] is False
+
+    # WebDAV : serveur minimal (PUT, PROPFIND, DELETE, authentification de base)
+    files: dict[str, bytes] = {}
+
+    class Dav(BaseHTTPRequestHandler):
+        def log_message(self, *a): pass
+        def _auth(self):
+            ok = self.headers.get("Authorization") == "Basic am9objpzZWNyZXQ="      # john:secret
+            if not ok:
+                self.send_response(401); self.end_headers()
+            return ok
+        def do_PUT(self):
+            if self._auth():
+                files[self.path.rsplit("/", 1)[-1]] = self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(201); self.end_headers()
+        def do_DELETE(self):
+            if self._auth():
+                files.pop(self.path.rsplit("/", 1)[-1], None); self.send_response(204); self.end_headers()
+        def do_PROPFIND(self):
+            if self._auth():
+                body = "<d:multistatus xmlns:d='DAV:'>" + "".join(f"<d:response><d:href>/dav/{n}</d:href></d:response>" for n in files) + "</d:multistatus>"
+                self.send_response(207); self.send_header("Content-Length", str(len(body.encode()))); self.end_headers(); self.wfile.write(body.encode())
+    srv = HTTPServer(("127.0.0.1", 0), Dav)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        save_config({"backup_remote_path": "", "backup_webdav_url": f"http://127.0.0.1:{srv.server_port}/dav",
+                     "backup_webdav_user": "john", "backup_webdav_password": "secret"})
+        assert client.post("/api/backups/remote-test").json()["ok"] is True and ".contrail-probe" not in files
+        for _ in range(keep + 2):
+            r = client.post("/api/backups").json()
+            assert r["remote"]["ok"], r["remote"]
+        names = [n for n in files if n.startswith("contrail-backup-")]
+        assert r["name"] in names and len(names) <= keep                          # rotation WebDAV via PROPFIND + DELETE
+        save_config({"backup_webdav_password": "faux"})
+        assert client.post("/api/backups").json()["remote"]["ok"] is False
+        # le mot de passe WebDAV n'est jamais écrit dans l'archive
+        import zipfile
+        z = zipfile.ZipFile(backup.backup_path(r["name"]))
+        assert "backup_webdav_password" not in z.read("config.json").decode()
+    finally:
+        srv.shutdown()
+        save_config({"backup_webdav_url": "", "backup_webdav_user": "", "backup_webdav_password": "", "backup_remote_path": ""})
+
+
+def test_photo_duplicates_by_perceptual_hash(client):
+    from PIL import ImageDraw
+    from app.services import media
+
+    def photo(w, h, shapes, quality=90):
+        im = Image.new("RGB", (w, h), (60, 90, 140))
+        d = ImageDraw.Draw(im)
+        for box, col in shapes:
+            d.rectangle([box[0] * w, box[1] * h, box[2] * w, box[3] * h], fill=col)
+        buf = io.BytesIO(); im.save(buf, "JPEG", quality=quality); return buf.getvalue()
+    a = [((0.1, 0.5, 0.9, 0.7), (230, 230, 230)), ((0.4, 0.2, 0.6, 0.8), (200, 30, 30)), ((0.0, 0.8, 1.0, 1.0), (40, 120, 40))]
+    b = [((0.2, 0.1, 0.4, 0.4), (250, 200, 0)), ((0.6, 0.6, 0.95, 0.95), (10, 10, 10))]
+    first = photo(1600, 1000, a)
+    sid = client.post("/api/spots", data={"data": json.dumps({"registration": "F-HPH1", "aircraft": "ATR 72", "aircraft_icao": "AT76", "date": "2026-07-01T10:00"})},
+                      files={"image": ("a.jpg", first, "image/jpeg")}).json()["spot"]["id_spotting"]
+    assert client.get(f"/api/spots/{sid}").json()["phash"]
+    # même image redimensionnée, recompressée et renommée → détectée
+    again = photo(640, 400, a, quality=55)
+    m = client.post("/api/spots/check-photo", files={"image": ("IMG_0001.jpg", again, "image/jpeg")}).json()["matches"]
+    assert m and m[0]["id_spotting"] == sid and m[0]["distance"] <= 6
+    # autre image → pas de correspondance ; et un spot ne se signale pas lui-même à l'édition
+    assert client.post("/api/spots/check-photo", files={"image": ("b.jpg", photo(1600, 1000, b), "image/jpeg")}).json()["matches"] == []
+    assert client.post("/api/spots/check-photo", data={"exclude_id": str(sid)}, files={"image": ("c.jpg", again, "image/jpeg")}).json()["matches"] == []
+    # deux spots avec la même photo → listés comme doublon ; un ancien spot sans empreinte est rattrapé
+    sid2 = client.post("/api/spots", data={"data": json.dumps({"registration": "F-HPH2", "aircraft": "ATR 72", "aircraft_icao": "AT76", "date": "2026-07-02T10:00"})},
+                       files={"image": ("a2.jpg", again, "image/jpeg")}).json()["spot"]["id_spotting"]
+    d = client.get("/api/spots/duplicates", params={"limit": 100000}).json()
+    assert any({p["a"]["id"], p["b"]["id"]} == {sid, sid2} for p in d["pairs"])
+    from app.core import execute
+    execute("UPDATE spotting SET phash = NULL WHERE id_spotting = ?", (sid,))
+    assert media.backfill_phash() >= 1 and client.get(f"/api/spots/{sid}").json()["phash"]
