@@ -1430,5 +1430,14 @@
 "patrol.unknown": "Inconnue",
 "patrol.hint": "Chaque avion devient un spot à part entière (compté dans les stats), avec la même photo, la même date et le même lieu. Cochez « Inconnue » pour un avion de la photo que vous n'avez pas pu identifier : vous pourrez compléter plus tard.",
 "patrol.leave": "Retirer cet avion de la patrouille",
-"patrol.view_all": "Voir les {n} avions"
+"patrol.view_all": "Voir les {n} avions",
+"settings.patrol_mode": "Patrouilles",
+"settings.patrol_simple": "Mode simple",
+"settings.patrol_detailed": "Mode détaillé",
+"settings.patrol_mode_hint": "Simple : une patrouille est un seul spot, nommé d'après la patrouille (elle remplace l'immatriculation). Détaillé : un spot par avion, avec la même photo, pour suivre chaque immatriculation.",
+"patrol.simple_toggle": "Cette photo est une patrouille (un seul spot)",
+"patrol.size": "Nombre d'avions",
+"patrol.simple_hint": "Le nom de la patrouille remplace l'immatriculation : elle compte comme un seul avion, et ses passages s'accumulent sous ce nom.",
+"patrol.n_aircraft": "{n} avions",
+"err.patrol_name_required": "Indiquez le nom de la patrouille."
 }

@@ -79,6 +79,9 @@ export async function render(root, params) {
     body.innerHTML = `<div class="stack"><div class="card stack">
         <label class="field"><span>${esc(t('settings.default_airport'))}</span><div class="input-wrap"><input data-default value="${esc(S.default_airport)}" placeholder="LFBO"></div></label>
         <label class="field"><span>${esc(t('settings.home_airports'))}</span><input data-homes value="${esc((S.home_airports || []).join(', '))}" placeholder="LFBO, LFPG"><span class="tiny muted">${esc(t('settings.home_airports_hint'))}</span></label>
+        <div class="field"><span>${esc(t('settings.patrol_mode'))}</span>
+          <div class="seg">${['simple', 'detailed'].map((v) => `<button data-patrol-mode="${v}" class="${(S.patrol_mode || 'simple') === v ? 'on' : ''}">${esc(t(`settings.patrol_${v}`))}</button>`).join('')}</div>
+          <span class="tiny muted">${esc(t('settings.patrol_mode_hint'))}</span></div>
       </div>
       <div class="card stack"><div class="card-title">${esc(t('settings.images'))}</div>
         <div class="field-row">
@@ -96,6 +99,7 @@ export async function render(root, params) {
         <label class="field"><span>${esc(t('settings.watch_interval'))}</span><select data-watchint>${[2, 5, 10, 15, 30, 60].map((v) => `<option value="${v}" ${S.watch_interval_min === v ? 'selected' : ''}>${v} min</option>`).join('')}</select></label>
       </div></div>`;
     airportInput(body.querySelector('[data-default]'));
+    body.querySelectorAll('[data-patrol-mode]').forEach((b) => (b.onclick = () => save({ patrol_mode: b.dataset.patrolMode }, { reload: true })));
     body.querySelector('[data-default]').onchange = (e) => save({ default_airport: e.target.value.trim().toUpperCase() });
     body.querySelector('[data-homes]').onchange = (e) => save({ home_airports: e.target.value.split(/[\s,;]+/).map((x) => x.trim().toUpperCase()).filter(Boolean) });
     body.querySelector('[data-imgmax]').onchange = (e) => save({ image_max_px: Number(e.target.value) });

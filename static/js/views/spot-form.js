@@ -27,6 +27,8 @@ export async function render(root, params, query) {
     store.tags ? Promise.resolve(store.tags) : store.refreshTags().catch(() => []),
     store.mod('locations') ? api('/api/locations').catch(() => []) : Promise.resolve([]),
   ]);
+  // Patrouille : « simple » = un seul spot nommé (tient lieu d'immatriculation), « détaillé » = un spot par avion
+  const simpleOnly = !!s.is_patrol || (!editing && (store.settings.patrol_mode || 'simple') === 'simple');
   let imageFile = null, audioFile = null, removeImage = false, removeAudio = false, dateTouched = editing;
   let recorder = null;
 
@@ -42,11 +44,21 @@ export async function render(root, params, query) {
       <div data-analysis></div>
 
       <div class="card stack">
+        ${simpleOnly ? `<label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" name="patrol_simple" ${s.is_patrol ? 'checked disabled' : ''}> <b>${esc(t('patrol.simple_toggle'))}</b></label>
+        <div class="stack" data-patsimple hidden>
+          <div class="field-row">
+            <label class="field" style="flex:2"><span>${esc(t('patrol.name'))}</span><input name="patrol_sname" list="patrol-names" value="${esc(s.patrol_name)}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off"></label>
+            <label class="field"><span>${esc(t('patrol.size'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span><input name="patrol_size" value="${esc(s.patrol_size)}" inputmode="numeric" placeholder="8"></label>
+          </div>
+          <p class="tiny muted">${esc(t('patrol.simple_hint'))}</p>
+        </div>` : ''}
+        <div data-regblock class="stack">
         <label class="field"><span>${esc(t('spot.registration'))}</span>
           <div class="input-wrap"><input class="input big" name="registration" value="${esc(s.registration)}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="F-HBXA" required>
           <button type="button" class="btn-icon" data-lookup title="${esc(t('spot.lookup'))}">${icon('wand-sparkles')}</button></div></label>
         <label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" name="unknown_registration" ${isUnknown ? 'checked' : ''}> <span>${esc(t('spot.unknown_reg'))}</span> <span class="tiny muted">${esc(t('spot.unknown_reg_hint'))}</span></label>
         <div data-lookup-res></div>
+        </div>
         <div data-dup></div>
         <div data-photodup></div>
         <div class="field-row">
@@ -71,18 +83,19 @@ export async function render(root, params, query) {
         <div class="field"><span>${esc(t('spot.tags'))}</span><div data-tags></div></div>
       </div>
 
-      <details class="card fold" data-patrol ${s.patrol ? 'open' : ''}>
+      ${simpleOnly ? '' : `<details class="card fold" data-patrol ${s.patrol ? 'open' : ''}>
         <summary>${icon('users', '', 18)} ${esc(t('patrol.title'))} ${icon('chevron-down', 'chev', 18)}</summary>
         <div class="fold-body stack">
           <label class="field"><span>${esc(t('patrol.name'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
-            <input name="patrol_name" list="patrol-names" value="${esc(s.patrol?.name)}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off"><datalist id="patrol-names"></datalist></label>
+            <input name="patrol_name" list="patrol-names" value="${esc(s.patrol?.name)}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off"></label>
           ${s.patrol ? `<div class="stack" style="gap:6px"><span class="tiny muted">${esc(t('patrol.members'))}</span><div class="row wrap" style="gap:6px">${s.patrol.members.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}
           <div class="stack" style="gap:8px" data-pat-rows></div>
           <div><button type="button" class="btn sm" data-pat-add>${icon('plus', '', 16)} ${esc(t('patrol.add'))}</button></div>
           <p class="tiny muted">${esc(t('patrol.hint'))}</p>
           ${s.patrol ? `<label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" name="patrol_leave"> <span>${esc(t('patrol.leave'))}</span></label>` : ''}
         </div>
-      </details>
+      </details>`}
+      <datalist id="patrol-names"></datalist>
 
       <details class="card fold" ${s.livery || s.description || s.flight_type || s.test_registration || s.location_id ? 'open' : ''}>
         <summary>${icon('sliders-horizontal', '', 18)} ${esc(t('spot.more_details'))} ${icon('chevron-down', 'chev', 18)}</summary>
@@ -325,7 +338,7 @@ export async function render(root, params, query) {
   };
 
   // ------------------------------------------------------------ patrouille : autres avions de la photo
-  const patRows = root.querySelector('[data-pat-rows]');
+  const patRows = root.querySelector('[data-pat-rows]') || document.createElement('div');
   const addPatRow = () => {
     const row = document.createElement('div');
     row.className = 'row';
@@ -339,18 +352,26 @@ export async function render(root, params, query) {
     patRows.append(row);
     inp.focus();
   };
-  root.querySelector('[data-pat-add]').onclick = () => { root.querySelector('[data-patrol]').open = true; addPatRow(); };
-  root.querySelector('[data-patrol]').addEventListener('toggle', function once() {
-    if (!this.open || this.dataset.loaded) return;
-    this.dataset.loaded = '1';
-    api('/api/spots/patrol-names').then((names) => { root.querySelector('#patrol-names').innerHTML = names.map((n) => `<option value="${esc(n)}">`).join(''); }).catch(() => {});
-  });
+  const addBtn = root.querySelector('[data-pat-add]');
+  if (addBtn) addBtn.onclick = () => { root.querySelector('[data-patrol]').open = true; addPatRow(); };
+  api('/api/spots/patrol-names').then((names) => { root.querySelector('#patrol-names').innerHTML = names.map((n) => `<option value="${esc(n)}">`).join(''); }).catch(() => {});
+  // Mode simple : la patrouille remplace l'immatriculation
+  const patSimple = form.elements.patrol_simple;
+  const syncPatrol = () => {
+    const on = !!patSimple?.checked;
+    root.querySelector('[data-patsimple]')?.toggleAttribute('hidden', !on);
+    root.querySelector('[data-regblock]').hidden = on;
+    F('registration').required = !on && !unk.checked;
+  };
+  if (patSimple) { patSimple.addEventListener('change', syncPatrol); syncPatrol(); }
 
   // ------------------------------------------------------------ enregistrement
   form.onsubmit = async (e) => {
     e.preventDefault();
+    const asPatrol = !!patSimple?.checked;
+    if (asPatrol && !F('patrol_sname').value.trim()) { F('patrol_sname').focus(); toast(esc(t('err.patrol_name_required')), { type: 'error' }); return; }
     const reg = F('registration').value.trim();
-    if (!reg && !unk.checked) { F('registration').focus(); toast(esc(t('err.registration_required')), { type: 'error' }); return; }
+    if (!asPatrol && !reg && !unk.checked) { F('registration').focus(); toast(esc(t('err.registration_required')), { type: 'error' }); return; }
     const data = {};
     for (const k of ['registration', 'aircraft', 'aircraft_icao', 'owner', 'airline_icao', 'msn', 'manufacturer', 'airport', 'date', 'livery', 'flight_type', 'description', 'camera', 'lens', 'focal', 'aperture', 'iso', 'shutter', 'icao24', 'lat', 'lng', 'test_registration']) data[k] = F(k).value.trim();
     data.unknown_registration = unk.checked;
@@ -363,10 +384,12 @@ export async function render(root, params, query) {
     data.favorite = F('favorite').checked;
     data.rating = rating || null;
     data.tags = picker.value();
-    const members = [...patRows.children].map((r) => ({ registration: r.querySelector('[data-pr]').value.trim(), unknown_registration: r.querySelector('[data-pu]').checked }))
+    if (asPatrol) data.patrol = { simple: true, name: F('patrol_sname').value.trim(), size: F('patrol_size').value.trim() };
+    const members = asPatrol ? [] : [...patRows.children].map((r) => ({ registration: r.querySelector('[data-pr]').value.trim(), unknown_registration: r.querySelector('[data-pu]').checked }))
       .filter((m) => m.registration || m.unknown_registration);
-    const patName = F('patrol_name').value.trim();
-    if (editing && s.patrol && F('patrol_leave')?.checked) data.patrol = null;
+    const patName = F('patrol_name')?.value.trim() || '';
+    if (asPatrol) { /* déjà renseigné */ }
+    else if (editing && s.patrol && F('patrol_leave')?.checked) data.patrol = null;
     else if (members.length || patName || (editing && s.patrol)) data.patrol = { name: patName, members };
     if (removeImage) data.remove_image = true;
     if (removeAudio) data.remove_audio = true;

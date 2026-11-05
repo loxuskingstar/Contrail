@@ -200,7 +200,7 @@ def metrics() -> dict[str, float]:
     m["oddities"] = sum(cls_count.get(k, 0) for k in ("glider", "balloon", "drone"))
 
     # Alphabet : dernières lettres d'immatriculation différentes (A à Z)
-    m["alphabet"] = len({(r["registration"] or "")[-1:] for r in q("SELECT DISTINCT registration FROM spotting WHERE known(registration) IS NOT NULL")} &
+    m["alphabet"] = len({(r["registration"] or "")[-1:] for r in q("SELECT DISTINCT registration FROM spotting WHERE known(registration) IS NOT NULL AND is_patrol = 0")} &
                         set("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
 
     # Aéroports : pays et étendue géographique

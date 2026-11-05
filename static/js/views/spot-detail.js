@@ -3,7 +3,7 @@ import { api, mediaUrl } from '../api.js';
 import { store, navigate } from '../app.js';
 import { t, fmtDate, fmtNum, countryName, flag } from '../i18n.js';
 import { icon } from '../lib/icons.js';
-import { esc, regText, badgeHtml, tagChips, lightbox, menu, confirmDialog, toast, errorToast } from '../ui.js';
+import { esc, regText, regLabel, badgeHtml, tagChips, lightbox, menu, confirmDialog, toast, errorToast } from '../ui.js';
 
 const WX_ICON = { clear: 'sun', partly_cloudy: 'cloud-sun', cloudy: 'cloud', overcast: 'cloud', rain: 'cloud-rain', drizzle: 'cloud-rain', snow: 'cloud-snow', thunderstorm: 'cloud-lightning', fog: 'cloud-fog', mist: 'cloud-fog', haze: 'cloud-fog' };
 
@@ -37,7 +37,7 @@ export async function render(root, params) {
       <div class="nav-btns">${s.prev_id ? `<a class="btn-icon" href="#/spots/${s.prev_id}" title="${esc(t('spot.newer'))}">${icon('chevron-left')}</a>` : ''}${s.next_id ? `<a class="btn-icon" href="#/spots/${s.next_id}" title="${esc(t('spot.older'))}">${icon('chevron-right')}</a>` : ''}</div></div>` : ''}
     <header class="page-head" style="${s.image ? 'padding-top:20px' : ''}">
       <div class="grow" style="min-width:0">
-        <div class="row" style="gap:12px"><h1 class="reg-title">${esc(regText(s.registration))}</h1><span class="flag" style="font-size:30px" title="${esc(countryName(s.country))}">${flag(s.country)}</span></div>
+        <div class="row" style="gap:12px"><h1 class="reg-title">${esc(regLabel(s))}</h1><span class="flag" style="font-size:30px" title="${esc(countryName(s.country))}">${flag(s.country)}</span></div>
         <div class="sub" style="font-size:17px;color:var(--text-2)">${esc(s.aircraft || s.aircraft_icao || t('spot.unknown_aircraft'))}${s.owner ? ` · <b>${esc(s.owner)}</b>` : ''}</div>
         <div class="sub">${icon('map-pin', '', 15)} ${esc(ap ? `${ap.name} (${ap.icao})` : s.airport || s.place || '—')} · ${icon('calendar', '', 15)} ${fmtDate(s.date)}</div>
       </div>
@@ -50,6 +50,7 @@ export async function render(root, params) {
     </header>
     ${s.badges.length || s.tags.length ? `<div class="chips" style="margin:-8px 0 16px">${s.badges.map((b) => badgeHtml(b)).join('')}${tagChips(s.tags)}</div>` : ''}
 
+    ${s.is_patrol && s.patrol_size ? `<div class="card row" style="margin-bottom:14px">${icon('users', '', 22)}<b>${esc(t('patrol.n_aircraft', { n: s.patrol_size }))}</b></div>` : ''}
     ${s.patrol ? `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('users', '', 18)} ${esc(s.patrol.name || t('patrol.title'))}<a href="#/spots?patrol=${s.patrol.id}">${esc(t('patrol.view_all', { n: s.patrol.members.length }))} →</a></div>
       <div class="row wrap" style="gap:8px">${s.patrol.members.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}
     ${s.flights.length ? `<a class="card row" style="margin-bottom:14px;background:rgb(139 92 246 / .1)" href="#/airframe/${encodeURIComponent(s.registration)}">${icon('ticket', '', 26)}

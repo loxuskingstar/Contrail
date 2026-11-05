@@ -1259,5 +1259,14 @@
 "patrol.unknown": "不明",
 "patrol.hint": "各機は同じ写真・日時・場所を持つ独立したスポットになります（統計にも数えられます）。写真に写っていて識別できなかった機体は「不明」にチェックし、後で補完できます。",
 "patrol.leave": "この機体を編隊から外す",
-"patrol.view_all": "全{n}機を見る"
+"patrol.view_all": "全{n}機を見る",
+"settings.patrol_mode": "編隊",
+"settings.patrol_simple": "シンプルモード",
+"settings.patrol_detailed": "詳細モード",
+"settings.patrol_mode_hint": "シンプル：編隊を1つのスポットとして扱い、登録記号の代わりに編隊名を使います。詳細：同じ写真で1機ごとにスポットを作り、各登録記号を追跡します。",
+"patrol.simple_toggle": "この写真は編隊です（スポット1件）",
+"patrol.size": "機数",
+"patrol.simple_hint": "編隊名が登録記号の代わりになり、1機として数えられ、出現はその名前の下に蓄積されます。",
+"patrol.n_aircraft": "{n}機",
+"err.patrol_name_required": "編隊名を入力してください。"
 }

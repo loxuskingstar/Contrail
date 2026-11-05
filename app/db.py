@@ -266,7 +266,13 @@ ALTER TABLE spotting ADD COLUMN patrol_id INTEGER REFERENCES patrols(id_patrol) 
 CREATE INDEX IF NOT EXISTS idx_spot_patrol ON spotting(patrol_id);
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7]
+SCHEMA_V8 = """
+-- Patrouille « mode simple » : un seul spot pour toute la patrouille ; l'immatriculation est la clé tirée de son nom
+ALTER TABLE spotting ADD COLUMN is_patrol INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE spotting ADD COLUMN patrol_size INTEGER;
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8]
 
 
 def init_db() -> None:

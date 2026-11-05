@@ -825,3 +825,32 @@ def test_patrol_import_export_roundtrip(client):
     assert a["place"] == "Plage de Biscarrosse" and a["patrol_id"] == b["patrol_id"] != c["patrol_id"]     # une patrouille par jour
     out = client.get("/api/export/spots.csv").text
     assert "patrol" in out.splitlines()[0] and "Patrouille Test" in out and "Plage de Biscarrosse" in out
+
+
+def test_simple_patrol_is_one_spot(client):
+    def post(d):
+        return client.post("/api/spots", data={"data": json.dumps(d)}, files={"image": ("p.jpg", jpeg_bytes((200, 30, 30)), "image/jpeg")})
+    assert client.get("/api/settings").json()["patrol_mode"] == "simple"          # mode par défaut
+    assert post({"patrol": {"simple": True, "name": " "}, "aircraft": "Alpha Jet"}).status_code == 422
+    base = client.get("/api/stats").json()["totals"]
+    r = post({"aircraft": "Dassault Alpha Jet", "aircraft_icao": "ALPH", "airport": "LFBO", "date": "2026-09-01T10:00",
+              "patrol": {"simple": True, "name": "Patrouille de France", "size": 8}})
+    assert r.status_code == 200, r.text
+    s = r.json()["spot"]
+    assert s["registration"] == "PATROUILLE-DE-FRANCE" and s["is_patrol"] == 1 and s["patrol_size"] == 8 and s["country"] is None
+    assert s["patrol_name"] == "Patrouille de France" and s["patrol"] is None
+    t = client.get("/api/stats").json()["totals"]
+    assert t["spots"] == base["spots"] + 1 and t["registrations"] == base["registrations"] + 1       # un spot, un « avion »
+    # même patrouille un autre jour : même clé, deux spots, toujours un seul « avion »
+    s2 = post({"airport": "LFBO", "date": "2026-09-02T10:00", "patrol": {"simple": True, "name": "patrouille de france"}}).json()["spot"]
+    assert s2["registration"] == s["registration"]
+    assert client.get("/api/stats").json()["totals"]["registrations"] == base["registrations"] + 1
+    assert post({"airport": "LFBO", "date": "2026-09-02T12:00", "patrol": {"simple": True, "name": "Patrouille de France"}}).status_code == 409
+    # renommer et changer l'effectif
+    up = client.put(f"/api/spots/{s['id_spotting']}", data={"data": json.dumps({"registration": "x", "patrol": {"name": "PAF", "size": 7}})}).json()["spot"]
+    assert up["registration"] == "PAF" and up["patrol_size"] == 7 and up["patrol_name"] == "PAF" and up["is_patrol"] == 1
+    # supprimer garde la patrouille propre : plus aucune ligne orpheline
+    client.delete(f"/api/spots/{s['id_spotting']}")
+    client.delete(f"/api/spots/{s2['id_spotting']}")
+    from app.core import q as _q
+    assert not _q("SELECT 1 FROM patrols p WHERE NOT EXISTS (SELECT 1 FROM spotting s WHERE s.patrol_id = p.id_patrol)")

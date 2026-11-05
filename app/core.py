@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-APP_VERSION = "1.9.0"
+APP_VERSION = "1.10.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -238,6 +238,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "units": "metric",             # metric | imperial (distances vols)
     "home_airports": [],           # ex. ["LFBO"]
     "default_airport": "",
+    "patrol_mode": "simple",       # simple : une patrouille = un spot (nommé) | detailed : un spot par avion
     "dashboard_widgets": [
         "hero", "quick", "goals", "recent", "on_this_day", "top_types",
         "achievements", "month_chart", "watchlist",

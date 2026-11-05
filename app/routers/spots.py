@@ -124,7 +124,7 @@ def decorate(rows: list[dict], ctx: dict | None = None) -> list[dict]:
 LIST_COLS = ("s.id_spotting, s.registration, s.aircraft, s.aircraft_icao, s.owner, s.airline_icao, s.livery, "
              "s.livery_category, s.military, s.flight_type, s.date, s.airport, s.thumb, s.image, s.image_w, "
              "s.image_h, s.atc_audio, s.country, s.favorite, s.rating, s.sun_elevation, s.msn, s.camera, s.lens, "
-             "s.description, s.lat, s.lng, s.location_id, s.place, s.test_registration, s.patrol_id, "
+             "s.description, s.lat, s.lng, s.location_id, s.place, s.test_registration, s.patrol_id, s.is_patrol, s.patrol_size, "
              "(SELECT name FROM patrols WHERE id_patrol = s.patrol_id) AS patrol_name")
 
 
@@ -325,7 +325,8 @@ def get_spot(spot_id: int, sort: str = "date_desc"):
     s["airport_info"] = geo.airport(s["airport"])
     s["location"] = q1("SELECT * FROM spot_locations WHERE id_location = ?", (s["location_id"],)) if s["location_id"] else None
     s["flights"] = collection.crossref_for_spot(s["registration"])
-    s["patrol"] = patrol_of(s)
+    s["patrol"] = None if s.get("is_patrol") else patrol_of(s)
+    s["patrol_name"] = (q1("SELECT name FROM patrols WHERE id_patrol = ?", (s["patrol_id"],)) or {}).get("name") if s.get("patrol_id") else None
     ids = airframes.group(s["registration"])
     s["encounters"] = q1(f"SELECT COUNT(*) n FROM spotting WHERE registration IN ({','.join('?' * len(ids))})", ids)["n"]
     s["aliases"] = [i for i in ids if i != s["registration"]]
@@ -527,11 +528,25 @@ def _prepare_members(base: dict, members: list | None) -> list[dict]:
 
 
 def _gc_patrols() -> None:
-    """Une patrouille qui n'a plus qu'un avion (ou aucun) n'existe plus."""
+    """Une patrouille sans spot disparaît ; en mode détaillé, avec un seul avion restant, elle se dissout.
+    Une patrouille « mode simple » (un seul spot, is_patrol) reste telle quelle."""
     for r in q("SELECT p.id_patrol FROM patrols p LEFT JOIN spotting s ON s.patrol_id = p.id_patrol "
-               "GROUP BY p.id_patrol HAVING COUNT(s.id_spotting) < 2"):
+               "GROUP BY p.id_patrol HAVING COUNT(s.id_spotting) < 2 AND COALESCE(SUM(s.is_patrol), 0) = 0"):
         execute("UPDATE spotting SET patrol_id = NULL WHERE patrol_id = ?", (r["id_patrol"],))
         execute("DELETE FROM patrols WHERE id_patrol = ?", (r["id_patrol"],))
+
+
+def patrol_key(name: str) -> str:
+    """Clé d'immatriculation d'une patrouille « mode simple » : son nom en majuscules, espaces → tirets."""
+    return re.sub(r"[\s_]+", "-", name.strip().upper())[:60]
+
+
+def _simple_size(info: dict) -> int | None:
+    try:
+        n = int(info.get("size"))
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
 
 
 def _free_files(s: dict) -> None:
@@ -588,15 +603,22 @@ def create_spot(
         exist = q1("SELECT id_spotting FROM spotting WHERE draft_uuid = ?", (payload["draft_uuid"],))
         if exist:
             return {"spot": get_spot(exist["id_spotting"]), "already_synced": True, "crossref": [], "achievements": []}
+    patrol_in = payload.get("patrol") if isinstance(payload.get("patrol"), dict) else None
+    simple = bool(patrol_in and patrol_in.get("simple"))
+    if simple:
+        if not (patrol_in.get("name") or "").strip():
+            raise HTTPException(422, "patrol_name_required")
+        payload["registration"] = patrol_key(patrol_in["name"])      # la patrouille tient lieu d'immatriculation
     out: dict = {}
     _apply_image(out, image, payload)
     merged_input = {**payload, **{k: v for k, v in out.items() if k in EDITABLE and not payload.get(k)}}
     if not merged_input.get("airport") and not merged_input.get("place") and get_settings().get("default_airport"):
         merged_input["airport"] = get_settings()["default_airport"]
     out.update(prepare(merged_input))
-    patrol_in = payload.get("patrol") if isinstance(payload.get("patrol"), dict) else None
     member_rows: list[dict] = []
-    if patrol_in:
+    if simple:
+        out.update({"country": None, "is_patrol": 1, "patrol_size": _simple_size(patrol_in)})
+    elif patrol_in:
         if out.get("military") is None:
             out["military"] = 1 if regs.looks_military(out.get("owner"), out.get("aircraft")) else 0
         try:
@@ -644,6 +666,17 @@ def update_spot(
     if not existing:
         raise HTTPException(404, "not_found")
     payload = json.loads(data or "{}")
+    if existing.get("is_patrol"):
+        # Patrouille « mode simple » : l'immatriculation est la clé tirée de son nom
+        payload.pop("registration", None)
+        payload.pop("unknown_registration", None)
+        info = payload.get("patrol") if isinstance(payload.get("patrol"), dict) else {}
+        if payload.get("patrol", 0) is None:
+            payload.pop("patrol")
+        elif (info.get("name") or "").strip():
+            payload["registration"] = patrol_key(info["name"])
+        elif "name" in info:
+            raise HTTPException(422, "patrol_name_required")
     out: dict = {}
     drop_old: tuple | None = None
     if image and image.filename:
@@ -663,6 +696,10 @@ def update_spot(
         media.delete_audio(existing.get("atc_audio"))
         out["atc_audio"] = None
     out.update(prepare({**{k: v for k, v in out.items() if k in EDITABLE}, **payload}, existing))
+    if existing.get("is_patrol"):
+        out["country"] = None
+        if isinstance(payload.get("patrol"), dict) and "size" in payload["patrol"]:
+            out["patrol_size"] = _simple_size(payload["patrol"])
     out["updated_at"] = now_iso()
     sets = ", ".join(f"{k} = ?" for k in out)
     patrol_in = payload.get("patrol") if isinstance(payload.get("patrol"), dict) else None
