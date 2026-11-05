@@ -70,7 +70,8 @@ export async function render(root, params, query) {
       <details class="card fold" ${s.livery || s.description || s.flight_type || s.location_id ? 'open' : ''}>
         <summary>${icon('sliders-horizontal', '', 18)} ${esc(t('spot.more_details'))} ${icon('chevron-down', 'chev', 18)}</summary>
         <div class="fold-body stack">
-          <label class="field"><span>${esc(t('spot.livery'))}</span><input name="livery" value="${esc(s.livery && s.livery !== 'None' ? s.livery : '')}" placeholder="${esc(t('spot.livery_ph'))}"></label>
+          <label class="field"><span>${esc(t('spot.livery'))}</span><input name="livery" value="${esc(s.livery && s.livery !== 'None' ? s.livery : '')}" placeholder="${esc(t('spot.livery_ph'))}">
+            <span class="row" style="gap:6px;margin-top:6px"><button type="button" class="chip" data-primer style="height:28px;font-size:12.5px">${icon('paint-bucket', '', 14)} ${esc(t('livery.primer_chip'))}</button></span></label>
           <div class="field-row">
             <label class="field"><span>${esc(t('spot.flight_type'))}</span><select name="flight_type"><option value="">—</option>${FLIGHT_TYPES.map((f) => `<option value="${f}" ${s.flight_type === f ? 'selected' : ''}>${esc(t(`ftype.${f}`))}</option>`).join('')}</select></label>
             ${locations.length ? `<label class="field"><span>${esc(t('spot.location'))}</span><select name="location_id"><option value="">—</option>${locations.map((l) => `<option value="${l.id_location}" ${s.location_id === l.id_location ? 'selected' : ''}>${esc(l.name)}${l.airport ? ` (${esc(l.airport)})` : ''}</option>`).join('')}</select></label>` : ''}
@@ -223,6 +224,10 @@ export async function render(root, params, query) {
   }
   F('registration').addEventListener('blur', () => lookup());
   F('registration').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lookup(true); } });
+  const PRIMER = /\bprimers?\b|appr[eê]ts?\b|non\s?peint|unpainted|bare\s?metal|sin\s?pintar|未塗装|プライマー/i;
+  const primerFlight = () => { if (PRIMER.test(F('livery').value) && !F('flight_type').value) F('flight_type').value = 'test'; };   // « Vol d'essai »
+  F('livery').addEventListener('input', primerFlight);
+  form.querySelector('[data-primer]')?.addEventListener('click', () => { F('livery').value = 'Primer'; primerFlight(); });
   F('registration').addEventListener('input', (e) => { const p = e.target.selectionStart; e.target.value = e.target.value.toUpperCase(); e.target.setSelectionRange(p, p); });
   root.querySelector('[data-lookup]').onclick = () => lookup(true);
 

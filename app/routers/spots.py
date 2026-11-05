@@ -73,7 +73,7 @@ def build_filters(f: dict) -> tuple[str, list]:
         where.append("s.date <= ?")
         params.append(f["date_to"] + "T23:59")
     if f.get("special"):
-        where.append("s.livery_category IS NOT NULL")
+        where.append("s.livery_category IS NOT NULL AND s.livery_category <> 'primer'")
     if f.get("military") is not None and f.get("military") != "":
         where.append("s.military = ?")
         params.append(int(f["military"]))
@@ -180,7 +180,7 @@ def spots_map(
         if r["date"]:
             p["last"] = max(p["last"] or r["date"], r["date"])
             p["first"] = min(p["first"] or r["date"], r["date"])
-        p["special"] += 1 if r["livery_category"] else 0
+        p["special"] += 1 if r["livery_category"] not in (None, "primer") else 0
         p["military"] += 1 if r["military"] else 0
         tkey = r["aircraft_icao"] or r["aircraft"]
         if tkey:
@@ -191,7 +191,7 @@ def spots_map(
             a = p["_regs"][r["registration"]] = {
                 "registration": r["registration"], "id_spotting": r["id_spotting"], "aircraft": r["aircraft"],
                 "aircraft_icao": r["aircraft_icao"], "owner": r["owner"], "date": r["date"], "thumb": r["thumb"],
-                "n": 0, "special": bool(r["livery_category"]), "favorite": False}
+                "n": 0, "special": r["livery_category"] not in (None, "primer"), "favorite": False}
         a["n"] += 1
         a["thumb"] = a["thumb"] or r["thumb"]
         a["favorite"] = a["favorite"] or bool(r["favorite"])
@@ -316,6 +316,9 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
         out["msn"] = str(out["msn"])
     if "livery" in out:
         out["livery_category"] = collection.livery_category(out["livery"])
+        # Un avion en primer est un avion d'essai : le type de vol « Vol d'essai » est proposé s'il n'est pas renseigné
+        if out["livery_category"] == "primer" and not (out.get("flight_type") or (existing or {}).get("flight_type")):
+            out["flight_type"] = "test"
     merged = {**(existing or {}), **out}
     # Coordonnées : point de vue choisi > GPS EXIF > (affichage : aéroport)
     if out.get("location_id"):

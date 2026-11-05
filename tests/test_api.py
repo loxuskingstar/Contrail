@@ -435,3 +435,34 @@ def test_wishlist_family_livery_airline_and_reminders(client):
     assert wishes.reminders() >= 1 and wishes.reminders() == 0      # un seul rappel par échéance
     n = client.get("/api/notifications").json()["items"]
     assert any(i["kind"] == "wishlist" for i in n)
+
+
+def test_primer_livery_is_separate_from_special_liveries(client):
+    from app.core import execute
+    from app.services import collection
+    base = client.get("/api/stats").json()["totals"]["special_liveries"]
+    data = {"registration": "F-WZZZ", "aircraft": "Airbus A350-1000", "aircraft_icao": "A35K", "livery": "Primer",
+            "flight_type": "test", "date": "2026-06-01T10:00"}
+    r = client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")}).json()
+    sid = r["spot"]["id_spotting"]
+    assert r["spot"]["livery_category"] == "primer"
+    assert any(b["code"] == "primer" for b in client.get(f"/api/spots/{sid}").json()["badges"])
+    assert not any(b["code"] == "special_livery" for b in client.get(f"/api/spots/{sid}").json()["badges"])
+    assert client.get("/api/stats").json()["totals"]["special_liveries"] == base      # pas compté comme livrée spéciale
+    groups = {g["category"]: g for g in client.get("/api/liveries").json()}
+    assert groups["primer"]["unique"] >= 1
+    assert sid not in {s["id_spotting"] for s in client.get("/api/spots", params={"special": "true"}).json()["items"]}
+    assert sid in {s["id_spotting"] for s in client.get("/api/spots", params={"livery_category": "primer"}).json()["items"]}
+    # un ancien spot « Primer » rangé en livrée spéciale est reclassé au démarrage
+    execute("UPDATE spotting SET livery_category = 'special' WHERE id_spotting = ?", (sid,))
+    assert collection.recategorize() >= 1
+    assert client.get(f"/api/spots/{sid}").json()["livery_category"] == "primer"
+
+
+def test_primer_defaults_flight_type_to_test(client):
+    data = {"registration": "F-WZZY", "aircraft": "Airbus A220-300", "aircraft_icao": "BCS3", "livery": "Primer", "date": "2026-06-02T10:00"}
+    s = client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")}).json()["spot"]
+    assert s["flight_type"] == "test"
+    data.update(registration="F-WZZX", flight_type="delivery")       # une valeur saisie n'est jamais écrasée
+    s = client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")}).json()["spot"]
+    assert s["flight_type"] == "delivery"
