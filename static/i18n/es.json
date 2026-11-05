@@ -1444,5 +1444,12 @@
 "spots.scope_title": "Lugar mostrado",
 "spots.scope_hint": "Al abrir la lista solo se muestran los spots del aeropuerto o lugar elegido. Los spots sin aeropuerto ni lugar solo aparecen en «Todos los lugares».",
 "patrol.country": "País de la patrulla",
-"spots.f_unknown": "Matrícula por completar"
+"spots.f_unknown": "Matrícula por completar",
+"ach.current_value": "Valor actual",
+"ach.levels_done": "{n}/{total} niveles alcanzados",
+"ach.step_done": "Alcanzado",
+"ach.step_next": "Siguiente nivel",
+"ach.step_first": "Primer nivel",
+"ach.step_todo": "Próximo",
+"ach.remaining": "Faltan {n}"
 }

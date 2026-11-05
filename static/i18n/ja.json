@@ -1273,5 +1273,12 @@
 "spots.scope_title": "表示する場所",
 "spots.scope_hint": "一覧を開くと、選んだ空港または場所のスポットだけが表示されます。空港も場所もないスポットは「すべての場所」でのみ表示されます。",
 "patrol.country": "編隊の国",
-"spots.f_unknown": "登録記号が未入力"
+"spots.f_unknown": "登録記号が未入力",
+"ach.current_value": "現在の値",
+"ach.levels_done": "{n}/{total} 段階達成",
+"ach.step_done": "達成済み",
+"ach.step_next": "次の段階",
+"ach.step_first": "最初の段階",
+"ach.step_todo": "今後",
+"ach.remaining": "あと{n}"
 }

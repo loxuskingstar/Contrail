@@ -1444,5 +1444,12 @@
 "spots.scope_title": "Lieu affiché",
 "spots.scope_hint": "À l'ouverture de la liste, seuls les spots de l'aéroport ou du lieu choisi s'affichent. Les spots sans aéroport ni lieu n'apparaissent que sous « Tous les lieux ».",
 "patrol.country": "Pays de la patrouille",
-"spots.f_unknown": "Immatriculation à compléter"
+"spots.f_unknown": "Immatriculation à compléter",
+"ach.current_value": "Valeur actuelle",
+"ach.levels_done": "{n}/{total} paliers atteints",
+"ach.step_done": "Atteint",
+"ach.step_next": "Prochain palier",
+"ach.step_first": "Premier palier",
+"ach.step_todo": "À venir",
+"ach.remaining": "Encore {n}"
 }

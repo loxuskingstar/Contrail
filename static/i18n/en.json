@@ -1444,5 +1444,12 @@
 "spots.scope_title": "Place shown",
 "spots.scope_hint": "When you open the list, only spots from the chosen airport or place are shown. Spots with no airport or place only appear under “All places”.",
 "patrol.country": "Formation's country",
-"spots.f_unknown": "Registration to fill in"
+"spots.f_unknown": "Registration to fill in",
+"ach.current_value": "Current value",
+"ach.levels_done": "{n}/{total} levels reached",
+"ach.step_done": "Reached",
+"ach.step_next": "Next level",
+"ach.step_first": "First level",
+"ach.step_todo": "Upcoming",
+"ach.remaining": "{n} to go"
 }
