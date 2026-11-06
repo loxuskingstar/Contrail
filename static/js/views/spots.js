@@ -7,7 +7,7 @@ import { esc, sheet, spotRow, spotTile, emptyState, confirmDialog, toast, errorT
 
 const PAGE = 60;
 const SCOPE_KEY = 'contrail.spotsScope';
-const FILTER_KEYS = ['search', 'tag', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'sort'];
+const FILTER_KEYS = ['search', 'tag', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'sort'];
 
 export async function render(root, _p, query) {
   const filters = Object.fromEntries(FILTER_KEYS.filter((k) => query[k] !== undefined && query[k] !== '').map((k) => [k, query[k]]));
@@ -89,6 +89,7 @@ export async function render(root, _p, query) {
       if (k === 'tag') label = store.tags?.find((x) => String(x.id_tag) === String(v))?.name || v;
       if (k === 'country') label = `${flag(v)} ${countryName(v)}`;
       if (['special', 'favorite', 'has_photo', 'has_audio', 'unknown', 'rare'].includes(k)) label = t(`spots.f_${k}`);
+      if (k === 'rarity') label = t(`rarity.n.${v}`);
       if (k === 'military') label = v === '1' ? t('spot.military') : t('spots.civil');
       if (k === 'flight_type') label = t(`ftype.${v}`);
       if (k === 'livery_category') label = t(`livery.${v}`);
@@ -386,10 +387,13 @@ async function openFilters(filters, onApply) {
       </div>
       <div class="field-row">
         <label class="field"><span>${esc(t('spots.military_filter'))}</span><select data-k="military"><option value="">${esc(t('common.all'))}</option><option value="0" ${f.military === '0' ? 'selected' : ''}>${esc(t('spots.civil'))}</option><option value="1" ${f.military === '1' ? 'selected' : ''}>${esc(t('spot.military'))}</option></select></label>
+        <label class="field"><span>${esc(t('rarity.title'))}</span><select data-k="rarity"><option value="">${esc(t('common.all'))}</option>${['legendary', 'epic', 'rare', 'uncommon', 'common'].map((v) => `<option value="${v}" ${f.rarity === v ? 'selected' : ''}>${esc(t(`rarity.n.${v}`))}</option>`).join('')}</select></label>
+      </div>
+      <div class="field-row">
         <label class="field"><span>${esc(t('spots.sort'))}</span><select data-k="sort">${['date_desc', 'date_asc', 'created', 'registration', 'type'].map((v) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${esc(t(`sort.${v}`))}</option>`).join('')}</select></label>
       </div>
       <div class="card" style="padding:4px 14px">
-        ${['favorite', 'special', 'rare', 'has_photo', 'has_audio', 'unknown'].map((k) => `<label class="toggle-row"><span class="t">${esc(t(`spots.f_${k}`))}</span><span class="switch"><input type="checkbox" data-b="${k}" ${f[k] ? 'checked' : ''}><span></span></span></label>`).join('')}
+        ${['favorite', 'special', 'has_photo', 'has_audio', 'unknown'].map((k) => `<label class="toggle-row"><span class="t">${esc(t(`spots.f_${k}`))}</span><span class="switch"><input type="checkbox" data-b="${k}" ${f[k] ? 'checked' : ''}><span></span></span></label>`).join('')}
       </div>
       <div class="row" style="justify-content:space-between"><button class="btn ghost" data-reset>${esc(t('spots.clear_filters'))}</button><button class="btn primary" data-apply>${esc(t('common.apply'))}</button></div>
     </div>` });

@@ -1110,8 +1110,8 @@ def test_patrol_country_and_unknown_filter(client):
 
 def test_rarity_badge_and_filter(client, monkeypatch):
     from app.services import collection, refdb
-    monkeypatch.setattr(refdb, "type_counts", lambda: {"A388": 12, "A320": 9000})
-    assert collection.rarity_tier(12) == "legendary" and collection.rarity_tier(9000) is None
+    monkeypatch.setattr(refdb, "type_counts", lambda: {"A388": 12, "A320": 40000})
+    assert [collection.rarity_tier(n) for n in (12, 100, 1000, 9000, 40000)] == ["legendary", "epic", "rare", "uncommon", "common"]
     client.post("/api/spots", data={"data": json.dumps({"registration": "F-HRAR", "aircraft_icao": "A388", "airport": "LFPG"})})
     client.post("/api/spots", data={"data": json.dumps({"registration": "F-HCOM", "aircraft_icao": "A320", "airport": "LFPG"})})
     got = client.get("/api/spots?rare=1").json()
@@ -1119,6 +1119,9 @@ def test_rarity_badge_and_filter(client, monkeypatch):
     assert "F-HRAR" in regs and "F-HCOM" not in regs
     mine = next(s for s in got["items"] if s["registration"] == "F-HRAR")
     assert any(b["code"] == "rarity" and b["tier"] == "legendary" for b in mine["badges"])
+    com = client.get("/api/spots?rarity=common").json()["items"]
+    assert any(x["registration"] == "F-HCOM" for x in com) and all(x["registration"] != "F-HRAR" for x in com)
+    assert any(b["code"] == "rarity" and b["tier"] == "common" for b in next(x for x in com if x["registration"] == "F-HCOM")["badges"])
 
 
 def test_photo_export_has_iptc_and_xmp(client):

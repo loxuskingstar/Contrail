@@ -83,8 +83,8 @@ def build_filters(f: dict) -> tuple[str, list]:
     if f.get("military") is not None and f.get("military") != "":
         where.append("s.military = ?")
         params.append(int(f["military"]))
-    if f.get("rare"):
-        rt = collection.rare_types()
+    if f.get("rare") or f.get("rarity"):
+        rt = collection.rare_types((f["rarity"],) if f.get("rarity") else None)
         where.append(f"s.aircraft_icao IN ({','.join('?' * len(rt)) or 'NULL'})")
         params += rt
     if f.get("favorite"):
@@ -147,7 +147,7 @@ def list_spots(
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
-    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False, outing: int | None = None, rare: bool = False,
+    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False, outing: int | None = None, rare: bool = False, rarity: str = "",
     sort: str = "date_desc", limit: int = Query(60, le=500), offset: int = 0,
 ):
     f = dict(locals())

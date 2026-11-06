@@ -242,12 +242,15 @@ const BADGE_STYLE = {
   flown: ['violet', 'ticket'], military: ['slate', 'shield'], night: ['night', 'moon'], golden_hour: ['gold', 'sunset'], rarity: ['rose', 'gem'],
 };
 
+const RARITY_CLS = { legendary: 'gold', epic: 'violet', rare: 'rose', uncommon: 'green', common: 'slate' };
+
 export function badgeHtml(b, { withIcon = true } = {}) {
   const [cls, ic] = BADGE_STYLE[b.code] || ['slate', 'tag'];
   let label = t(`badge.${b.code}`, b.n ? { n: b.n } : undefined);
-  if (b.code === 'rarity') label = t(`rarity.${b.tier}`, { n: b.n });
+  let cls2;
+  if (b.code === 'rarity') { label = t(`rarity.${b.tier}`, { n: b.n.toLocaleString() }); cls2 = RARITY_CLS[b.tier]; }
   if (b.code === 'special_livery' && b.cat && b.cat !== 'special') label = t(`livery.${b.cat}`);
-  return `<span class="badge ${cls}">${withIcon ? icon(ic, '', 12) : ''}${esc(label)}</span>`;
+  return `<span class="badge ${cls2 || cls}">${withIcon ? icon(ic, '', 12) : ''}${esc(label)}</span>`;
 }
 
 export function badgesHtml(list = [], max = 4) {

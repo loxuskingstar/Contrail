@@ -9,6 +9,9 @@ export async function render(root) {
   try { items = (await api('/api/airport-pages')).items; } catch (e) { errorToast(e); }
   if (!items.length) { root.innerHTML = pageHead(esc(t('airport.title'))) + `<div class="card">${emptyState('map-pin', t('airport.empty'), t('airport.empty_text'))}</div>`; return; }
   root.innerHTML = `${pageHead(esc(t('airport.title')), { sub: esc(t('airport.count', { n: items.length, nf: fmtNum(items.length) })) })}
+    <div class="grid kpis" style="margin-bottom:14px">${[['map-pin', items.length, t('nav.airports')], ['globe', new Set(items.map((a) => a.country).filter(Boolean)).size, t('airport.countries')],
+      ['camera', items.reduce((s, a) => s + a.n, 0), t('outing.k_spots')], ['trophy', items[0].icao, t('airport.most')]].map(([ic, v, l]) => `<div class="card kpi">${icon(ic)}<div class="v">${typeof v === 'number' ? fmtNum(v) : esc(v)}</div><div class="l">${esc(l)}</div></div>`).join('')}</div>
+    <div class="card flush" style="margin-bottom:14px"><div class="map" style="height:340px;border-radius:0" data-map></div></div>
     <div class="search" style="margin-bottom:12px">${icon('search', '', 18)}<input class="input" type="search" data-q placeholder="${esc(t('airport.search_ph'))}" autocomplete="off"></div>
     <div class="card" style="padding:6px" data-list></div>`;
   const list = root.querySelector('[data-list]');
@@ -23,4 +26,10 @@ export async function render(root) {
   };
   draw();
   root.querySelector('[data-q]').addEventListener('input', debounce((e) => draw(e.target.value), 150));
+  import('../lib/map.js').then(async ({ createMap }) => {
+    const m = await createMap(root.querySelector('[data-map]'));
+    const pts = items.filter((a) => a.lat != null);
+    pts.forEach((a) => m.marker([a.lat, a.lng], { label: String(a.n), title: `${a.icao} · ${a.name || ''}`, onClick: () => { location.hash = `#/airports/${a.icao}`; } }));
+    m.fit(pts.map((a) => [a.lat, a.lng]), { maxZoom: 9 });
+  }).catch(() => {});
 }

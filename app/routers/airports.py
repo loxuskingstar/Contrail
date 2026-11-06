@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from ..core import memo, q, q1
-from ..services import collection, geo
+from ..services import collection, geo, refdb
 from .spots import LIST_COLS, decorate
 
 router = APIRouter(prefix="/api/airport-pages", tags=["airports"])
@@ -43,9 +43,24 @@ def _detail(icao: str):
                          "GROUP BY k ORDER BY k")
     st["by_month"] = [{"m": int(r["m"]), "n": r["n"]} for r in tops(
         "SELECT substr(date, 6, 2) m, COUNT(*) n FROM spotting WHERE airport = ? AND date IS NOT NULL GROUP BY m ORDER BY m")]
+    st["top_regs"] = tops("SELECT registration, COALESCE(aircraft_icao, aircraft) type, COUNT(*) n FROM spotting WHERE airport = ? "
+                          "AND registration NOT LIKE 'SANS-IMMAT-%' GROUP BY registration ORDER BY n DESC, registration LIMIT 6")
+    best = q1("SELECT o.id_outing id, o.day, o.name, COUNT(*) n FROM outings o JOIN spotting s ON s.outing_id = o.id_outing "
+              "WHERE o.airport = ? GROUP BY o.id_outing ORDER BY n DESC, o.day DESC LIMIT 1", (icao,))
+    st["best_outing"] = best
+    tc = refdb.type_counts()
+    seen = {r["t"]: r["n"] for r in q("SELECT aircraft_icao t, COUNT(*) n FROM spotting WHERE airport = ? AND aircraft_icao IS NOT NULL "
+                                      "GROUP BY aircraft_icao", (icao,))}
+    tiers: dict[str, int] = {}
+    for t_, n_ in seen.items():
+        tier = collection.rarity_tier(tc.get(t_))
+        if tier:
+            tiers[tier] = tiers.get(tier, 0) + 1
+    st["rarity"] = tiers
+    st["rare_types"] = sorted(((t_, tc[t_]) for t_ in seen if collection.rarity_tier(tc.get(t_)) in collection.RARE_TIERS), key=lambda x: x[1])[:6]
     st["first_regs"] = tops("SELECT registration, COALESCE(aircraft_icao, aircraft) type, MIN(date) d FROM spotting WHERE airport = ? "
                             "GROUP BY registration ORDER BY d DESC LIMIT 6")
-    st["locations"] = q("SELECT l.id_location id, l.name, l.view_bearing, l.best_time, (SELECT COUNT(*) FROM spotting s "
+    st["locations"] = q("SELECT l.id_location id, l.name, l.lat, l.lng, l.view_bearing, l.best_time, (SELECT COUNT(*) FROM spotting s "
                         "WHERE s.location_id = l.id_location) n FROM spot_locations l WHERE l.airport = ? ORDER BY n DESC, l.name", (icao,))
     st["outings"] = q("SELECT o.id_outing id, o.day, o.name, COUNT(s.id_spotting) n FROM outings o "
                       "JOIN spotting s ON s.outing_id = o.id_outing WHERE o.airport = ? GROUP BY o.id_outing "
@@ -64,4 +79,5 @@ def get_airport(code: str):
     if d is None and not a:
         raise HTTPException(404, "Aéroport inconnu")
     return {"icao": icao, "info": a, **(d or {"n": 0, "regs": 0, "types": 0, "top_types": [], "top_airlines": [], "by_year": [],
-                                              "by_month": [], "first_regs": [], "locations": [], "outings": [], "n_outings": 0, "recent": []})}
+                                              "by_month": [], "first_regs": [], "locations": [], "outings": [], "n_outings": 0, "recent": [], "top_regs": [], "best_outing": None,
+                                              "rarity": {}, "rare_types": []})}

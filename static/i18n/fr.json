@@ -1561,5 +1561,19 @@
 "export.photos_filtered": "Exporter les photos (JPEG + métadonnées)",
 "export.meta_d": "Les photos exportées embarquent légende, mots-clés, lieu, date et GPS (IPTC et XMP), lisibles par Lightroom, Photos ou Bridge.",
 "export.photographer": "Auteur de la photo",
-"export.copyright": "Mention de copyright"
+"export.copyright": "Mention de copyright",
+"rarity.title": "Rareté du type",
+"rarity.n.legendary": "Exceptionnel",
+"rarity.n.epic": "Très rare",
+"rarity.n.rare": "Rare",
+"rarity.n.uncommon": "Peu commun",
+"rarity.n.common": "Commun",
+"rarity.uncommon": "Peu commun (≈{n} exemplaires)",
+"rarity.common": "Commun (≈{n} exemplaires)",
+"airport.countries": "Pays",
+"airport.most": "Le plus visité",
+"airport.elev": "Altitude {n} ft ({m} m)",
+"airport.record": "Sortie record",
+"airport.top_regs": "Avions les plus revus ici",
+"airport.rare_seen": "Types rares vus ici"
 }

@@ -46,6 +46,7 @@ const NAV = [
   { href: '#/', icon: 'house', key: 'nav.home', match: /^$/ },
   { href: '#/spots', icon: 'camera', key: 'nav.spots', match: /^spots/ },
   { href: '#/outings', icon: 'calendar-days', key: 'nav.outings', match: /^outings/ },
+  { href: '#/airports', icon: 'map-pin', key: 'nav.airports', match: /^airports/ },
   { href: '#/flights', icon: 'ticket', key: 'nav.flights', match: /^flights/, mod: 'flights' },
   { href: '#/fleets', icon: 'building-2', key: 'nav.fleets', match: /^(fleets|liveries)/, mod: 'fleets' },
   { href: '#/stats', icon: 'chart-column', key: 'nav.stats', match: /^stats/ },

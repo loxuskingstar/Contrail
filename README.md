@@ -87,8 +87,8 @@
 
 ### Nouveautés de la version 3.0
 - **Sorties de spotting** : les spots d'un même jour et d'un même site (aéroport ou lieu libre) sont regroupés automatiquement en une sortie, avec chiffres clés (spots, avions, types, nouveaux avions, livrées spéciales…), METAR, chronologie, nom et notes modifiables, navigation de sortie en sortie. Les spots existants sont rattachés à la migration.
-- **Rareté** : avec la base de référence importée, chaque type reçoit un palier d'après le nombre d'exemplaires connus (rare, très rare, exceptionnel) : badge sur les spots et filtre « Types rares ».
-- **Page par aéroport** (Plus › Aéroports) : fréquentation, saisonnalité, types et compagnies les plus vus, points de vue, sorties, derniers spots.
+- **Rareté** : avec la base de référence importée, chaque type reçoit un palier d'après le nombre d'exemplaires connus (exceptionnel ≤ 25, très rare ≤ 250, rare ≤ 2 000, peu commun ≤ 10 000, commun au-delà) : badge sur les spots et filtre « Rareté du type ».
+- **Aéroports** (onglet du menu) : carte de tous vos aéroports, puis fiche par aéroport avec carte et points de vue, heure locale, altitude, sortie record, avions les plus revus, types rares vus, fréquentation, saisonnalité, types et compagnies les plus vus, points de vue, sorties, derniers spots.
 - **Métadonnées IPTC/XMP à l'export** : photo seule (menu de la fiche), sélection multiple ou liste filtrée en archive .zip. Légende, titre, mots-clés (immatriculation, type, compagnie, aéroport, livrée, étiquettes), lieu, date, GPS, auteur et copyright (Réglages › Données). Si l'original est conservé et en JPEG, il n'est pas ré-encodé.
 - **Corbeille** : suppressions (spots, vols, groupes) réversibles pendant 30 jours (réglable), restauration complète (étiquettes, patrouille), fichiers conservés jusqu'à la purge, bouton « Annuler » après chaque suppression.
 - **Photos HEIC/HEIF** (iPhone) acceptées à l'import, converties en WebP, aperçu JPEG généré par le serveur pour les navigateurs qui ne les lisent pas.

@@ -1390,5 +1390,19 @@
 "export.photos_filtered": "写真を書き出す（JPEG＋メタデータ）",
 "export.meta_d": "書き出した写真にはキャプション・キーワード・場所・日付・GPS（IPTC/XMP）が埋め込まれ、Lightroom・写真・Bridge で読めます。",
 "export.photographer": "撮影者",
-"export.copyright": "著作権表示"
+"export.copyright": "著作権表示",
+"rarity.title": "機種の希少度",
+"rarity.n.legendary": "極めて希少",
+"rarity.n.epic": "非常に希少",
+"rarity.n.rare": "希少",
+"rarity.n.uncommon": "やや普通",
+"rarity.n.common": "普通",
+"rarity.uncommon": "やや普通（約{n}機）",
+"rarity.common": "普通（約{n}機）",
+"airport.countries": "国",
+"airport.most": "最多訪問",
+"airport.elev": "標高 {n} ft（{m} m）",
+"airport.record": "最多スポットの遠征",
+"airport.top_regs": "ここでよく見る機体",
+"airport.rare_seen": "ここで見た希少機種"
 }
