@@ -462,7 +462,10 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
             old = (existing or {}).get("registration")
             reg = old if regs.is_unknown(old) else regs.new_unknown()
         out["registration"] = reg
-        out["country"] = regs.country_of(reg)
+        out["country"] = regs.country_for(reg, merged.get("owner"))
+    elif "owner" in out and not (existing or {}).get("country"):
+        # exploitant renseigné après coup (série militaire type QA400) : le pays se déduit de lui
+        out["country"] = regs.country_for((existing or {}).get("registration"), out.get("owner"))
     if "airport" in out or "place" in out:
         out["airport"], out["place"] = _split_place(out.get("airport"), out.get("place"))
     if "aircraft_icao" in out and out["aircraft_icao"]:

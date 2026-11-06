@@ -164,3 +164,70 @@ MILITARY_HINTS = re.compile(
 
 def looks_military(*values: str | None) -> bool:
     return any(v and MILITARY_HINTS.search(v) for v in values)
+
+
+# --------------------------------------------------------------------------- #
+# Pays déduit de l'exploitant, pour les « immatriculations » qui n'en sont pas (numéros de série militaires : QA400, 31+05…)
+# --------------------------------------------------------------------------- #
+_ALIASES = {
+    # forces armées et services d'État sans nom de pays dans leur intitulé
+    "FR": ("armee de l'air", "armee de l air", "marine nationale", "aeronavale", "gendarmerie nationale", "securite civile", "alat", "french", "francais"),
+    "DE": ("luftwaffe", "bundeswehr", "marineflieger", "german", "allemand", "deutsche"),
+    "GB": ("royal air force", "royal navy", "fleet air arm", "army air corps", "british", "britannique"),
+    "US": ("usaf", "us air force", "us navy", "us army", "usmc", "united states", "american", "americain", "uscg"),
+    "IT": ("aeronautica militare", "esercito", "marina militare", "guardia di finanza", "italian", "italien"),
+    "ES": ("ejercito del aire", "fuerza aerea espanola", "armada espanola", "spanish", "espagnol", "guardia civil"),
+    "PT": ("forca aerea portuguesa", "portuguese", "portugais"),
+    "NL": ("koninklijke luchtmacht", "dutch", "neerlandais", "royal netherlands"),
+    "BE": ("belgian", "belge", "composante air"),
+    "CH": ("swiss", "suisse", "schweizer luftwaffe"),
+    "CA": ("rcaf", "canadian", "canadien", "forces canadiennes"),
+    "PL": ("polish", "polonais"), "GR": ("hellenic", "greek", "grec"), "TR": ("turkish", "turc"),
+    "RU": ("russian", "russe", "voenno"), "CN": ("chinese", "chinois", "plaaf"), "JP": ("japanese", "japonais", "jasdf", "jmsdf"),
+    "IN": ("indian", "indien"), "BR": ("brazilian", "bresilien"), "AU": ("australian", "australien", "raaf"),
+    "SA": ("saudi", "saoudien"), "AE": ("emirates air force", "emirati"), "QA": ("qatari",), "EG": ("egyptian", "egyptien"),
+    "MA": ("moroccan", "marocain"), "SE": ("swedish", "suedois"), "NO": ("norwegian", "norvegien"), "DK": ("danish", "danois"),
+    "FI": ("finnish", "finlandais"), "AT": ("austrian", "autrichien"), "CZ": ("czech", "tcheque"), "RO": ("romanian", "roumain"),
+    "HU": ("hungarian", "hongrois"), "IE": ("irish", "irlandais"), "UA": ("ukrainian", "ukrainien"), "IL": ("israeli", "israelien"),
+    "KR": ("korean", "coreen", "rokaf"), "SG": ("singaporean", "singapourien", "rsaf"), "TH": ("thai", "thailandais"),
+}
+
+
+def _fold(s: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", s.lower()) if unicodedata.category(c) != "Mn")
+
+
+_NAMES: list[tuple[re.Pattern, str]] | None = None
+
+
+def _name_patterns() -> list[tuple[re.Pattern, str]]:
+    global _NAMES
+    if _NAMES is None:
+        import json
+        from pathlib import Path
+        pairs: dict[str, str] = {}
+        f = Path(__file__).resolve().parents[2] / "static" / "data" / "country_names.json"
+        if f.is_file():
+            pairs.update(json.loads(f.read_text(encoding="utf-8")))
+        for code, words in _ALIASES.items():
+            pairs.update({w: code for w in words})
+        # le plus long d'abord : « equatorial guinea » avant « guinea », « south africa » avant « africa »
+        _NAMES = [(re.compile(rf"(?<![a-z]){re.escape(k)}(?![a-z])"), v) for k, v in sorted(pairs.items(), key=lambda kv: -len(kv[0]))]
+    return _NAMES
+
+
+def country_from_operator(owner: str | None) -> str | None:
+    """Pays d'après l'exploitant (« Qatar Emiri Air Force » → QA, « Armée de l'Air » → FR) ; None si rien de reconnu."""
+    if not owner or len(owner.strip()) < 3:
+        return None
+    text = _fold(owner)
+    for pat, code in _name_patterns():
+        if pat.search(text):
+            return code
+    return None
+
+
+def country_for(reg: str | None, owner: str | None = None) -> str | None:
+    """Pays d'immatriculation, à défaut celui de l'exploitant (avions militaires, numéros de série)."""
+    return country_of(reg) or (country_from_operator(owner) if not is_unknown(reg) else None)

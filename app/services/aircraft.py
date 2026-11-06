@@ -255,13 +255,15 @@ def lookup(reg_in: str, refresh: bool = False) -> dict:
             pass
         if remote:
             remote["registration"] = reg
-            remote["country"] = regs.country_of(reg)
+            remote["country"] = regs.country_for(reg, remote.get("owner"))
             _store(reg, remote, "+".join(used))
             for k, v in remote.items():
                 if v not in (None, "") and not result.get(k):
                     result[k] = v
             sources.extend(used)
 
+    if not result.get("country"):
+        result["country"] = regs.country_for(reg, result.get("owner"))
     if "military" not in result:
         result["military"] = 1 if regs.looks_military(result.get("owner"), result.get("aircraft")) else 0
     result["sources"] = sources

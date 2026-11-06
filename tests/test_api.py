@@ -1258,3 +1258,20 @@ def test_editing_common_info_updates_other_aircraft_of_the_photo(client):
     assert sec["airport"] == "LFPG" and sec["date"].startswith("2045-02-03T09:30") and sec["description"] == "Deux avions" and sec["rating"] == 4
     assert sec["aircraft_icao"] == "B738" and sec["registration"] == "F-HSY2"      # l'identité de l'avion ne bouge pas
     assert sec["outing"]["day"] == "2045-02-03"
+
+
+def test_country_from_operator_for_military_serial(client):
+    from app.services import registration as regs
+    assert regs.country_of("QA400") is None
+    assert regs.country_for("QA400", "Qatar Emiri Air Force") == "QA"
+    assert regs.country_for("31+05", "Luftwaffe") == "DE"
+    assert regs.country_for("F-GXLN", "Airbus") == regs.country_of("F-GXLN") == "FR"
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "QA400", "owner": "Qatar Emiri Air Force", "date": "2046-03-04"})})
+    assert r.status_code in (200, 201), r.text
+    sid = r.json()["spot"]["id_spotting"]
+    assert client.get(f"/api/spots/{sid}").json()["country"] == "QA"
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "ZZ9901", "date": "2046-03-05"})})
+    sid2 = r.json()["spot"]["id_spotting"]
+    assert client.get(f"/api/spots/{sid2}").json()["country"] in (None, "")
+    client.put(f"/api/spots/{sid2}", data={"data": json.dumps({"owner": "Armée de l'Air"})})
+    assert client.get(f"/api/spots/{sid2}").json()["country"] == "FR"
