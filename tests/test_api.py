@@ -361,15 +361,6 @@ def test_subsidiary_not_merged_with_parent_airline(client):
     from app.services import operators
     operators.reset_cache()
     groups = {g["key"]: g for g in client.get("/api/fleets").json()}
-<<<<<<< HEAD
-    assert groups["AFR"]["regs"] == 2 and groups["Hop!"]["regs"] == 1
-    airlines = {a["v"]: a["n"] for a in client.get("/api/spots/facets").json()["airlines"]}
-    assert airlines["AFR"] == 2 and airlines["Hop!"] == 1
-    assert len(client.get("/api/spots", params={"airline": "Hop!"}).json()["items"]) == 1
-    assert len(client.get("/api/spots", params={"airline": "AFR"}).json()["items"]) == 2
-    top = {a["k"]: a["n"] for a in client.get("/api/stats").json()["top_airlines"]}
-    assert top["AFR"] == 2 and top["Hop!"] == 1
-=======
     # AFR = les 2 spots codés AFR + le spot « Air France » saisi sans code (rattaché à AFR par son nom)
     assert groups["AFR"]["regs"] == 3 and groups["Hop!"]["regs"] == 1
     airlines = {a["v"]: a["n"] for a in client.get("/api/spots/facets").json()["airlines"]}
@@ -378,7 +369,6 @@ def test_subsidiary_not_merged_with_parent_airline(client):
     assert len(client.get("/api/spots", params={"airline": "AFR"}).json()["items"]) == 3
     top = {a["k"]: a["n"] for a in client.get("/api/stats").json()["top_airlines"]}
     assert top["AFR"] == 3 and top["Hop!"] == 1
->>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
 
 
 def test_polluted_registered_name_does_not_merge_subsidiary(client):
@@ -388,11 +378,6 @@ def test_polluted_registered_name_does_not_merge_subsidiary(client):
     execute("INSERT INTO airlines(key, icao, name) VALUES('AFR','AFR','Hop!') ON CONFLICT(key) DO UPDATE SET name='Hop!'")
     operators.reset_cache()
     groups = {g["key"]: g for g in client.get("/api/fleets").json()}
-<<<<<<< HEAD
-    assert groups["AFR"]["regs"] == 2 and groups["Hop!"]["regs"] == 1
-    d = client.get("/api/fleets-reference/AFR").json()
-    assert d["used"] == ["air france"]
-=======
     assert groups["AFR"]["regs"] == 3 and groups["Hop!"]["regs"] == 1
     d = client.get("/api/fleets-reference/AFR").json()
     assert d["used"] == ["air france"]
@@ -902,4 +887,3 @@ def test_patrol_country_and_unknown_filter(client):
     u = post({"unknown_registration": True, "aircraft": "Rafale", "airport": "LFBO", "date": "2026-10-11T10:00"}).json()["spot"]
     got = client.get("/api/spots", params={"unknown": True, "limit": 500}).json()["items"]
     assert u["id_spotting"] in {i["id_spotting"] for i in got} and all(i["registration"].startswith("SANS-IMMAT-") for i in got)
->>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
