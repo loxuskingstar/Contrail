@@ -1696,5 +1696,13 @@
 "err.invalid_airfield_code": "Invalid code (2–10 letters, digits or hyphens)",
 "err.airfield_name_required": "Name is required",
 "err.invalid_airfield": "Invalid position or type",
-"err.airfield_exists": "This code already exists in your list"
+"err.airfield_exists": "This code already exists in your list",
+"fleet.rarity_title": "Rarity: worldwide fleet sizes",
+"fleet.rarity_d": "Rarity is computed from the number of aircraft that exist for the type. The reference database (ADS-B) sometimes counts wrongly: re-registered airframes twice, military aircraft missing. Enter the right figure to correct it; leave empty to keep the value in use (grey).",
+"fleet.db_count": "{n} in the database",
+"fleet.db_none": "not in the database",
+"fleet.src_user": "set by you",
+"fleet.src_curated": "corrected figure",
+"fleet.src_db": "reference database",
+"fleet.none": "No type in your collection yet."
 }

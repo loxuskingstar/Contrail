@@ -1525,5 +1525,13 @@
 "err.invalid_airfield_code": "無効なコード（英数字とハイフン、2〜10文字）",
 "err.airfield_name_required": "名称は必須です",
 "err.invalid_airfield": "位置または種類が無効です",
-"err.airfield_exists": "このコードは既に登録されています"
+"err.airfield_exists": "このコードは既に登録されています",
+"fleet.rarity_title": "希少度：世界の機数",
+"fleet.rarity_d": "希少度は、その機種が現存する機数から計算されます。参照データベース（ADS-B）は、再登録機の重複や軍用機の欠落などで誤ることがあります。正しい機数を入力すると修正され、空欄なら現在の値（グレー）を使います。",
+"fleet.db_count": "データベース {n} 機",
+"fleet.db_none": "データベースに無し",
+"fleet.src_user": "手動設定",
+"fleet.src_curated": "補正済み",
+"fleet.src_db": "参照データベース",
+"fleet.none": "コレクションに機種がまだありません。"
 }

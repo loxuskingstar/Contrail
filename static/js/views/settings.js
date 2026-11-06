@@ -122,6 +122,7 @@ export async function render(root, params) {
         ${field('airlabs_api_key', 'AirLabs API key', `<a href="https://airlabs.co/signup" target="_blank" rel="noopener">airlabs.co</a> — ${esc(t('settings.airlabs_hint'))}`)}
         ${field('aviationstack_api_key', 'Aviationstack API key', `<a href="https://aviationstack.com/signup/free" target="_blank" rel="noopener">aviationstack.com</a> — ${esc(t('settings.experimental'))}`)}
       </div>
+      <div class="card stack" data-fleet><div class="card-title">${icon('gem', '', 15)} ${esc(t('fleet.rarity_title'))}</div><div class="skeleton" style="height:80px"></div></div>
       <div class="card stack" data-refdb><div class="card-title">${icon('database', '', 15)} ${esc(t('refdb.title'))}</div><div class="skeleton" style="height:80px"></div></div>
       <div class="card stack"><div class="card-title">OpenSky Network</div>
         <p class="small muted">${esc(t('settings.opensky_d'))}</p>
@@ -143,6 +144,7 @@ export async function render(root, params) {
     };
     body.querySelector('[data-perm]')?.addEventListener('click', () => Notification.requestPermission().then(() => render(root, params)));
     refdbCard(body.querySelector('[data-refdb]'));
+    fleetCard(body.querySelector('[data-fleet]'));
   }
 
   if (section === 'data') {
@@ -431,4 +433,28 @@ async function remoteBackupCard(box) {
     };
   };
   draw();
+}
+
+
+// ------------------------------------------------------------------ effectifs mondiaux (rareté)
+async function fleetCard(box) {
+  const SRC = { user: 'fleet.src_user', curated: 'fleet.src_curated', db: 'fleet.src_db' };
+  try {
+    const { items, overrides } = await api('/api/refdb/fleet');
+    box.innerHTML = `<div class="card-title">${icon('gem', '', 15)} ${esc(t('fleet.rarity_title'))}</div>
+      <p class="small muted">${esc(t('fleet.rarity_d'))}</p>
+      ${items.length ? `<div class="stack" style="gap:6px;max-height:420px;overflow:auto">${items.map((x) => `<div class="row" style="gap:8px;align-items:center">
+        <span class="mono" style="min-width:48px"><b>${esc(x.type)}</b></span>
+        <span class="grow ellipsis small">${esc(x.name || '')}<span class="tiny muted" style="display:block">${esc(x.db != null ? t('fleet.db_count', { n: fmtNum(x.db) }) : t('fleet.db_none'))}${x.source ? ' · ' + esc(t(SRC[x.source])) : ''}</span></span>
+        <input class="input" style="width:96px;text-align:right" inputmode="numeric" data-t="${esc(x.type)}" value="${esc(overrides[x.type] ?? '')}" placeholder="${x.count ?? '—'}" aria-label="${esc(x.type)}"></div>`).join('')}</div>
+        <div class="row" style="justify-content:flex-end"><button class="btn primary" data-save>${esc(t('common.save'))}</button></div>`
+        : `<p class="small muted">${esc(t('fleet.none'))}</p>`}`;
+    box.querySelector('[data-save]')?.addEventListener('click', async () => {
+      const shown = new Set(items.map((x) => x.type));
+      const next = Object.fromEntries(Object.entries(overrides).filter(([k]) => !shown.has(k)));   // les types hors collection restent
+      box.querySelectorAll('[data-t]').forEach((i) => { const n = parseInt(i.value, 10); if (n > 0) next[i.dataset.t] = n; });
+      try { await api('/api/settings', { method: 'PUT', body: { fleet_overrides: next } }); toast(esc(t('common.saved')), { type: 'success' }); fleetCard(box); }
+      catch (e) { errorToast(e); }
+    });
+  } catch { box.innerHTML = ''; }
 }

@@ -1330,3 +1330,17 @@ def test_custom_airfield(client):
     assert client.put("/api/airport-pages/custom/ZZHEL1", json={**body, "name": "Autre nom"}).json()["name"] == "Autre nom"
     assert client.delete("/api/airport-pages/custom/ZZHEL1").status_code == 200
     assert geo.airport("ZZHEL1") is None
+
+
+def test_fleet_overrides_correct_rarity(client):
+    from app.services import refdb
+    base = refdb.type_counts()
+    assert base["A337"] == 6 and base["RFAL"] >= 250          # table d'effectifs corrigés, même sans base de référence
+    r = client.put("/api/settings", json={"fleet_overrides": {"zz9z": 7}})
+    assert r.status_code == 200
+    assert refdb.type_counts()["ZZ9Z"] == 7
+    client.put("/api/settings", json={"fleet_overrides": {"A337": 5}})
+    assert refdb.type_counts()["A337"] == 5                   # ta valeur l'emporte sur la table
+    client.put("/api/settings", json={"fleet_overrides": {}})
+    assert refdb.type_counts()["A337"] == 6
+    assert "items" in client.get("/api/refdb/fleet").json()

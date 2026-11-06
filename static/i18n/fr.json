@@ -1696,5 +1696,13 @@
 "err.invalid_airfield_code": "Code invalide (2 à 10 lettres, chiffres ou tirets)",
 "err.airfield_name_required": "Le nom est obligatoire",
 "err.invalid_airfield": "Position ou type invalide",
-"err.airfield_exists": "Ce code existe déjà dans ta liste"
+"err.airfield_exists": "Ce code existe déjà dans ta liste",
+"fleet.rarity_title": "Rareté : effectifs mondiaux",
+"fleet.rarity_d": "La rareté se calcule sur le nombre d'appareils existants du type. La base de référence (ADS-B) compte parfois mal : doublons d'appareils rematriculés, militaires absents. Saisis ici le bon effectif pour corriger ; laisse vide pour garder la valeur retenue (en gris).",
+"fleet.db_count": "{n} dans la base",
+"fleet.db_none": "absent de la base",
+"fleet.src_user": "corrigé par toi",
+"fleet.src_curated": "effectif corrigé",
+"fleet.src_db": "base de référence",
+"fleet.none": "Aucun type dans ta collection pour l'instant."
 }

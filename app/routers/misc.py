@@ -236,6 +236,22 @@ class RefdbDownload(BaseModel):
     source: str = "tar1090"
 
 
+@router.get("/api/refdb/fleet")
+def refdb_fleet():
+    """Types de ta collection avec leur effectif mondial : base ADS-B, valeur retenue et origine (base, table corrigée, toi)."""
+    from ..services import refdb
+    raw, eff, over = refdb.raw_type_counts(), refdb.type_counts(), refdb._user_overrides()  # noqa: SLF001
+    cur = refdb._curated()  # noqa: SLF001
+    rows = q("SELECT aircraft_icao t, MAX(aircraft) name, COUNT(*) n FROM spotting WHERE aircraft_icao IS NOT NULL "
+             "GROUP BY aircraft_icao ORDER BY n DESC")
+    out = []
+    for r in rows:
+        t = r["t"]
+        src = "user" if t in over else ("curated" if t in cur else ("db" if t in raw else None))
+        out.append({"type": t, "name": r["name"], "spots": r["n"], "db": raw.get(t), "count": eff.get(t), "source": src})
+    return {"items": out, "overrides": over}
+
+
 @router.post("/api/refdb/download")
 def refdb_download(body: RefdbDownload | None = None):
     from ..services import refdb
