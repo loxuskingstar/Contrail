@@ -13,7 +13,7 @@
 
 1. [Fonctionnalités](#fonctionnalités)
 2. [Installation avec Docker (recommandé)](#installation-avec-docker-recommandé)
-3. [Installation sans Docker](#installation-sans-docker)
+3. [Installation sans Docker](#installation-sans-docker) — dont le [lanceur](#avec-le-lanceur-en-ligne) et l'[installation hors ligne](#installation-hors-ligne-sans-internet-sur-la-machine-cible)
 4. [Configuration des API](#configuration-des-api)
 5. [Accès mobile, HTTPS et PWA](#accès-mobile-https-et-pwa)
 6. [Données, migration et sauvegardes](#données-migration-et-sauvegardes) — dont la [session de test](#session-de-test)
@@ -111,17 +111,112 @@ L'image installe Tesseract : l'OCR fonctionne sans configuration.
 
 ## Installation sans Docker
 
-Prérequis : Python 3.11+ et, pour l'OCR, Tesseract (`apt install tesseract-ocr`, `brew install tesseract` ou l'installateur Windows).
+Deux voies, sans Docker : l'**installeur** prêt à l'emploi (Windows, macOS, Linux — voir [`desktop/README.md`](desktop/README.md)) ou le **lanceur** `desktop/launcher.py` depuis les sources, décrit ci-dessous. Le lanceur démarre le serveur, ouvre le navigateur, place une icône dans la zone de notification et range les données dans le dossier propre à chaque système.
+
+Prérequis : **Python 3.11 ou plus récent** (testé en 3.11 et 3.13) et, pour l'OCR seulement, Tesseract (`apt install tesseract-ocr`, `brew install tesseract`, installateur Windows). Sans Tesseract, tout fonctionne sauf la lecture automatique de l'immatriculation.
+
+### Avec le lanceur (en ligne)
+
+À exécuter à la racine du projet. Sous Windows, utilisez PowerShell ; si l'activation du venv est bloquée, lancez une fois `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+**Linux**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt pystray
+python desktop/launcher.py
+```
+
+**macOS**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt pystray
+python desktop/launcher.py
+```
+
+**Windows (PowerShell)**
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt pystray
+python desktop\launcher.py
+```
+
+`pystray` est facultatif : sans lui, le lanceur fonctionne sans icône de notification (`--no-tray`). Linux peut demander `sudo apt install python3-venv python3-tk` si le venv ou la boîte d'erreur échouent. L'application s'ouvre sur `http://localhost:8765` (un autre port libre est choisi si celui-ci est pris).
+
+### Installation hors ligne (sans Internet sur la machine cible)
+
+Le principe : télécharger les paquets Python (« wheels ») sur une machine connectée, copier le dossier avec le projet, puis installer sans réseau. **La machine de préparation doit avoir le même système, la même architecture et la même version mineure de Python (3.11, 3.12, 3.13…) que la machine cible**, sinon pip ne trouve pas les bons binaires (Pillow, pydantic, uvloop…).
+
+*1. Sur la machine connectée* — depuis la racine du projet :
+
+**Linux / macOS**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install --upgrade pip
+pip download -r requirements.txt pystray -d wheels
+```
+
+**Windows (PowerShell)**
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip download -r requirements.txt pystray -d wheels
+```
+
+Copiez ensuite le projet complet, **dossier `wheels/` compris** (clé USB, disque externe), sur la machine cible. Ne copiez pas le `.venv` : il n'est pas portable.
+
+*2. Sur la machine hors ligne* — dans le dossier copié :
+
+**Linux**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install --no-index --find-links wheels -r requirements.txt pystray
+python desktop/launcher.py
+```
+
+**macOS**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install --no-index --find-links wheels -r requirements.txt pystray
+python desktop/launcher.py
+```
+
+**Windows (PowerShell)**
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install --no-index --find-links wheels -r requirements.txt pystray
+python desktop\launcher.py
+```
+
+Contrail ne demande plus Internet pour fonctionner : la base d'aéroports (`airportsdata`) et les fuseaux horaires (`tzdata`) sont embarqués dans les paquets. Seuls les services externes optionnels (fonds de carte, géocodage des villes, API de vol, météo) exigent une connexion ; hors ligne, le carnet, les photos, les statistiques et les succès restent pleinement utilisables. Pour une machine sans Python du tout, utilisez plutôt l'installeur de bureau, qui embarque son propre interpréteur.
+
+### Options du lanceur
+
+| Option | Effet |
+|---|---|
+| `--port 9000` | Port d'écoute (8765 par défaut ; variable `CONTRAIL_PORT`) |
+| `--data-dir CHEMIN` | Dossier de données (photos, base) |
+| `--lan` | Écoute sur le réseau local, pour l'ouvrir depuis un téléphone |
+| `--no-browser` | N'ouvre pas le navigateur |
+| `--no-tray` | Pas d'icône de notification |
+| `--console` | Journal dans le terminal (diagnostic) |
+| `--stop` | Arrête l'instance en cours |
+
+Exemples : `python desktop/launcher.py --lan --no-browser` (Linux/macOS) ; `python desktop\launcher.py --data-dir D:\Contrail --port 9000` (Windows). Le journal et les éventuels plantages sont écrits dans `contrail.log` et `contrail-crash.log`, dans le dossier de données.
+
+Dossier de données par défaut : Windows `%APPDATA%\Contrail` · macOS `~/Library/Application Support/Contrail` · Linux `~/.local/share/contrail`.
+
+### Avec uvicorn (serveur seul, sans lanceur)
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate      # Windows : .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Les données sont écrites dans `./data` (modifiable avec la variable `CONTRAIL_DATA_DIR`). Sans Tesseract, tout fonctionne sauf la lecture automatique de l'immatriculation.
-
-Pour découvrir l'interface avec des données fictives : `python scripts/seed_demo.py --url http://localhost:8000` sur une instance vide.
+Les données sont alors écrites dans `./data` (modifiable avec `CONTRAIL_DATA_DIR`). Pour découvrir l'interface avec des données fictives : `python scripts/seed_demo.py --url http://localhost:8000` sur une instance vide.
 
 ## Configuration des API
 

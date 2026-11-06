@@ -37,6 +37,9 @@ Par défaut, seul l'ordinateur y accède. Lancez le raccourci **« Contrail (acc
 ou `Contrail --lan` : l'adresse réseau s'affiche dans le menu de l'icône (`http://192.168.x.x:8765`). Téléphone et ordinateur doivent être sur le même Wi-Fi ;
 Windows demandera d'autoriser Contrail dans le pare-feu. À n'utiliser que sur un réseau de confiance (domicile) : sans mot de passe, toute personne du réseau peut ouvrir Contrail.
 
+## Sans installeur : lanceur depuis les sources, y compris hors ligne
+Si vous préférez ne pas utiliser l'installeur (ou si votre système n'est pas couvert), `python desktop/launcher.py` (Windows : `py desktop\launcher.py`) lance Contrail depuis les sources. La procédure complète, avec la préparation des paquets pour une machine sans Internet (`pip download … -d wheels` puis `pip install --no-index --find-links wheels …`) en syntaxe Linux, macOS et Windows, est dans le [README principal](../README.md#installation-sans-docker).
+
 ## Limites par rapport à la version Docker
 - Une instance par ordinateur : pour un accès permanent depuis plusieurs appareils, un petit serveur / NAS avec Docker reste préférable.
 - La lecture automatique des immatriculations sur photo (OCR) demande Tesseract, non fourni ; le reste fonctionne sans.
