@@ -1661,5 +1661,12 @@
 "multi.sync_hint": {
 "one": "Date, place, photo, tags, rating and camera settings are also applied to the other aircraft in this photo.",
 "other": "Date, place, photo, tags, rating and camera settings are also applied to the {n} other aircraft in this photo."
-}
+},
+"ftype.museum": "Museum / collection",
+"ftype.display": "On display (monument, gate guardian)",
+"ftype.storage": "Storage / long-term parking",
+"ftype.maintenance": "Maintenance / hangar",
+"ftype.scrapyard": "Scrapping / boneyard",
+"ftype.g_flight": "Flying / in service",
+"ftype.g_static": "Static aircraft"
 }

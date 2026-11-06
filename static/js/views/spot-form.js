@@ -7,7 +7,8 @@ import { airportInput, tagPicker, rememberAirport } from '../lib/fields.js';
 import { esc, toast, errorToast, confirmDialog, stars, bindStars, pageHead, debounce, regText } from '../ui.js';
 import { saveDraft, uuid } from '../offline.js';
 
-const FLIGHT_TYPES = ['commercial', 'cargo', 'test', 'delivery', 'ferry', 'military', 'business', 'general', 'helicopter', 'medical', 'training', 'airshow', 'government', 'other'];
+const FLIGHT_TYPES = ['commercial', 'cargo', 'test', 'delivery', 'ferry', 'military', 'business', 'general', 'helicopter', 'medical', 'training', 'airshow', 'government', 'museum', 'display', 'storage', 'maintenance', 'scrapyard', 'other'];
+const STATIC_TYPES = ['museum', 'display', 'storage', 'maintenance', 'scrapyard'];
 
 function nowLocal() {
   const d = new Date();
@@ -127,7 +128,7 @@ export async function render(root, params, query) {
           <label class="field"><span>${esc(t('spot.livery'))}</span><input name="livery" value="${esc(s.livery && s.livery !== 'None' ? s.livery : '')}" placeholder="${esc(t('spot.livery_ph'))}">
             <span class="row" style="gap:6px;margin-top:6px"><button type="button" class="chip" data-primer style="height:28px;font-size:12.5px">${icon('paint-bucket', '', 14)} ${esc(t('livery.primer_chip'))}</button><button type="button" class="chip" data-white style="height:28px;font-size:12.5px">${icon('paint-bucket', '', 14)} ${esc(t('livery.white_chip'))}</button></span></label>
           <div class="field-row">
-            <label class="field"><span>${esc(t('spot.flight_type'))}</span><select name="flight_type"><option value="">—</option>${FLIGHT_TYPES.map((f) => `<option value="${f}" ${s.flight_type === f ? 'selected' : ''}>${esc(t(`ftype.${f}`))}</option>`).join('')}</select></label>
+            <label class="field"><span>${esc(t('spot.flight_type'))}</span><select name="flight_type"><option value="">—</option>${(() => { const o = (f) => `<option value="${f}" ${s.flight_type === f ? 'selected' : ''}>${esc(t(`ftype.${f}`))}</option>`; const fly = FLIGHT_TYPES.filter((f) => !STATIC_TYPES.includes(f)); return `<optgroup label="${esc(t('ftype.g_flight'))}">${fly.filter((f) => f !== 'other').map(o).join('')}</optgroup><optgroup label="${esc(t('ftype.g_static'))}">${STATIC_TYPES.map(o).join('')}</optgroup>${o('other')}`; })()}</select></label>
             ${locations.length ? `<label class="field"><span>${esc(t('spot.location'))}</span><select name="location_id">${locOptions(locations, s.airport, s.location_id)}</select></label>` : ''}
           </div>
           <label class="field optional"><span>${esc(t('spot.test_registration'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>

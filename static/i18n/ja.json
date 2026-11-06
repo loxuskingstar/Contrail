@@ -1490,5 +1490,12 @@
 "multi.sync_hint": {
 "one": "日時・場所・写真・タグ・評価・撮影設定は、この写真のもう1機にも反映されます。",
 "other": "日時・場所・写真・タグ・評価・撮影設定は、この写真の他の {n} 機にも反映されます。"
-}
+},
+"ftype.museum": "博物館・コレクション",
+"ftype.display": "展示（モニュメント・ゲートガーディアン）",
+"ftype.storage": "保管・長期駐機",
+"ftype.maintenance": "整備・格納庫",
+"ftype.scrapyard": "解体・航空機墓場",
+"ftype.g_flight": "飛行・運航中",
+"ftype.g_static": "静態機"
 }

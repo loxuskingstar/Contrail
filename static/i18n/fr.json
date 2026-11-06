@@ -1661,5 +1661,12 @@
 "multi.sync_hint": {
 "one": "Date, lieu, photo, étiquettes, note et réglages de prise de vue sont aussi appliqués à l'autre avion de cette photo.",
 "other": "Date, lieu, photo, étiquettes, note et réglages de prise de vue sont aussi appliqués aux {n} autres avions de cette photo."
-}
+},
+"ftype.museum": "Musée / collection",
+"ftype.display": "Exposé (monument, gate guardian)",
+"ftype.storage": "Stockage / parking longue durée",
+"ftype.maintenance": "Maintenance / hangar",
+"ftype.scrapyard": "Démantèlement / cimetière d'avions",
+"ftype.g_flight": "En vol / en service",
+"ftype.g_static": "Avion statique"
 }

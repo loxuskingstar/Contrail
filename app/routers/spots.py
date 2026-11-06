@@ -20,7 +20,8 @@ TAG_PALETTE = ["#ef4444", "#f97316", "#f59e0b", "#84cc16", "#10b981", "#06b6d4",
                "#6366f1", "#8b5cf6", "#d946ef", "#ec4899", "#64748b"]
 
 FLIGHT_TYPES = ["commercial", "cargo", "test", "delivery", "ferry", "military", "business", "general",
-                "helicopter", "medical", "training", "airshow", "government", "other"]
+                "helicopter", "medical", "training", "airshow", "government",
+                "museum", "display", "storage", "maintenance", "scrapyard", "other"]    # museum… scrapyard : avions statiques
 
 EDITABLE = ("registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner", "airline_icao",
             "livery", "military", "flight_type", "test_registration", "date", "airport", "place", "location_id", "lat", "lng",
