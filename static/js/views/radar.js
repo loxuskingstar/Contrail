@@ -99,7 +99,8 @@ export async function render(root) {
         states.clear();
         return;
       }
-      status.innerHTML = `${icon('wifi-off', '', 16)} ${esc(e.offline ? t('err.offline') : t('radar.error'))}`;
+      const why = e.detail?.reason;
+      status.innerHTML = `${icon('wifi-off', '', 16)} ${esc(e.offline ? t('err.offline') : t('radar.error'))}${why ? `<br><small class="muted">${esc(why)}</small>` : ''}`;
     }
   }
 

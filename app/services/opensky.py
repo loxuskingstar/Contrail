@@ -27,6 +27,8 @@ _token: dict = {"value": None, "exp": 0.0}
 _token_lock = threading.Lock()
 _cache: dict[str, tuple[float, dict]] = {}
 _failed_until = 0.0   # OpenSky en panne ou lent : on passe directement aux sources gratuites pendant 60 s
+_last_error = ""       # dernière cause d'échec des sources gratuites (affichée dans l'interface)
+_last_warn = 0.0
 _tile_cache: dict[str, tuple[float, str, list[dict]]] = {}
 _blocked_until = 0.0  # OpenSky a répondu 429 : on le laisse tranquille jusqu'à cette date (secondes epoch)
 
@@ -113,18 +115,20 @@ def _free_tile(lamin: float, lomin: float, lamax: float, lomax: float) -> tuple[
     dlat_nm = (lamax - lamin) / 2 * 60
     dlon_nm = (lomax - lomin) / 2 * 60 * max(math.cos(math.radians(lat)), 0.1)
     radius = max(5, min(250, math.ceil(math.hypot(dlat_nm, dlon_nm))))
-    last: Exception | None = None
+    errs: list[str] = []
     for name, tpl in FREE_SOURCES:
         try:
             with ac.client() as c:
                 r = c.get(tpl.format(lat=lat, lon=lon, r=radius), timeout=6)
-                if r.status_code == 429:
-                    last = RuntimeError(f"{name}: 429")
+                if r.status_code >= 400:
+                    errs.append(f"{name} : HTTP {r.status_code}")
                     continue
-                r.raise_for_status()
                 data = r.json() or {}
-        except (httpx.HTTPError, ValueError) as e:
-            last = e
+        except httpx.HTTPError as e:
+            errs.append(f"{name} : {type(e).__name__} {str(e)[:80]}".strip())
+            continue
+        except ValueError:
+            errs.append(f"{name} : réponse illisible")
             continue
         states = []
         for a in data.get("ac") or data.get("aircraft") or []:
@@ -145,7 +149,7 @@ def _free_tile(lamin: float, lomin: float, lamax: float, lomax: float) -> tuple[
                 "vertical_rate": round((_num(a.get("baro_rate")) or _num(a.get("geom_rate")) or 0) * 0.00508, 1),
                 "squawk": a.get("squawk"), "category": None, "last_contact": None})
         return name, states
-    raise httpx.HTTPError(f"sources gratuites indisponibles : {last}")
+    raise httpx.HTTPError(" ; ".join(errs))
 
 
 def _free_tile_cached(tile: tuple[float, float, float, float]) -> tuple[str, list[dict]] | None:
@@ -157,7 +161,11 @@ def _free_tile_cached(tile: tuple[float, float, float, float]) -> tuple[str, lis
     try:
         name, sts = _free_tile(*tile)
     except (httpx.HTTPError, ValueError) as e:
-        log.info("Tuile radar indisponible (%s) : %s", key, e)
+        global _last_error, _last_warn
+        _last_error = str(e) or type(e).__name__
+        if time.time() - _last_warn > 60:
+            _last_warn = time.time()
+            log.warning("Radar : sources gratuites indisponibles (%s) : %s", key, _last_error)
         return (hit[1], hit[2]) if hit and time.time() - hit[0] < 120 else None
     if len(_tile_cache) > 200:
         _tile_cache.clear()
@@ -176,7 +184,7 @@ def _free_states(lamin: float, lomin: float, lamax: float, lomax: float) -> dict
         parts = list(ex.map(_free_tile_cached, tiles))
     ok = [p for p in parts if p]
     if not ok:
-        raise httpx.HTTPError("sources gratuites indisponibles")
+        raise httpx.HTTPError(_last_error or "sources gratuites indisponibles")
     seen: dict[str, dict] = {}
     for _, sts in ok:
         for st in sts:

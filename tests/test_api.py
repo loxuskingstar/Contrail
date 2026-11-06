@@ -354,7 +354,7 @@ def test_radar_survives_opensky_timeout_and_partial_tiles(client, monkeypatch):
     assert r.status_code == 200 and r.json()["partial"] >= 1 and r.json()["states"]
     # 3) tout échoue et rien en cache : 502
     r = client.get("/api/radar", params={"lamin": 60, "lomin": 1, "lamax": 61, "lomax": 2})
-    assert r.status_code == 502
+    assert r.status_code == 502 and "HTTP 429" in r.json()["detail"]["reason"]
 
 
 def test_fleet_airlabs_pagination_and_exclusions(client, monkeypatch):

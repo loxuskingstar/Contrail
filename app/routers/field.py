@@ -115,4 +115,4 @@ def radar(lamin: float, lomin: float, lamax: float, lomax: float):
     except ValueError as e:
         raise HTTPException(422, "area_too_large") from e
     except httpx.HTTPError as e:
-        raise HTTPException(502, "opensky_unreachable") from e
+        raise HTTPException(502, {"code": "opensky_unreachable", "reason": str(e)[:300]}) from e
