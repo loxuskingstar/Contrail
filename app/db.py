@@ -314,7 +314,6 @@ CREATE INDEX IF NOT EXISTS idx_outing_day ON outings(day);
 ALTER TABLE spotting ADD COLUMN outing_id INTEGER REFERENCES outings(id_outing) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_spot_outing ON spotting(outing_id);
 CREATE INDEX IF NOT EXISTS idx_spot_no_outing ON spotting(id_spotting) WHERE outing_id IS NULL;
-CREATE INDEX IF NOT EXISTS idx_spot_no_outing ON spotting(id_spotting) WHERE outing_id IS NULL;
 INSERT OR IGNORE INTO outings (day, airport, place, created_at)
     SELECT DISTINCT substr(date, 1, 10), NULLIF(airport, ''), NULLIF(place, ''), datetime('now') FROM spotting
     WHERE date IS NOT NULL AND length(date) >= 10 AND (NULLIF(airport, '') IS NOT NULL OR NULLIF(place, '') IS NOT NULL);
@@ -323,7 +322,26 @@ UPDATE spotting SET outing_id = (SELECT o.id_outing FROM outings o WHERE o.day =
     WHERE outing_id IS NULL AND date IS NOT NULL AND length(date) >= 10 AND (NULLIF(airport, '') IS NOT NULL OR NULLIF(place, '') IS NOT NULL);
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11]
+SCHEMA_V12 = """
+-- Meetings aériens : une sortie peut couvrir plusieurs jours (end_day), être planifiée sans spot et porter un programme
+ALTER TABLE outings ADD COLUMN end_day TEXT;
+ALTER TABLE outings ADD COLUMN kind TEXT NOT NULL DEFAULT 'outing';      -- 'outing' | 'airshow'
+CREATE TABLE IF NOT EXISTS outing_items (
+    id_item     INTEGER PRIMARY KEY AUTOINCREMENT,
+    outing_id   INTEGER NOT NULL REFERENCES outings(id_outing) ON DELETE CASCADE,
+    day         TEXT,
+    time        TEXT,
+    label       TEXT NOT NULL,
+    match_kind  TEXT NOT NULL DEFAULT 'free',   -- 'registration' | 'type' | 'free' : vu automatiquement si un spot de la sortie correspond
+    match_value TEXT,
+    done        INTEGER NOT NULL DEFAULT 0,
+    notes       TEXT,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_item_outing ON outing_items(outing_id);
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12]
 
 
 def init_db() -> None:

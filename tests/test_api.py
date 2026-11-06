@@ -1160,3 +1160,45 @@ def test_watchlist_falls_back_to_free_hex_lookup(client, monkeypatch):
     out = opensky._free_by_hex(["39bd85"])
     assert out["39bd85"]["callsign"] == "AFR123" and out["39bd85"]["on_ground"] is False
     assert any("/hex/39bd85" in u for u in seen)
+
+
+def test_airshow_merge_plan_and_program(client):
+    def spot(reg, typ, day, ap="LFPO"):
+        r = client.post("/api/spots", data={"data": json.dumps({"registration": reg, "aircraft_icao": typ, "airport": ap, "date": f"{day}T10:00"})})
+        assert r.status_code in (200, 201), r.text
+    for reg, typ, day in (("F-HMA1", "A320", "2041-06-06"), ("F-HMA2", "A321", "2041-06-07"), ("F-HMA3", "A320", "2041-06-08")):
+        spot(reg, typ, day)
+    outs = [o for o in client.get("/api/outings?year=2041").json()["items"]]
+    assert len(outs) == 3
+    other = client.post("/api/spots", data={"data": json.dumps({"registration": "F-HMB1", "aircraft_icao": "A320", "airport": "LFBO", "date": "2041-06-07T10:00"})})
+    assert other.status_code in (200, 201)
+    ids = [o["id"] for o in outs if o["airport"] == "LFPO"]
+    bad = client.post("/api/outings/merge", json={"ids": [ids[0], next(o["id"] for o in client.get("/api/outings?year=2041").json()["items"] if o["airport"] == "LFBO")]})
+    assert bad.status_code == 422 and "different_sites" in bad.text
+    ok = client.post("/api/outings/merge", json={"ids": ids, "name": "Meeting test", "kind": "airshow"})
+    assert ok.status_code == 200
+    mid = ok.json()["id"]
+    d = client.get(f"/api/outings/{mid}").json()
+    assert d["day"] == "2041-06-06" and d["end_day"] == "2041-06-08" and d["n"] == 3 and len(d["days"]) == 3 and d["kind"] == "airshow"
+    # un nouveau spot sur un jour couvert rejoint la sortie fusionnée
+    spot("F-HMA4", "A320", "2041-06-07")
+    assert client.get(f"/api/outings/{mid}").json()["n"] == 4
+    # programme : détection du type et de l'immatriculation, vu automatiquement
+    assert client.post(f"/api/outings/{mid}/items", json={"label": "A321"}).json()["match_kind"] == "type"
+    assert client.post(f"/api/outings/{mid}/items", json={"label": "F-HMA3"}).json()["match_kind"] == "registration"
+    assert client.post(f"/api/outings/{mid}/items", json={"label": "Patrouille de France"}).json()["match_kind"] == "free"
+    items = client.get(f"/api/outings/{mid}").json()["items"]
+    assert [i["seen"] for i in items] == [True, True, False]
+    client.put(f"/api/outings/items/{items[2]['id']}", json={"done": True})
+    assert client.get(f"/api/outings/{mid}").json()["items"][2]["seen"] is True
+    # séparation
+    assert client.post(f"/api/outings/{mid}/split").status_code == 200
+    assert len([o for o in client.get("/api/outings?year=2041").json()["items"] if o["airport"] == "LFPO"]) == 3
+    # planification : un meeting à venir sur 3 jours absorbe les sorties existantes du site
+    pl = client.post("/api/outings", json={"day": "2041-06-06", "end_day": "2041-06-08", "airport": "LFPO", "name": "Meeting planifié"}).json()["id"]
+    p = client.get(f"/api/outings/{pl}").json()
+    assert p["n"] == 4 and p["kind"] == "airshow" and p["end_day"] == "2041-06-08"
+    future = client.post("/api/outings", json={"day": "2042-05-01", "end_day": "2042-05-02", "place": "Cerny"}).json()["id"]
+    f = client.get(f"/api/outings/{future}").json()
+    assert f["n"] == 0 and len(f["days"]) == 2
+    assert client.delete(f"/api/outings/{future}").status_code == 200

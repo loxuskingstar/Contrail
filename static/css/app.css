@@ -875,3 +875,6 @@ body.radar-mode .main { padding: 0; }
 .o-stats span { display: inline-flex; align-items: center; gap: 4px; }
 .o-stats .o-new { color: var(--accent); font-weight: 650; }
 @media (max-width: 480px) { .o-thumbs { width: 84px; height: 84px; } }
+.card.outing.selected { outline: 2px solid var(--accent); }
+.card.outing .ttl input[type=checkbox] { vertical-align: -2px; margin-right: 4px; }
+.btn.danger { color: var(--danger, #d33); }

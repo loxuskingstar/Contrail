@@ -39,7 +39,7 @@ export async function render(root, params, query) {
   }
   const s = editing ? await api(`/api/spots/${params.id}`) : {
     registration: query.reg || '', airport: query.airport || (query.place ? '' : scope.airport || (scope.place ? '' : store.settings.default_airport) || ''),
-    place: query.place || (query.airport ? '' : scope.place || ''), lat: query.lat ?? scopeLL?.[0] ?? null, lng: query.lng ?? scopeLL?.[1] ?? null, date: nowLocal(),
+    place: query.place || (query.airport ? '' : scope.place || ''), lat: query.lat ?? scopeLL?.[0] ?? null, lng: query.lng ?? scopeLL?.[1] ?? null, date: /^\d{4}-\d{2}-\d{2}$/.test(query.date || '') ? `${query.date}T${nowLocal().slice(11)}` : nowLocal(),
     icao24: query.icao24 || '', tags: [], military: 0, favorite: 0, rating: null,
   };
   const isUnknown = typeof s.registration === 'string' && s.registration.startsWith('SANS-IMMAT-');
