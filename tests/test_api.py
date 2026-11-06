@@ -1275,3 +1275,19 @@ def test_country_from_operator_for_military_serial(client):
     assert client.get(f"/api/spots/{sid2}").json()["country"] in (None, "")
     client.put(f"/api/spots/{sid2}", data={"data": json.dumps({"owner": "Armée de l'Air"})})
     assert client.get(f"/api/spots/{sid2}").json()["country"] == "FR"
+
+
+def test_manual_country_override(client):
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "ZZ9902", "date": "2046-04-01"})})
+    sid = r.json()["spot"]["id_spotting"]
+    assert not client.get(f"/api/spots/{sid}").json()["country"]
+    put = lambda d: client.put(f"/api/spots/{sid}", data={"data": json.dumps(d)})
+    assert put({"registration": "ZZ9902", "country": "qa"}).status_code == 200
+    assert client.get(f"/api/spots/{sid}").json()["country"] == "QA"
+    # une modification ultérieure sans toucher au pays le conserve
+    put({"registration": "ZZ9902", "owner": "Quelqu'un"})
+    assert client.get(f"/api/spots/{sid}").json()["country"] == "QA"
+    # « Auto » relance la détection
+    put({"registration": "F-ZZZZ", "country": ""})
+    assert client.get(f"/api/spots/{sid}").json()["country"] == "FR"
+    assert put({"country": "france"}).status_code == 422

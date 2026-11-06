@@ -462,10 +462,19 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
             old = (existing or {}).get("registration")
             reg = old if regs.is_unknown(old) else regs.new_unknown()
         out["registration"] = reg
-        out["country"] = regs.country_for(reg, merged.get("owner"))
+        ex = existing or {}
+        # le pays n'est recalculé que si l'immatriculation change : un pays corrigé à la main survit aux modifications suivantes
+        if not ex.get("country") or reg != ex.get("registration"):
+            out["country"] = regs.country_for(reg, merged.get("owner"))
     elif "owner" in out and not (existing or {}).get("country"):
         # exploitant renseigné après coup (série militaire type QA400) : le pays se déduit de lui
         out["country"] = regs.country_for((existing or {}).get("registration"), out.get("owner"))
+    if "country" in data:
+        # choix explicite dans le formulaire : un code pays le fixe, « Auto » (vide) relance la détection
+        c = str(data.get("country") or "").strip().upper()
+        if c and not re.fullmatch(r"[A-Z]{2}", c):
+            raise HTTPException(422, "invalid_country")
+        out["country"] = c or regs.country_for(merged.get("registration"), merged.get("owner"))
     if "airport" in out or "place" in out:
         out["airport"], out["place"] = _split_place(out.get("airport"), out.get("place"))
     if "aircraft_icao" in out and out["aircraft_icao"]:

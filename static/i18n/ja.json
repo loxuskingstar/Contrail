@@ -144,7 +144,7 @@
 "spot.same_camera": "このカメラで撮った写真を見る",
 "spot.duplicate": "同じ場所で新規記録",
 "spot.download_photo": "写真をダウンロード",
-"spot.country": "登録国",
+"spot.country": "国",
 "spot.type": "機種",
 "spots.search": "登録記号、機種、航空会社、メモ…",
 "spots.filters": "フィルター",
@@ -1497,5 +1497,8 @@
 "ftype.maintenance": "整備・格納庫",
 "ftype.scrapyard": "解体・航空機墓場",
 "ftype.g_flight": "飛行・運航中",
-"ftype.g_static": "静態機"
+"ftype.g_static": "静態機",
+"spot.country_auto": "自動（検出）",
+"spot.country_hint": "登録記号、なければ運用者から判定します。必要ならここで修正できます。",
+"err.invalid_country": "国が無効です"
 }

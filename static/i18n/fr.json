@@ -150,7 +150,7 @@
 "spot.same_camera": "Voir les photos prises avec ce boîtier",
 "spot.duplicate": "Nouveau spot au même endroit",
 "spot.download_photo": "Télécharger la photo",
-"spot.country": "Pays d'immatriculation",
+"spot.country": "Pays",
 "spot.type": "Type",
 "spots.search": "Immatriculation, type, compagnie, notes…",
 "spots.filters": "Filtres",
@@ -1668,5 +1668,8 @@
 "ftype.maintenance": "Maintenance / hangar",
 "ftype.scrapyard": "Démantèlement / cimetière d'avions",
 "ftype.g_flight": "En vol / en service",
-"ftype.g_static": "Avion statique"
+"ftype.g_static": "Avion statique",
+"spot.country_auto": "Auto (détecté)",
+"spot.country_hint": "Détecté d'après l'immatriculation, sinon l'exploitant. À corriger ici si besoin.",
+"err.invalid_country": "Pays invalide"
 }

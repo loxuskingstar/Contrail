@@ -93,6 +93,9 @@ export async function render(root, params, query) {
           <label class="field"><span>${esc(t('spot.owner'))}</span><input name="owner" value="${esc(s.owner)}" placeholder="Air France"></label>
           <label class="field"><span>${esc(t('spot.airline_icao'))}</span><input name="airline_icao" value="${esc(s.airline_icao)}" placeholder="AFR" maxlength="4" autocapitalize="characters"></label>
         </div>
+        <label class="field optional"><span>${esc(t('spot.country'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
+          <select name="country"><option value="">${esc(t('spot.country_auto'))}</option>${s.country ? `<option value="${esc(s.country)}" selected>${flag(s.country)} ${esc(countryName(s.country))}</option>` : ''}</select>
+          <span class="tiny muted">${esc(t('spot.country_hint'))}</span></label>
         <div class="field-row">
           <label class="field"><span>${esc(t('spot.msn'))}</span><input name="msn" value="${esc(s.msn)}" inputmode="text"></label>
           <label class="field"><span>${esc(t('spot.manufacturer'))}</span><input name="manufacturer" value="${esc(s.manufacturer)}"></label>
@@ -426,6 +429,19 @@ export async function render(root, params, query) {
       F('patrol_sname').addEventListener('blur', guess);
     }).catch(() => {});
   }
+  // Pays de l'appareil : liste complète, « Auto » = détection par immatriculation puis exploitant
+  const spotCountry = form.elements.country;
+  let countryTouched = false;
+  if (spotCountry) {
+    spotCountry.addEventListener('change', () => { countryTouched = true; });
+    api('/api/spots/countries').then((codes) => {
+      const cur = spotCountry.value;
+      if (cur && !codes.includes(cur)) codes.push(cur);
+      spotCountry.innerHTML = `<option value="">${esc(t('spot.country_auto'))}</option>` + codes.map((c) => ({ c, n: countryName(c) })).sort((a, b) => a.n.localeCompare(b.n))
+        .map(({ c, n }) => `<option value="${esc(c)}">${flag(c)} ${esc(n)}</option>`).join('');
+      spotCountry.value = cur;
+    }).catch(() => {});
+  }
   // Mode simple : la patrouille remplace l'immatriculation
   const patSimple = form.elements.patrol_simple;
   const syncPatrol = () => {
@@ -447,6 +463,7 @@ export async function render(root, params, query) {
     const data = {};
     for (const k of ['registration', 'aircraft', 'aircraft_icao', 'owner', 'airline_icao', 'msn', 'manufacturer', 'airport', 'date', 'livery', 'flight_type', 'description', 'camera', 'lens', 'focal', 'aperture', 'iso', 'shutter', 'icao24', 'lat', 'lng', 'test_registration']) data[k] = F(k).value.trim();
     data.unknown_registration = unk.checked;
+    if (countryTouched && !asPatrol) data.country = spotCountry.value;
     // Lieu choisi dans les suggestions : on l'enregistre comme lieu ; un texte libre est classé par le serveur
     const isPlace = F('airport').dataset.kind === 'place';
     data.place = isPlace ? data.airport : '';

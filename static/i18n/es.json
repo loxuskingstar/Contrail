@@ -150,7 +150,7 @@
 "spot.same_camera": "Ver las fotos hechas con esta cámara",
 "spot.duplicate": "Nuevo avistamiento en el mismo lugar",
 "spot.download_photo": "Descargar la foto",
-"spot.country": "País de matrícula",
+"spot.country": "País",
 "spot.type": "Tipo",
 "spots.search": "Matrícula, tipo, aerolínea, notas…",
 "spots.filters": "Filtros",
@@ -1668,5 +1668,8 @@
 "ftype.maintenance": "Mantenimiento / hangar",
 "ftype.scrapyard": "Desguace / cementerio de aviones",
 "ftype.g_flight": "En vuelo / en servicio",
-"ftype.g_static": "Avión estático"
+"ftype.g_static": "Avión estático",
+"spot.country_auto": "Auto (detectado)",
+"spot.country_hint": "Detectado por la matrícula o, si no, por el operador. Corrígelo aquí si hace falta.",
+"err.invalid_country": "País no válido"
 }
