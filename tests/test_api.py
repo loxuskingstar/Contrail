@@ -1110,8 +1110,8 @@ def test_patrol_country_and_unknown_filter(client):
 
 def test_rarity_badge_and_filter(client, monkeypatch):
     from app.services import collection, refdb
-    monkeypatch.setattr(refdb, "type_counts", lambda: {"A388": 12, "A320": 9000})
-    assert collection.rarity_tier(12) == "legendary" and collection.rarity_tier(9000) is None
+    monkeypatch.setattr(refdb, "type_counts", lambda: {"A388": 12, "A320": 40000})
+    assert [collection.rarity_tier(n) for n in (12, 100, 1000, 9000, 40000)] == ["legendary", "epic", "rare", "uncommon", "common"]
     client.post("/api/spots", data={"data": json.dumps({"registration": "F-HRAR", "aircraft_icao": "A388", "airport": "LFPG"})})
     client.post("/api/spots", data={"data": json.dumps({"registration": "F-HCOM", "aircraft_icao": "A320", "airport": "LFPG"})})
     got = client.get("/api/spots?rare=1").json()
@@ -1119,6 +1119,9 @@ def test_rarity_badge_and_filter(client, monkeypatch):
     assert "F-HRAR" in regs and "F-HCOM" not in regs
     mine = next(s for s in got["items"] if s["registration"] == "F-HRAR")
     assert any(b["code"] == "rarity" and b["tier"] == "legendary" for b in mine["badges"])
+    com = client.get("/api/spots?rarity=common").json()["items"]
+    assert any(x["registration"] == "F-HCOM" for x in com) and all(x["registration"] != "F-HRAR" for x in com)
+    assert any(b["code"] == "rarity" and b["tier"] == "common" for b in next(x for x in com if x["registration"] == "F-HCOM")["badges"])
 
 
 def test_photo_export_has_iptc_and_xmp(client):
@@ -1157,3 +1160,187 @@ def test_watchlist_falls_back_to_free_hex_lookup(client, monkeypatch):
     out = opensky._free_by_hex(["39bd85"])
     assert out["39bd85"]["callsign"] == "AFR123" and out["39bd85"]["on_ground"] is False
     assert any("/hex/39bd85" in u for u in seen)
+
+
+def test_airshow_merge_plan_and_program(client):
+    def spot(reg, typ, day, ap="LFPO"):
+        r = client.post("/api/spots", data={"data": json.dumps({"registration": reg, "aircraft_icao": typ, "airport": ap, "date": f"{day}T10:00"})})
+        assert r.status_code in (200, 201), r.text
+    for reg, typ, day in (("F-HMA1", "A320", "2041-06-06"), ("F-HMA2", "A321", "2041-06-07"), ("F-HMA3", "A320", "2041-06-08")):
+        spot(reg, typ, day)
+    outs = [o for o in client.get("/api/outings?year=2041").json()["items"]]
+    assert len(outs) == 3
+    other = client.post("/api/spots", data={"data": json.dumps({"registration": "F-HMB1", "aircraft_icao": "A320", "airport": "LFBO", "date": "2041-06-07T10:00"})})
+    assert other.status_code in (200, 201)
+    ids = [o["id"] for o in outs if o["airport"] == "LFPO"]
+    bad = client.post("/api/outings/merge", json={"ids": [ids[0], next(o["id"] for o in client.get("/api/outings?year=2041").json()["items"] if o["airport"] == "LFBO")]})
+    assert bad.status_code == 422 and "different_sites" in bad.text
+    ok = client.post("/api/outings/merge", json={"ids": ids, "name": "Meeting test", "kind": "airshow"})
+    assert ok.status_code == 200
+    mid = ok.json()["id"]
+    d = client.get(f"/api/outings/{mid}").json()
+    assert d["day"] == "2041-06-06" and d["end_day"] == "2041-06-08" and d["n"] == 3 and len(d["days"]) == 3 and d["kind"] == "airshow"
+    # un nouveau spot sur un jour couvert rejoint la sortie fusionnée
+    spot("F-HMA4", "A320", "2041-06-07")
+    assert client.get(f"/api/outings/{mid}").json()["n"] == 4
+    # programme : détection du type et de l'immatriculation, vu automatiquement
+    assert client.post(f"/api/outings/{mid}/items", json={"label": "A321"}).json()["match_kind"] == "type"
+    assert client.post(f"/api/outings/{mid}/items", json={"label": "F-HMA3"}).json()["match_kind"] == "registration"
+    assert client.post(f"/api/outings/{mid}/items", json={"label": "Patrouille de France"}).json()["match_kind"] == "free"
+    items = client.get(f"/api/outings/{mid}").json()["items"]
+    assert [i["seen"] for i in items] == [True, True, False]
+    client.put(f"/api/outings/items/{items[2]['id']}", json={"done": True})
+    assert client.get(f"/api/outings/{mid}").json()["items"][2]["seen"] is True
+    # séparation
+    assert client.post(f"/api/outings/{mid}/split").status_code == 200
+    assert len([o for o in client.get("/api/outings?year=2041").json()["items"] if o["airport"] == "LFPO"]) == 3
+    # planification : un meeting à venir sur 3 jours absorbe les sorties existantes du site
+    pl = client.post("/api/outings", json={"day": "2041-06-06", "end_day": "2041-06-08", "airport": "LFPO", "name": "Meeting planifié"}).json()["id"]
+    p = client.get(f"/api/outings/{pl}").json()
+    assert p["n"] == 4 and p["kind"] == "airshow" and p["end_day"] == "2041-06-08"
+    future = client.post("/api/outings", json={"day": "2042-05-01", "end_day": "2042-05-02", "place": "Cerny"}).json()["id"]
+    f = client.get(f"/api/outings/{future}").json()
+    assert f["n"] == 0 and len(f["days"]) == 2
+    assert client.delete(f"/api/outings/{future}").status_code == 200
+
+
+def test_daytime_weather_wind_filters(client):
+    from app.core import db
+    ids = {}
+    for reg, el in (("F-HDAY", 30), ("F-HGLD", 2), ("F-HDWN", -8), ("F-HNGT", -20)):
+        r = client.post("/api/spots", data={"data": json.dumps({"registration": reg, "aircraft_icao": "A320", "airport": "LFBO", "date": "2043-03-01T07:00"})})
+        sid = r.json()["spot"]["id_spotting"]
+        ids[reg] = sid
+        conn = db()
+        conn.execute("UPDATE spotting SET sun_elevation = ? WHERE id_spotting = ?", (el, sid))
+        conn.commit()
+    conn = db()
+    conn.execute("UPDATE spotting SET metar_json = ? WHERE id_spotting = ?", (json.dumps({"summary": "rain", "wind_kt": 22}), ids["F-HDAY"]))
+    conn.execute("UPDATE spotting SET metar_json = ? WHERE id_spotting = ?", (json.dumps({"summary": "clear", "wind_kt": 3}), ids["F-HGLD"]))
+    conn.commit()
+    regs = lambda qs: {s["registration"] for s in client.get(f"/api/spots?year=2043&{qs}").json()["items"]}
+    assert regs("daytime=day") == {"F-HDAY"} and regs("daytime=golden") == {"F-HGLD"}
+    assert regs("daytime=dawn") == {"F-HDWN"} and regs("daytime=dusk") == set() and regs("daytime=night") == {"F-HNGT"}
+    assert regs("weather=rain") == {"F-HDAY"} and regs("weather=clear") == {"F-HGLD"} and regs("weather=none") == {"F-HDWN", "F-HNGT"}
+    assert regs("wind=strong") == {"F-HDAY"} and regs("wind=calm") == {"F-HGLD"}
+
+
+def test_extra_aircraft_on_same_photo_do_not_inherit_identity(client):
+    import io as _io
+    from PIL import Image
+    buf = _io.BytesIO(); Image.new("RGB", (64, 48), (200, 90, 30)).save(buf, "JPEG")
+    data = {"registration": "F-HMU1", "aircraft": "Airbus A320", "aircraft_icao": "A320", "owner": "Air France", "airport": "LFBO", "date": "2044-02-02T10:00",
+            "patrol": {"members": [{"registration": "F-HMU2", "inherit_aircraft": False, "aircraft_icao": "B738", "owner": "Ryanair"},
+                                   {"registration": "F-HMU3", "inherit_aircraft": True}]}}
+    r = client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("a.jpg", buf.getvalue(), "image/jpeg")})
+    assert r.status_code in (200, 201), r.text
+    got = {s["registration"]: s for s in client.get("/api/spots?year=2044").json()["items"]}
+    assert set(got) == {"F-HMU1", "F-HMU2", "F-HMU3"}
+    assert got["F-HMU2"]["aircraft_icao"] == "B738" and got["F-HMU2"]["owner"] == "Ryanair"
+    assert got["F-HMU3"]["aircraft_icao"] == "A320"
+    assert len({s["thumb"] for s in got.values()}) == 1                 # une seule photo partagée
+
+
+def test_editing_common_info_updates_other_aircraft_of_the_photo(client):
+    import io as _io
+    from PIL import Image
+    buf = _io.BytesIO(); Image.new("RGB", (64, 48), (10, 120, 30)).save(buf, "JPEG")
+    data = {"registration": "F-HSY1", "aircraft_icao": "A320", "airport": "LFBO", "date": "2045-02-02T10:00",
+            "patrol": {"members": [{"registration": "F-HSY2", "inherit_aircraft": False, "aircraft_icao": "B738"}]}}
+    r = client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("a.jpg", buf.getvalue(), "image/jpeg")})
+    assert r.status_code in (200, 201), r.text
+    by = lambda: {s["registration"]: s for s in client.get("/api/spots?year=2045").json()["items"]}
+    first = by()["F-HSY1"]
+    edit = {"date": "2045-02-03T09:30", "airport": "LFPG", "description": "Deux avions", "rating": 4, "tags": []}
+    up = client.put(f"/api/spots/{first['id_spotting']}", data={"data": json.dumps(edit)})
+    assert up.status_code == 200, up.text
+    sec = client.get(f"/api/spots/{by()['F-HSY2']['id_spotting']}").json()
+    assert sec["airport"] == "LFPG" and sec["date"].startswith("2045-02-03T09:30") and sec["description"] == "Deux avions" and sec["rating"] == 4
+    assert sec["aircraft_icao"] == "B738" and sec["registration"] == "F-HSY2"      # l'identité de l'avion ne bouge pas
+    assert sec["outing"]["day"] == "2045-02-03"
+
+
+def test_country_from_operator_for_military_serial(client):
+    from app.services import registration as regs
+    assert regs.country_of("QA400") is None
+    assert regs.country_for("QA400", "Qatar Emiri Air Force") == "QA"
+    assert regs.country_for("31+05", "Luftwaffe") == "DE"
+    assert regs.country_for("F-GXLN", "Airbus") == regs.country_of("F-GXLN") == "FR"
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "QA400", "owner": "Qatar Emiri Air Force", "date": "2046-03-04"})})
+    assert r.status_code in (200, 201), r.text
+    sid = r.json()["spot"]["id_spotting"]
+    assert client.get(f"/api/spots/{sid}").json()["country"] == "QA"
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "ZZ9901", "date": "2046-03-05"})})
+    sid2 = r.json()["spot"]["id_spotting"]
+    assert client.get(f"/api/spots/{sid2}").json()["country"] in (None, "")
+    client.put(f"/api/spots/{sid2}", data={"data": json.dumps({"owner": "Armée de l'Air"})})
+    assert client.get(f"/api/spots/{sid2}").json()["country"] == "FR"
+
+
+def test_manual_country_override(client):
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "ZZ9902", "date": "2046-04-01"})})
+    sid = r.json()["spot"]["id_spotting"]
+    assert not client.get(f"/api/spots/{sid}").json()["country"]
+    put = lambda d: client.put(f"/api/spots/{sid}", data={"data": json.dumps(d)})
+    assert put({"registration": "ZZ9902", "country": "qa"}).status_code == 200
+    assert client.get(f"/api/spots/{sid}").json()["country"] == "QA"
+    # une modification ultérieure sans toucher au pays le conserve
+    put({"registration": "ZZ9902", "owner": "Quelqu'un"})
+    assert client.get(f"/api/spots/{sid}").json()["country"] == "QA"
+    # « Auto » relance la détection
+    put({"registration": "F-ZZZZ", "country": ""})
+    assert client.get(f"/api/spots/{sid}").json()["country"] == "FR"
+    assert put({"country": "france"}).status_code == 422
+
+
+def test_heliports_and_small_fields(client):
+    from app.services import geo
+    a = geo.airport("LF3624")                      # code SIA d'un terrain absent d'airportsdata
+    assert a and a["icao"] == "LF3624" and a["kind"] == "airfield" and a["tz"] == "Europe/Paris"
+    assert geo.airport("FR-0001")["kind"] == "heliport"
+    assert [x["icao"] for x in client.get("/api/airports/search", params={"q": "LF362"}).json()][:1] == ["LF3623"]
+    assert client.get("/api/airports/LF3624").json()["name"].startswith("Grange Dieu")
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZHEL", "date": "2047-05-01", "airport": "LF3624"})})
+    assert client.get(f"/api/spots/{r.json()['spot']['id_spotting']}").json()["airport"] == "LF3624"
+    # code inconnu de toute base (LF999) : conservé comme terrain, pas rangé en « lieu »
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZHE2", "date": "2047-05-02", "airport": "LF999"})})
+    d = client.get(f"/api/spots/{r.json()['spot']['id_spotting']}").json()
+    assert d["airport"] == "LF999" and not d.get("place")
+    assert geo.airport("LFBO")["name"] and geo.airport("TLS")["icao"] == "LFBO"
+
+
+
+def test_custom_airfield(client):
+    from app.services import geo
+    assert geo.airport("ZZHEL1") is None
+    body = {"code": "zzhel1", "name": "Hôpital Test", "kind": "heliport", "city": "Toulouse", "country": "FR", "lat": 43.6, "lng": 1.4}
+    r = client.post("/api/airport-pages", json=body)
+    assert r.status_code == 200, r.text
+    assert client.post("/api/airport-pages", json=body).status_code == 409
+    assert client.post("/api/airport-pages", json={**body, "code": "a"}).status_code == 422
+    a = geo.airport("ZZHEL1")
+    assert a["kind"] == "heliport" and a["custom"] and a["tz"] == "Europe/Paris"
+    items = client.get("/api/airport-pages").json()["items"]
+    row = next(i for i in items if i["icao"] == "ZZHEL1")      # visible dans la liste sans aucun spot
+    assert row["n"] == 0 and row["custom"] and row["lat"] == 43.6
+    assert client.get("/api/airports/search", params={"q": "hôpital test"}).json()[0]["icao"] == "ZZHEL1"
+    s = client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZHE4", "date": "2047-08-01", "airport": "ZZHEL1"})})
+    assert client.get(f"/api/spots/{s.json()['spot']['id_spotting']}").json()["airport"] == "ZZHEL1"
+    assert client.get("/api/airport-pages").json()["items"][0]["icao"] != "x"
+    assert client.put("/api/airport-pages/custom/ZZHEL1", json={**body, "name": "Autre nom"}).json()["name"] == "Autre nom"
+    assert client.delete("/api/airport-pages/custom/ZZHEL1").status_code == 200
+    assert geo.airport("ZZHEL1") is None
+
+
+def test_fleet_overrides_correct_rarity(client):
+    from app.services import refdb
+    base = refdb.type_counts()
+    assert base["A337"] == 6 and base["RFAL"] >= 250          # table d'effectifs corrigés, même sans base de référence
+    r = client.put("/api/settings", json={"fleet_overrides": {"zz9z": 7}})
+    assert r.status_code == 200
+    assert refdb.type_counts()["ZZ9Z"] == 7
+    client.put("/api/settings", json={"fleet_overrides": {"A337": 5}})
+    assert refdb.type_counts()["A337"] == 5                   # ta valeur l'emporte sur la table
+    client.put("/api/settings", json={"fleet_overrides": {}})
+    assert refdb.type_counts()["A337"] == 6
+    assert "items" in client.get("/api/refdb/fleet").json()

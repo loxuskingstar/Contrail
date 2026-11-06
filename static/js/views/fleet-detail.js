@@ -144,7 +144,7 @@ export async function render(root, params) {
     const s = sheet({ title: esc(t('fleet.import')), body: `
       <p class="small muted" style="margin-bottom:12px">${esc(t('fleet.import_hint'))}</p>
       <label class="field"><span>${esc(t('fleet.airline_name'))}</span><input data-name value="${esc(d.meta.name || d.name || '')}"></label>
-      <label class="field" style="margin-top:12px"><span>${esc(t('fleet.list'))}</span><textarea data-text rows="10" placeholder="F-HBXA, A320&#10;F-HBXB, A320&#10;F-GKXA"></textarea></label>
+      <label class="field" style="margin-top:12px"><span>${esc(t('fleet.list'))}</span><textarea data-text rows="10" placeholder="AB-CDE, ABCD&#10;AB-CDF, ABCD&#10;AB-CDG"></textarea></label>
       <label class="toggle-row"><span class="t">${esc(t('fleet.replace'))}</span><span class="switch"><input type="checkbox" data-rep checked><span></span></span></label>
       <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" data-go>${esc(t('common.import'))}</button></div>` });
     s.body.querySelector('[data-go]').onclick = async () => {

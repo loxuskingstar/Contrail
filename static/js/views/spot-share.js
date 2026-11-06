@@ -41,7 +41,7 @@ function facts(s, o) {
   const m = s.metar_decoded;
   const wx = m ? [t(`wx.${m.summary}`), m.temp_c != null && `${m.temp_c} °C`, m.wind_kt != null && `${m.wind_dir != null ? String(m.wind_dir).padStart(3, '0') + '°' : 'VRB'} ${m.wind_kt} kt`].filter(Boolean).join(' · ') : '';
   const special = (s.badges || []).find((b) => b.code === 'special_livery');
-  const badges = (s.badges || []).filter((b) => ['first_type', 'special_livery', 'most_spotted', 'flown', 'golden_hour', 'night', 'military'].includes(b.code))
+  const badges = (s.badges || []).filter((b) => ['first_type', 'special_livery', 'most_spotted', 'flown', 'golden_hour', 'twilight', 'night', 'military'].includes(b.code))
     .map((b) => (b.code === 'special_livery' && b.cat && b.cat !== 'special' ? t(`livery.${b.cat}`) : t(`badge.${b.code}`, b.n ? { n: b.n } : undefined)));
   return {
     reg: regLabel(s), isPatrol: !!s.is_patrol, flag: flagEmoji(s.country), country: s.country ? countryName(s.country) : '',

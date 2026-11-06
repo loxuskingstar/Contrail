@@ -61,7 +61,8 @@ def livery_category(livery: str | None) -> str | None:
 # --------------------------------------------------------------------------- #
 # Badges dynamiques
 # --------------------------------------------------------------------------- #
-RARITY_TIERS = ((25, "legendary"), (250, "epic"), (2000, "rare"))   # nombre d'appareils connus au monde pour ce type
+RARITY_TIERS = ((25, "legendary"), (250, "epic"), (2000, "rare"), (10000, "uncommon"))   # appareils connus au monde pour ce type ; au-delà : « common »
+RARE_TIERS = ("legendary", "epic", "rare")
 
 
 def rarity_tier(n: int | None) -> str | None:
@@ -70,7 +71,7 @@ def rarity_tier(n: int | None) -> str | None:
     for lim, name in RARITY_TIERS:
         if n <= lim:
             return name
-    return None
+    return "common"
 
 
 def rare_types(tiers: tuple[str, ...] | None = None) -> list[str]:
@@ -80,7 +81,8 @@ def rare_types(tiers: tuple[str, ...] | None = None) -> list[str]:
     if not tc:
         return []
     mine = {r["t"] for r in q("SELECT DISTINCT aircraft_icao t FROM spotting WHERE aircraft_icao IS NOT NULL")}
-    return sorted(t for t in mine if (tier := rarity_tier(tc.get(t))) and (not tiers or tier in tiers))
+    tiers = tiers or RARE_TIERS
+    return sorted(t for t in mine if rarity_tier(tc.get(t)) in tiers)
 
 
 def badge_context() -> dict:
@@ -156,8 +158,11 @@ def badges_for(spot: dict, ctx: dict) -> list[dict]:
         b.append({"code": "rarity", "tier": tier, "n": tn})
     el = spot.get("sun_elevation")
     if el is not None:
-        if el < -6:
+        if el < -12:                                    # nuit noire (au-delà du crépuscule astronomique)
             b.append({"code": "night"})
+        elif el < -4:                                   # crépuscule civil avancé / nautique : ciel encore clair, soleil sous l'horizon
+            hour = int(spot["date"][11:13]) if len(spot.get("date") or "") >= 13 else 18
+            b.append({"code": "twilight", "phase": "dawn" if hour < 12 else "dusk"})
         elif el <= 8:
             b.append({"code": "golden_hour"})
     return b

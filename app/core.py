@@ -290,6 +290,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "ocr": True, "locations": True, "gamification": True, "watchlist": True,
     },
     "trash_days": 30,              # durée de conservation des éléments supprimés (0 = suppression immédiate)
+    "fleet_overrides": {},         # effectifs mondiaux corrigés à la main par code type (rareté), ex. {"A337": 6}
     "photographer": "",            # nom écrit dans les métadonnées IPTC/XMP des photos exportées
     "copyright": "",
     "keep_originals": False,

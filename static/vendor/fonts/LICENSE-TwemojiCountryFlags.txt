@@ -1,0 +1,3 @@
+TwemojiCountryFlags.woff2 — police de drapeaux de pays (emoji) pour Windows, qui ne les affiche pas nativement.
+Source : paquet npm « country-flag-emoji-polyfill » (licence MIT), dessins de drapeaux issus de Twemoji
+(© Twitter, Inc. et contributeurs, licence CC-BY 4.0 : https://creativecommons.org/licenses/by/4.0/).

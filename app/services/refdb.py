@@ -18,6 +18,7 @@ import csv
 import gzip
 import io
 import logging
+import json
 import re
 import sqlite3
 import threading
@@ -104,10 +105,33 @@ def by_hex(hexes: list[str]) -> dict[str, dict]:
 
 
 _tc: dict = {"mtime": None, "data": {}}
+_eff: dict = {"key": None, "data": {}}
 
 
-def type_counts() -> dict[str, int]:
-    """Nombre d'appareils connus par code type (base de référence), recalculé uniquement si le fichier change."""
+def _curated() -> dict[str, int]:
+    """Effectifs corrigés à la main (static/data/fleet_sizes.json) pour les types que la base ADS-B compte mal."""
+    f = Path(__file__).resolve().parents[2] / "static" / "data" / "fleet_sizes.json"
+    try:
+        return {k.upper(): int(v) for k, v in json.loads(f.read_text(encoding="utf-8")).items()}
+    except (OSError, ValueError):
+        return {}
+
+
+def _user_overrides() -> dict[str, int]:
+    from ..core import get_settings, memo
+    raw = memo("fleet_overrides", lambda: get_settings().get("fleet_overrides") or {})
+    out = {}
+    for k, v in raw.items():
+        try:
+            if int(v) > 0:
+                out[str(k).strip().upper()] = int(v)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def raw_type_counts() -> dict[str, int]:
+    """Nombre d'appareils par code type tel que compté dans la base de référence, sans correction."""
     c = _conn()
     if not c:
         return {}
@@ -120,6 +144,20 @@ def type_counts() -> dict[str, int]:
             _tc["data"] = {}
         _tc["mtime"] = mt
     return _tc["data"]
+
+
+def type_counts() -> dict[str, int]:
+    """Effectif mondial par code type, base ADS-B corrigée par la table d'effectifs puis par tes propres valeurs.
+
+    La base de référence recense les appareils vus en ADS-B / Mode S : elle double certains appareils rematriculés
+    (Beluga XL) et ignore la plupart des militaires (Rafale), d'où les corrections."""
+    base = raw_type_counts()
+    over = _user_overrides()
+    key = (_tc["mtime"], tuple(sorted(over.items())))
+    if _eff["key"] != key:
+        _eff["data"] = {**base, **_curated(), **over}
+        _eff["key"] = key
+    return _eff["data"]
 
 
 def by_reg(reg: str) -> dict | None:

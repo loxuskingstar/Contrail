@@ -187,7 +187,7 @@ export async function render(root) {
         <div class="wish-kinds" data-kinds-pick>${KINDS.map((k) => `<button type="button" class="wish-kind ${v.kind === k ? 'on' : ''}" data-k="${k}">${icon(KIND_ICON[k], '', 22)}<b>${esc(t(`wish.k.${k}`))}</b><small>${esc(t(`wish.kd.${k}`))}</small></button>`).join('')}</div>
 
         <label class="field" data-for="aircraft"><span>${esc(t('wish.f.registration'))}</span>
-          <input class="mono" name="reg" value="${v.kind === 'aircraft' ? val('value') : ''}" placeholder="F-HBXA" autocapitalize="characters" style="text-transform:uppercase"></label>
+          <input class="mono" name="reg" value="${v.kind === 'aircraft' ? val('value') : ''}" placeholder="AB-CDE" autocapitalize="characters" style="text-transform:uppercase"></label>
         <label class="field" data-for="type"><span>${esc(t('wish.f.type'))}</span>
           <input name="type" list="wl-types" value="${v.kind === 'type' ? val('value') : ''}" placeholder="${esc(t('wish.ph.type'))}" autocomplete="off">
           <datalist id="wl-types">${types.map((x) => `<option value="${esc(x.code)}">${esc(x.name)}</option>`).join('')}</datalist></label>
@@ -202,7 +202,7 @@ export async function render(root) {
         <label class="field" data-for="livery"><span>${esc(t('wish.f.airline_opt'))}</span>
           <input name="airline_key" list="wl-air" value="${val('airline_key')}" autocomplete="off"></label>
         <label class="field" data-for="airport"><span>${esc(t('wish.f.airport'))}</span>
-          <div class="input-wrap"><input class="mono" name="apt" value="${v.kind === 'airport' ? val('value') : ''}" placeholder="LFBO" autocapitalize="characters" style="text-transform:uppercase"></div></label>
+          <div class="input-wrap"><input class="mono" name="apt" value="${v.kind === 'airport' ? val('value') : ''}" placeholder="ABCD" autocapitalize="characters" style="text-transform:uppercase"></div></label>
 
         <label class="field" data-for="event other"><span>${esc(t('wish.f.title'))}</span>
           <input name="title" value="${v.kind === 'event' || v.kind === 'other' ? val('title') : ''}" placeholder="${esc(t('wish.ph.event'))}"></label>
@@ -211,7 +211,7 @@ export async function render(root) {
           <label class="field"><span>${esc(t('wish.f.end'))}</span><input type="date" name="end_date" value="${val('end_date')}"></label></div>
         <div class="field-row" data-for="event">
           <label class="field"><span>${esc(t('wish.f.place'))}</span><input name="place" value="${val('place')}"></label>
-          <label class="field"><span>${esc(t('wish.f.event_airport'))}</span><div class="input-wrap"><input class="mono" name="eapt" value="${val('airport')}" placeholder="LFFQ" style="text-transform:uppercase"></div></label></div>
+          <label class="field"><span>${esc(t('wish.f.event_airport'))}</span><div class="input-wrap"><input class="mono" name="eapt" value="${val('airport')}" placeholder="ABCD" style="text-transform:uppercase"></div></label></div>
         <div class="field-row" data-for="event">
           <label class="field"><span>${esc(t('wish.f.url'))}</span><input type="url" name="url" value="${val('url')}" placeholder="https://"></label>
           <label class="field"><span>${esc(t('wish.f.remind'))}</span><input type="number" min="0" max="60" name="remind_days" value="${v.remind_days}"></label></div>

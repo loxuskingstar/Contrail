@@ -26,8 +26,8 @@ export async function render(root, params, query = {}) {
     <form class="stack" style="gap:16px">
       <div class="card stack">
         <div class="field-row">
-          <label class="field"><span>${esc(t('flight.from'))}</span><div class="input-wrap"><input name="dep_icao" value="${esc(f.dep_icao)}" required placeholder="LFBO" autocomplete="off"></div></label>
-          <label class="field"><span>${esc(t('flight.to'))}</span><div class="input-wrap"><input name="arr_icao" value="${esc(f.arr_icao)}" required placeholder="LFPG" autocomplete="off"></div></label>
+          <label class="field"><span>${esc(t('flight.from'))}</span><div class="input-wrap"><input name="dep_icao" value="${esc(f.dep_icao)}" required placeholder="ABCD" autocomplete="off"></div></label>
+          <label class="field"><span>${esc(t('flight.to'))}</span><div class="input-wrap"><input name="arr_icao" value="${esc(f.arr_icao)}" required placeholder="EFGH" autocomplete="off"></div></label>
         </div>
         <div data-route class="small muted"></div>
         <div class="field-row">
@@ -38,15 +38,15 @@ export async function render(root, params, query = {}) {
       </div>
       <div class="card stack">
         <div class="field-row">
-          <label class="field"><span>${esc(t('flight.number'))}</span><input name="flight_number" value="${esc(f.flight_number)}" placeholder="AF7781" autocapitalize="characters"></label>
-          <label class="field"><span>${esc(t('flight.airline'))}</span><input name="airline" value="${esc(f.airline)}" placeholder="Air France"></label>
-          <label class="field"><span>${esc(t('spot.airline_icao'))}</span><input name="airline_icao" value="${esc(f.airline_icao)}" maxlength="4" placeholder="AFR"></label>
+          <label class="field"><span>${esc(t('flight.number'))}</span><input name="flight_number" value="${esc(f.flight_number)}" placeholder="AB1234" autocapitalize="characters"></label>
+          <label class="field"><span>${esc(t('flight.airline'))}</span><input name="airline" value="${esc(f.airline)}" placeholder="…"></label>
+          <label class="field"><span>${esc(t('spot.airline_icao'))}</span><input name="airline_icao" value="${esc(f.airline_icao)}" maxlength="4" placeholder="ABC"></label>
         </div>
         <div class="field-row">
-          <label class="field"><span>${esc(t('spot.registration'))}</span><div class="input-wrap"><input name="registration" class="mono" value="${esc(f.registration)}" placeholder="F-HBXA" autocapitalize="characters">
+          <label class="field"><span>${esc(t('spot.registration'))}</span><div class="input-wrap"><input name="registration" class="mono" value="${esc(f.registration)}" placeholder="AB-CDE" autocapitalize="characters">
             <button type="button" class="btn-icon" data-lookup>${icon('wand-sparkles', '', 18)}</button></div></label>
-          <label class="field"><span>${esc(t('spot.aircraft'))}</span><input name="aircraft" value="${esc(f.aircraft)}" placeholder="Airbus A320"></label>
-          <label class="field"><span>${esc(t('spot.type_code'))}</span><input name="aircraft_icao" value="${esc(f.aircraft_icao)}" placeholder="A320"></label>
+          <label class="field"><span>${esc(t('spot.aircraft'))}</span><input name="aircraft" value="${esc(f.aircraft)}" placeholder="…"></label>
+          <label class="field"><span>${esc(t('spot.type_code'))}</span><input name="aircraft_icao" value="${esc(f.aircraft_icao)}" placeholder="ABCD"></label>
         </div>
         <div data-xref></div>
       </div>

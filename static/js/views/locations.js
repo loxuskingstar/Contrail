@@ -119,7 +119,7 @@ export function editLocation(l, center, onSaved) {
       <div class="field-row">
         <label class="field"><span>Latitude</span><input name="lat" value="${v.lat}" inputmode="decimal" required></label>
         <label class="field"><span>Longitude</span><input name="lng" value="${v.lng}" inputmode="decimal" required></label>
-        <label class="field"><span>${esc(t('loc.runways'))}</span><input name="runways" value="${esc(v.runways)}" placeholder="14R/32L"></label>
+        <label class="field"><span>${esc(t('loc.runways'))}</span><input name="runways" value="${esc(v.runways)}" placeholder="00L/18R"></label>
       </div>
       <div class="row" style="gap:18px;align-items:center;flex-wrap:wrap">
         <div class="compass" data-compass><span class="lbl" style="top:4px;left:50%;transform:translateX(-50%)">N</span><span class="lbl" style="right:6px;top:50%;transform:translateY(-50%)">E</span><span class="lbl" style="bottom:4px;left:50%;transform:translateX(-50%)">S</span><span class="lbl" style="left:6px;top:50%;transform:translateY(-50%)">W</span><div class="cone"></div></div>

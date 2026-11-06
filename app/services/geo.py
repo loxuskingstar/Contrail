@@ -14,8 +14,50 @@ import airportsdata
 # Aéroports
 # --------------------------------------------------------------------------- #
 @lru_cache(maxsize=1)
-def _airports() -> dict[str, dict]:
+def _core() -> dict[str, dict]:
     return airportsdata.load("ICAO")
+
+
+CODE_OVERRIDES: dict[str, str] = {}      # identifiant OurAirports → code SIA, pour les correspondances confirmées à la main
+
+_KIND = {"H": "heliport", "A": "airfield", "S": "seaplane", "B": "balloonport"}
+
+
+@lru_cache(maxsize=1)
+def _extra() -> tuple[dict[str, dict], dict[str, str]]:
+    """Hélistations, altisurfaces, bases ULM et terrains que airportsdata ignore (OurAirports, domaine public).
+    Renvoie (terrains par code, alias → code) : LF3624 (code SIA) désigne le terrain FR-0442 d'OurAirports."""
+    import gzip
+    import json
+    from pathlib import Path
+    f = Path(__file__).resolve().parents[2] / "static" / "data" / "airfields_extra.json.gz"
+    if not f.is_file():
+        return {}, {}
+    rows: dict[str, dict] = {}
+    alias: dict[str, str] = {}
+    for code, kind, name, lat, lon, elev, country, city, al in json.loads(gzip.decompress(f.read_bytes())):
+        if "-" in code and al and not (len(al) <= 3 and al.isalpha()):   # FR-0442 → LF3624 : on retient le code que les pilotes et le SIA utilisent
+            alias[code] = al
+            code = al
+            al = ""
+        if len(code) <= 3 and code.isalpha():      # codes locaux à trois lettres : ils entreraient en collision avec les codes IATA
+            continue
+        rows[code] = {"icao": code, "iata": "", "name": name, "city": city or "", "country": country, "lat": lat, "lon": lon,
+                      "elevation": elev, "tz": "", "kind": _KIND.get(kind, "airfield")}
+        if al:
+            alias[al] = code
+    # codes SIA absents d'OurAirports, confirmés à la main
+    for old, new in CODE_OVERRIDES.items():
+        if old in rows:
+            rows[new] = {**rows.pop(old), "icao": new}
+            alias[old] = new
+    return rows, alias
+
+
+@lru_cache(maxsize=1)
+def _airports() -> dict[str, dict]:
+    """Base complète : aéroports + hélistations et petits terrains."""
+    return {**_extra()[0], **_core()}
 
 
 @lru_cache(maxsize=1)
@@ -29,23 +71,60 @@ def _fold(s: str) -> str:
 
 @lru_cache(maxsize=1)
 def _search_index() -> list[tuple[str, str]]:
-    return [(icao, _fold(f"{icao} {a.get('iata','')} {a['name']} {a['city']}")) for icao, a in _airports().items()]
+    al = {v: k for k, v in _extra()[1].items()}
+
+    def words(a: dict) -> str:
+        # noms OurAirports en anglais : on ajoute les mots qu'on tape en français (hôpital, hélistation, altiport…)
+        n, k = a["name"].lower(), a.get("kind", "")
+        extra = []
+        if k == "heliport":
+            extra.append("heliport helistation helipad dzh")
+        if "hospital" in n:
+            extra.append("hopital chu centre hospitalier clinique")
+        if "altiport" in n or "altisurface" in n:
+            extra.append("altiport altisurface montagne")
+        if "ultralight" in n:
+            extra.append("ulm base ulm")
+        if "seaplane" in n or k == "seaplane":
+            extra.append("hydrobase hydravion")
+        return " ".join(extra)
+
+    return [(icao, _fold(f"{icao} {al.get(icao, '')} {a.get('iata','')} {a['name']} {a['city']} {words(a)}")) for icao, a in _airports().items()]
+
+
+def _load_custom() -> dict[str, dict]:
+    from ..core import q
+    try:
+        rows = q("SELECT * FROM custom_airfields")
+    except Exception:  # noqa: BLE001 — base pas encore migrée
+        return {}
+    return {r["code"]: {"icao": r["code"], "iata": "", "name": r["name"], "city": r["city"] or "", "country": r["country"] or "",
+                        "lat": r["lat"], "lon": r["lng"], "elevation": r["elevation_ft"], "tz": "", "kind": r["kind"], "custom": True}
+            for r in rows}
+
+
+def custom() -> dict[str, dict]:
+    """Terrains ajoutés par l'utilisateur (propres à chaque profil), prioritaires sur les bases embarquées."""
+    from ..core import memo
+    return memo("custom_airfields", _load_custom)
 
 
 def airport(code: str | None) -> dict | None:
     if not code:
         return None
     c = code.strip().upper()
-    a = _airports().get(c)
+    a = custom().get(c) or _airports().get(c)
     if a is None and len(c) == 3:
         icao = _iata_index().get(c)
         a = _airports().get(icao) if icao else None
+    if a is None and len(c) > 3:          # anciens identifiants (FR-0442 → LF3624) ; jamais pour 3 lettres, réservées à l'IATA
+        a = _airports().get(_extra()[1].get(c, ""))
     if a is None:
         return None
     return {
         "icao": a["icao"], "iata": a.get("iata") or None, "name": a["name"], "city": a["city"],
-        "country": a["country"], "lat": a["lat"], "lng": a["lon"], "tz": a.get("tz") or "UTC",
-        "elevation_ft": a.get("elevation"),
+        "country": a["country"], "lat": a["lat"], "lng": a["lon"], "tz": a.get("tz") or tz_at(a["lat"], a["lon"]),
+        "elevation_ft": a.get("elevation"), "kind": a.get("kind", "airport"), "custom": bool(a.get("custom")),
     }
 
 
@@ -85,7 +164,7 @@ def tz_at(lat: float | None, lng: float | None) -> str:
     if lat is None or lng is None:
         return "UTC"
     best, best_d = None, 1e9
-    for a in _airports().values():
+    for a in _core().values():
         if abs(a["lat"] - lat) > 6 or abs(a["lon"] - lng) > 8:    # préfiltre : l'essentiel de la planète est écarté sans calcul
             continue
         d = haversine_km(lat, lng, a["lat"], a["lon"])
@@ -102,6 +181,10 @@ def search_airports(query: str, limit: int = 12) -> list[dict]:
     results: list[dict] = [exact] if exact else []
     seen = {exact["icao"]} if exact else set()
     tokens = qf.split()
+    for icao, a in custom().items():
+        if icao not in seen and all(t in _fold(f"{icao} {a['name']} {a['city']}") for t in tokens):
+            results.append(airport(icao))
+            seen.add(icao)
     scored = []
     for icao, hay in _search_index():
         if icao in seen:
@@ -109,9 +192,9 @@ def search_airports(query: str, limit: int = 12) -> list[dict]:
         if all(t in hay for t in tokens):
             # Les codes et les débuts de mots passent devant.
             score = 0 if hay.startswith(qf) else (1 if f" {qf}" in hay else 2)
-            scored.append((score, icao))
+            scored.append((score, icao not in _core(), icao))     # aéroports avant hélistations et terrains de même pertinence
     scored.sort()
-    for _, icao in scored[: limit - len(results)]:
+    for _, _, icao in scored[: limit - len(results)]:
         results.append(airport(icao))
     return results
 

@@ -20,7 +20,8 @@ TAG_PALETTE = ["#ef4444", "#f97316", "#f59e0b", "#84cc16", "#10b981", "#06b6d4",
                "#6366f1", "#8b5cf6", "#d946ef", "#ec4899", "#64748b"]
 
 FLIGHT_TYPES = ["commercial", "cargo", "test", "delivery", "ferry", "military", "business", "general",
-                "helicopter", "medical", "training", "airshow", "government", "other"]
+                "helicopter", "medical", "training", "airshow", "government",
+                "museum", "display", "storage", "maintenance", "scrapyard", "other"]    # museum… scrapyard : avions statiques
 
 EDITABLE = ("registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner", "airline_icao",
             "livery", "military", "flight_type", "test_registration", "date", "airport", "place", "location_id", "lat", "lng",
@@ -39,6 +40,41 @@ SORTS = {
 # --------------------------------------------------------------------------- #
 # Filtres partagés (liste, carte, export, partage)
 # --------------------------------------------------------------------------- #
+# Moment de la journée d'après la hauteur du soleil (mêmes seuils que les badges) ; aube / crépuscule se distinguent par l'heure
+_HOUR = "CAST(substr(s.date, 12, 2) AS INTEGER)"
+DAYTIME_SQL = {
+    "day": "s.sun_elevation > 8",
+    "golden": "s.sun_elevation BETWEEN -4 AND 8",
+    "dawn": f"s.sun_elevation >= -12 AND s.sun_elevation < -4 AND {_HOUR} < 12",
+    "dusk": f"s.sun_elevation >= -12 AND s.sun_elevation < -4 AND {_HOUR} >= 12",
+    "night": "s.sun_elevation < -12",
+}
+_WX = "json_extract(s.metar_json, '$.summary')"
+
+
+def _wx_in(*vals: str) -> str:
+    return f"{_WX} IN ({','.join(repr(v) for v in vals)})"
+
+
+WEATHER_SQL = {
+    "clear": _wx_in("clear"),
+    "partly_cloudy": _wx_in("partly_cloudy"),
+    "cloudy": _wx_in("cloudy", "overcast"),
+    "rain": _wx_in("rain", "drizzle", "showers", "freezing"),
+    "snow": _wx_in("snow", "snow_grains", "ice_crystals", "ice_pellets", "hail", "small_hail"),
+    "storm": _wx_in("thunderstorm", "squalls", "funnel_cloud"),
+    "fog": _wx_in("fog", "mist", "haze", "smoke", "dust", "sand", "volcanic_ash"),
+    "none": "s.metar_json IS NULL",
+}
+_KT = "COALESCE(json_extract(s.metar_json, '$.wind_kt'), -1)"
+_GUST = "COALESCE(json_extract(s.metar_json, '$.gust_kt'), 0)"
+WIND_SQL = {
+    "calm": f"{_KT} BETWEEN 0 AND 7 AND {_GUST} < 15",
+    "moderate": f"{_KT} BETWEEN 8 AND 17 AND {_GUST} < 25",
+    "strong": f"({_KT} >= 18 OR {_GUST} >= 25)",
+}
+
+
 def build_filters(f: dict) -> tuple[str, list]:
     where, params = ["1=1"], []
     if f.get("search"):
@@ -83,8 +119,14 @@ def build_filters(f: dict) -> tuple[str, list]:
     if f.get("military") is not None and f.get("military") != "":
         where.append("s.military = ?")
         params.append(int(f["military"]))
-    if f.get("rare"):
-        rt = collection.rare_types()
+    if f.get("daytime") in DAYTIME_SQL:
+        where.append(DAYTIME_SQL[f["daytime"]])
+    if f.get("weather") in WEATHER_SQL:
+        where.append(WEATHER_SQL[f["weather"]])
+    if f.get("wind") in WIND_SQL:
+        where.append(WIND_SQL[f["wind"]])
+    if f.get("rare") or f.get("rarity"):
+        rt = collection.rare_types((f["rarity"],) if f.get("rarity") else None)
         where.append(f"s.aircraft_icao IN ({','.join('?' * len(rt)) or 'NULL'})")
         params += rt
     if f.get("favorite"):
@@ -147,7 +189,7 @@ def list_spots(
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
-    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False, outing: int | None = None, rare: bool = False,
+    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False, outing: int | None = None, rare: bool = False, rarity: str = "", daytime: str = "", weather: str = "", wind: str = "",
     sort: str = "date_desc", limit: int = Query(60, le=500), offset: int = 0,
 ):
     f = dict(locals())
@@ -399,7 +441,7 @@ def _split_place(airport_raw: str | None, place_raw: str | None) -> tuple[str | 
     if a:
         return a["icao"], None
     if airport_raw and not place_raw:
-        if re.fullmatch(r"[A-Z]{4}", airport_raw):        # code OACI en majuscules mais absent de la base : conservé tel quel
+        if re.fullmatch(r"[A-Z]{4}|[A-Z]{2}\d{2,5}", airport_raw):    # code OACI ou code terrain/hélistation (ex. LF3624) absent de la base : conservé tel quel
             return airport_raw, None
         return None, airport_raw[:120]
     return None, (place_raw or "")[:120] or None
@@ -420,7 +462,19 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
             old = (existing or {}).get("registration")
             reg = old if regs.is_unknown(old) else regs.new_unknown()
         out["registration"] = reg
-        out["country"] = regs.country_of(reg)
+        ex = existing or {}
+        # le pays n'est recalculé que si l'immatriculation change : un pays corrigé à la main survit aux modifications suivantes
+        if not ex.get("country") or reg != ex.get("registration"):
+            out["country"] = regs.country_for(reg, merged.get("owner"))
+    elif "owner" in out and not (existing or {}).get("country"):
+        # exploitant renseigné après coup (série militaire type QA400) : le pays se déduit de lui
+        out["country"] = regs.country_for((existing or {}).get("registration"), out.get("owner"))
+    if "country" in data:
+        # choix explicite dans le formulaire : un code pays le fixe, « Auto » (vide) relance la détection
+        c = str(data.get("country") or "").strip().upper()
+        if c and not re.fullmatch(r"[A-Z]{2}", c):
+            raise HTTPException(422, "invalid_country")
+        out["country"] = c or regs.country_for(merged.get("registration"), merged.get("owner"))
     if "airport" in out or "place" in out:
         out["airport"], out["place"] = _split_place(out.get("airport"), out.get("place"))
     if "aircraft_icao" in out and out["aircraft_icao"]:
@@ -548,7 +602,12 @@ MEMBER_FIELDS = ("registration", "aircraft", "aircraft_icao", "manufacturer", "m
                  "test_registration")
 INHERIT = ("aircraft", "aircraft_icao", "manufacturer", "owner", "airline_icao", "livery", "military", "flight_type",
            "date", "airport", "place", "location_id", "lat", "lng", "description", "camera", "lens", "focal", "aperture",
-           "iso", "shutter")
+           "iso", "shutter", "rating")
+# Ce qui décrit la photo et la prise de vue : modifié sur un avion, appliqué aux autres avions de la même photo
+SHARED = ("date", "date_utc", "sun_elevation", "airport", "place", "location_id", "lat", "lng", "description", "flight_type",
+          "camera", "lens", "focal", "aperture", "iso", "shutter", "rating",
+          "image", "thumb", "image_w", "image_h", "phash", "exif_json")
+IDENTITY = ("aircraft", "aircraft_icao", "manufacturer", "owner", "airline_icao", "livery", "military")
 INHERIT_RAW = ("exif_json", "image", "thumb", "image_w", "image_h", "phash")
 
 
@@ -559,7 +618,8 @@ def _prepare_members(base: dict, members: list | None) -> list[dict]:
     for m in members or []:
         if not isinstance(m, dict):
             continue
-        inp = {k: base[k] for k in INHERIT if base.get(k) not in (None, "")}
+        own = m.get("inherit_aircraft") is False          # autre appareil que l'avion principal : ni type ni compagnie hérités
+        inp = {k: base[k] for k in INHERIT if base.get(k) not in (None, "") and not (own and k in IDENTITY)}
         inp.update({k: v for k, v in m.items() if k in MEMBER_FIELDS and v not in (None, "")})
         inp["unknown_registration"] = bool(m.get("unknown_registration"))
         row = prepare(inp)
@@ -619,6 +679,33 @@ def _insert_members(rows: list[dict], patrol_id: int, tags: list, bg: Background
         for k, v in e.items():
             extra[k] = extra.get(k, []) + v
     return extra
+
+
+def _propagate(spot_id: int, patrol_id: int | None, out: dict, payload: dict, bg: BackgroundTasks) -> None:
+    """Applique aux autres avions de la photo les informations communes qui viennent d'être modifiées."""
+    if not patrol_id:
+        return
+    sibs = [r["id_spotting"] for r in q("SELECT id_spotting FROM spotting WHERE patrol_id = ? AND id_spotting <> ? AND is_patrol = 0",
+                                        (patrol_id, spot_id))]
+    if not sibs:
+        return
+    common = {k: out[k] for k in SHARED if k in out}
+    wx = settings_modules_weather()
+    for sid in sibs:
+        if common:
+            execute(f"UPDATE spotting SET {', '.join(f'{k} = ?' for k in common)}, updated_at = ? WHERE id_spotting = ?",
+                    [*common.values(), now_iso(), sid])
+        if "tags" in payload:
+            set_tags(sid, payload["tags"])
+        if common:
+            outings_svc.attach(sid)
+            if wx and ("date_utc" in common or "airport" in common):
+                execute("UPDATE spotting SET weather_status = 'pending' WHERE id_spotting = ?", (sid,))
+                bg.add_task(weather.update_spot_weather, sid)
+
+
+def settings_modules_weather() -> bool:
+    return bool(get_settings()["modules"].get("weather", True))
 
 
 def _patrol_id(spot: dict | None, info: dict) -> int:
@@ -768,6 +855,8 @@ def update_spot(
         out["patrol_id"] = None
         sets = ", ".join(f"{k} = ?" for k in out)
     execute(f"UPDATE spotting SET {sets} WHERE id_spotting = ?", list(out.values()) + [spot_id])
+    if not existing.get("is_patrol"):
+        _propagate(spot_id, out.get("patrol_id", existing.get("patrol_id")), out, payload, bg)
     if drop_old and drop_old[0]:
         if q1("SELECT 1 FROM spotting WHERE image = ? LIMIT 1", (drop_old[0],)):
             pass                           # la photo reste utilisée par un autre avion de la patrouille

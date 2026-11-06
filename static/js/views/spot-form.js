@@ -7,7 +7,8 @@ import { airportInput, tagPicker, rememberAirport } from '../lib/fields.js';
 import { esc, toast, errorToast, confirmDialog, stars, bindStars, pageHead, debounce, regText } from '../ui.js';
 import { saveDraft, uuid } from '../offline.js';
 
-const FLIGHT_TYPES = ['commercial', 'cargo', 'test', 'delivery', 'ferry', 'military', 'business', 'general', 'helicopter', 'medical', 'training', 'airshow', 'government', 'other'];
+const FLIGHT_TYPES = ['commercial', 'cargo', 'test', 'delivery', 'ferry', 'military', 'business', 'general', 'helicopter', 'medical', 'training', 'airshow', 'government', 'museum', 'display', 'storage', 'maintenance', 'scrapyard', 'other'];
+const STATIC_TYPES = ['museum', 'display', 'storage', 'maintenance', 'scrapyard'];
 
 function nowLocal() {
   const d = new Date();
@@ -39,7 +40,7 @@ export async function render(root, params, query) {
   }
   const s = editing ? await api(`/api/spots/${params.id}`) : {
     registration: query.reg || '', airport: query.airport || (query.place ? '' : scope.airport || (scope.place ? '' : store.settings.default_airport) || ''),
-    place: query.place || (query.airport ? '' : scope.place || ''), lat: query.lat ?? scopeLL?.[0] ?? null, lng: query.lng ?? scopeLL?.[1] ?? null, date: nowLocal(),
+    place: query.place || (query.airport ? '' : scope.place || ''), lat: query.lat ?? scopeLL?.[0] ?? null, lng: query.lng ?? scopeLL?.[1] ?? null, date: /^\d{4}-\d{2}-\d{2}$/.test(query.date || '') ? `${query.date}T${nowLocal().slice(11)}` : nowLocal(),
     icao24: query.icao24 || '', tags: [], military: 0, favorite: 0, rating: null,
   };
   const isUnknown = typeof s.registration === 'string' && s.registration.startsWith('SANS-IMMAT-');
@@ -77,7 +78,7 @@ export async function render(root, params, query) {
         </div>` : ''}
         <div data-regblock class="stack">
         <label class="field"><span>${esc(t('spot.registration'))}</span>
-          <div class="input-wrap"><input class="input big" name="registration" value="${esc(s.registration)}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="F-HBXA" required>
+          <div class="input-wrap"><input class="input big" name="registration" value="${esc(s.registration)}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AB-CDE" required>
           <button type="button" class="btn-icon" data-lookup title="${esc(t('spot.lookup'))}">${icon('wand-sparkles')}</button></div></label>
         <label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" name="unknown_registration" ${isUnknown ? 'checked' : ''}> <span>${esc(t('spot.unknown_reg'))}</span> <span class="tiny muted">${esc(t('spot.unknown_reg_hint'))}</span></label>
         <div data-lookup-res></div>
@@ -85,13 +86,16 @@ export async function render(root, params, query) {
         <div data-dup></div>
         <div data-photodup></div>
         <div class="field-row">
-          <label class="field"><span>${esc(t('spot.aircraft'))}</span><input name="aircraft" value="${esc(s.aircraft)}" placeholder="Airbus A320-214"></label>
-          <label class="field"><span>${esc(t('spot.type_code'))}</span><input name="aircraft_icao" value="${esc(s.aircraft_icao)}" placeholder="A320" autocapitalize="characters"></label>
+          <label class="field"><span>${esc(t('spot.aircraft'))}</span><input name="aircraft" value="${esc(s.aircraft)}" placeholder="…"></label>
+          <label class="field"><span>${esc(t('spot.type_code'))}</span><input name="aircraft_icao" value="${esc(s.aircraft_icao)}" placeholder="ABCD" autocapitalize="characters"></label>
         </div>
         <div class="field-row">
-          <label class="field"><span>${esc(t('spot.owner'))}</span><input name="owner" value="${esc(s.owner)}" placeholder="Air France"></label>
-          <label class="field"><span>${esc(t('spot.airline_icao'))}</span><input name="airline_icao" value="${esc(s.airline_icao)}" placeholder="AFR" maxlength="4" autocapitalize="characters"></label>
+          <label class="field"><span>${esc(t('spot.owner'))}</span><input name="owner" value="${esc(s.owner)}" placeholder="…"></label>
+          <label class="field"><span>${esc(t('spot.airline_icao'))}</span><input name="airline_icao" value="${esc(s.airline_icao)}" placeholder="ABC" maxlength="4" autocapitalize="characters"></label>
         </div>
+        <label class="field optional"><span>${esc(t('spot.country'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
+          <select name="country"><option value="">${esc(t('spot.country_auto'))}</option>${s.country ? `<option value="${esc(s.country)}" selected>${flag(s.country)} ${esc(countryName(s.country))}</option>` : ''}</select>
+          <span class="tiny muted">${esc(t('spot.country_hint'))}</span></label>
         <div class="field-row">
           <label class="field"><span>${esc(t('spot.msn'))}</span><input name="msn" value="${esc(s.msn)}" inputmode="text"></label>
           <label class="field"><span>${esc(t('spot.manufacturer'))}</span><input name="manufacturer" value="${esc(s.manufacturer)}"></label>
@@ -106,15 +110,16 @@ export async function render(root, params, query) {
         <div class="field"><span>${esc(t('spot.tags'))}</span><div data-tags></div></div>
       </div>
 
-      ${simpleOnly ? '' : `<details class="card fold" data-patrol ${s.patrol ? 'open' : ''}>
-        <summary>${icon('users', '', 18)} ${esc(t('patrol.title'))} ${icon('chevron-down', 'chev', 18)}</summary>
+      ${s.is_patrol ? '' : `<details class="card fold" data-patrol ${s.patrol ? 'open' : ''}>
+        <summary>${icon('plus', '', 18)} ${esc(t('multi.title'))} ${icon('chevron-down', 'chev', 18)}</summary>
         <div class="fold-body stack">
-          <label class="field"><span>${esc(t('patrol.name'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
+          <p class="tiny muted">${esc(t('multi.hint'))}</p>
+          ${s.patrol && s.patrol.members.length > 1 ? `<p class="tiny muted">${icon('link', '', 12)} ${esc(t('multi.sync_hint', { n: s.patrol.members.length - 1 }))}</p>` : ''}
+          <label class="field"><span>${esc(t('multi.group_name'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
             <input name="patrol_name" list="patrol-names" value="${esc(s.patrol?.name)}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off"></label>
           ${s.patrol ? `<div class="stack" style="gap:6px"><span class="tiny muted">${esc(t('patrol.members'))}</span><div class="row wrap" style="gap:6px">${s.patrol.members.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}
           <div class="stack" style="gap:8px" data-pat-rows></div>
-          <div><button type="button" class="btn sm" data-pat-add>${icon('plus', '', 16)} ${esc(t('patrol.add'))}</button></div>
-          <p class="tiny muted">${esc(t('patrol.hint'))}</p>
+          <div><button type="button" class="btn sm" data-pat-add>${icon('plus', '', 16)} ${esc(t('multi.add'))}</button></div>
           ${s.patrol ? `<label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" name="patrol_leave"> <span>${esc(t('patrol.leave'))}</span></label>` : ''}
         </div>
       </details>`}
@@ -126,7 +131,7 @@ export async function render(root, params, query) {
           <label class="field"><span>${esc(t('spot.livery'))}</span><input name="livery" value="${esc(s.livery && s.livery !== 'None' ? s.livery : '')}" placeholder="${esc(t('spot.livery_ph'))}">
             <span class="row" style="gap:6px;margin-top:6px"><button type="button" class="chip" data-primer style="height:28px;font-size:12.5px">${icon('paint-bucket', '', 14)} ${esc(t('livery.primer_chip'))}</button><button type="button" class="chip" data-white style="height:28px;font-size:12.5px">${icon('paint-bucket', '', 14)} ${esc(t('livery.white_chip'))}</button></span></label>
           <div class="field-row">
-            <label class="field"><span>${esc(t('spot.flight_type'))}</span><select name="flight_type"><option value="">—</option>${FLIGHT_TYPES.map((f) => `<option value="${f}" ${s.flight_type === f ? 'selected' : ''}>${esc(t(`ftype.${f}`))}</option>`).join('')}</select></label>
+            <label class="field"><span>${esc(t('spot.flight_type'))}</span><select name="flight_type"><option value="">—</option>${(() => { const o = (f) => `<option value="${f}" ${s.flight_type === f ? 'selected' : ''}>${esc(t(`ftype.${f}`))}</option>`; const fly = FLIGHT_TYPES.filter((f) => !STATIC_TYPES.includes(f)); return `<optgroup label="${esc(t('ftype.g_flight'))}">${fly.filter((f) => f !== 'other').map(o).join('')}</optgroup><optgroup label="${esc(t('ftype.g_static'))}">${STATIC_TYPES.map(o).join('')}</optgroup>${o('other')}`; })()}</select></label>
             ${locations.length ? `<label class="field"><span>${esc(t('spot.location'))}</span><select name="location_id">${locOptions(locations, s.airport, s.location_id)}</select></label>` : ''}
           </div>
           <label class="field optional"><span>${esc(t('spot.test_registration'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
@@ -384,14 +389,27 @@ export async function render(root, params, query) {
   const patRows = root.querySelector('[data-pat-rows]') || document.createElement('div');
   const addPatRow = () => {
     const row = document.createElement('div');
-    row.className = 'row';
-    row.style.gap = '8px';
-    row.innerHTML = `<input class="grow" data-pr placeholder="${esc(t('patrol.reg_ph'))}" autocapitalize="characters" autocomplete="off" spellcheck="false" style="min-width:0">
-      <label class="row tiny" style="gap:4px;white-space:nowrap;cursor:pointer"><input type="checkbox" data-pu> ${esc(t('patrol.unknown'))}</label>
-      <button type="button" class="btn sm ghost" data-px aria-label="${esc(t('common.remove'))}">${icon('x', '', 16)}</button>`;
-    const inp = row.querySelector('[data-pr]'), unkBox = row.querySelector('[data-pu]');
+    row.className = 'stack card-sub';
+    row.style.cssText = 'gap:6px;padding:10px;border:1px solid var(--line);border-radius:var(--r-sm)';
+    row.innerHTML = `<div class="row" style="gap:8px">
+        <input class="grow" data-pr placeholder="${esc(t('patrol.reg_ph'))}" autocapitalize="characters" autocomplete="off" spellcheck="false" style="min-width:0">
+        <label class="row tiny" style="gap:4px;white-space:nowrap;cursor:pointer"><input type="checkbox" data-pu> ${esc(t('patrol.unknown'))}</label>
+        <button type="button" class="btn sm ghost" data-px aria-label="${esc(t('common.remove'))}">${icon('x', '', 16)}</button></div>
+      <div class="row" style="gap:8px"><input class="grow" data-pt placeholder="${esc(t('multi.type_ph'))}" autocomplete="off" style="min-width:0"><input class="grow" data-po placeholder="${esc(t('multi.owner_ph'))}" autocomplete="off" style="min-width:0"></div>
+      <label class="row tiny" style="gap:6px;cursor:pointer"><input type="checkbox" data-ps> ${esc(t('multi.same'))}</label>`;
+    const inp = row.querySelector('[data-pr]'), unkBox = row.querySelector('[data-pu]'), ty = row.querySelector('[data-pt]'), ow = row.querySelector('[data-po]');
     unkBox.onchange = () => { inp.disabled = unkBox.checked; if (unkBox.checked) inp.value = ''; };
     row.querySelector('[data-px]').onclick = () => row.remove();
+    // Type et compagnie proposés d'après l'immatriculation (historique, cache, base locale) ; modifiables
+    inp.addEventListener('change', async () => {
+      const reg = inp.value.trim();
+      if (reg.length < 3 || (ty.value && ow.value)) return;
+      try {
+        const r = await api(`/api/lookup/aircraft/${encodeURIComponent(reg)}`);
+        if (!ty.value && (r.aircraft || r.aircraft_icao)) { ty.value = r.aircraft || r.aircraft_icao; row.dataset.icao = r.aircraft_icao || ''; row.dataset.tyname = ty.value; row.dataset.mfr = r.manufacturer || ''; }
+        if (!ow.value && r.owner) { ow.value = r.owner; row.dataset.alc = r.airline_icao || ''; }
+      } catch { /* hors ligne ou inconnu : l'utilisateur saisit lui-même */ }
+    });
     patRows.append(row);
     inp.focus();
   };
@@ -411,12 +429,26 @@ export async function render(root, params, query) {
       F('patrol_sname').addEventListener('blur', guess);
     }).catch(() => {});
   }
+  // Pays de l'appareil : liste complète, « Auto » = détection par immatriculation puis exploitant
+  const spotCountry = form.elements.country;
+  let countryTouched = false;
+  if (spotCountry) {
+    spotCountry.addEventListener('change', () => { countryTouched = true; });
+    api('/api/spots/countries').then((codes) => {
+      const cur = spotCountry.value;
+      if (cur && !codes.includes(cur)) codes.push(cur);
+      spotCountry.innerHTML = `<option value="">${esc(t('spot.country_auto'))}</option>` + codes.map((c) => ({ c, n: countryName(c) })).sort((a, b) => a.n.localeCompare(b.n))
+        .map(({ c, n }) => `<option value="${esc(c)}">${flag(c)} ${esc(n)}</option>`).join('');
+      spotCountry.value = cur;
+    }).catch(() => {});
+  }
   // Mode simple : la patrouille remplace l'immatriculation
   const patSimple = form.elements.patrol_simple;
   const syncPatrol = () => {
     const on = !!patSimple?.checked;
     root.querySelector('[data-patsimple]')?.toggleAttribute('hidden', !on);
     root.querySelector('[data-regblock]').hidden = on;
+    root.querySelector('[data-patrol]')?.toggleAttribute('hidden', on);
     F('registration').required = !on && !unk.checked;
   };
   if (patSimple) { patSimple.addEventListener('change', syncPatrol); syncPatrol(); }
@@ -431,6 +463,7 @@ export async function render(root, params, query) {
     const data = {};
     for (const k of ['registration', 'aircraft', 'aircraft_icao', 'owner', 'airline_icao', 'msn', 'manufacturer', 'airport', 'date', 'livery', 'flight_type', 'description', 'camera', 'lens', 'focal', 'aperture', 'iso', 'shutter', 'icao24', 'lat', 'lng', 'test_registration']) data[k] = F(k).value.trim();
     data.unknown_registration = unk.checked;
+    if (countryTouched && !asPatrol) data.country = spotCountry.value;
     // Lieu choisi dans les suggestions : on l'enregistre comme lieu ; un texte libre est classé par le serveur
     const isPlace = F('airport').dataset.kind === 'place';
     data.place = isPlace ? data.airport : '';
@@ -441,8 +474,20 @@ export async function render(root, params, query) {
     data.rating = rating || null;
     data.tags = picker.value();
     if (asPatrol) data.patrol = { simple: true, name: F('patrol_sname').value.trim(), size: F('patrol_size').value.trim(), country: F('patrol_country').value };
-    const members = asPatrol ? [] : [...patRows.children].map((r) => ({ registration: r.querySelector('[data-pr]').value.trim(), unknown_registration: r.querySelector('[data-pu]').checked }))
-      .filter((m) => m.registration || m.unknown_registration);
+    const members = asPatrol ? [] : [...patRows.children].map((r) => {
+      const ty = r.querySelector('[data-pt]').value.trim(), ow = r.querySelector('[data-po]').value.trim();
+      const same = r.querySelector('[data-ps]').checked;
+      const m = { registration: r.querySelector('[data-pr]').value.trim(), unknown_registration: r.querySelector('[data-pu]').checked, inherit_aircraft: same };
+      if (!same) {
+        if (ty) {
+          if (/^[A-Za-z0-9]{2,4}$/.test(ty)) m.aircraft_icao = ty.toUpperCase();
+          else { m.aircraft = ty; if (r.dataset.icao && ty === r.dataset.tyname) m.aircraft_icao = r.dataset.icao; }
+          if (r.dataset.mfr) m.manufacturer = r.dataset.mfr;
+        }
+        if (ow) { m.owner = ow; if (r.dataset.alc) m.airline_icao = r.dataset.alc; }
+      }
+      return m;
+    }).filter((m) => m.registration || m.unknown_registration);
     const patName = F('patrol_name')?.value.trim() || '';
     if (asPatrol) { /* déjà renseigné */ }
     else if (editing && s.patrol && F('patrol_leave')?.checked) data.patrol = null;

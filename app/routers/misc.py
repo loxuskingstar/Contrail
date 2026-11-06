@@ -206,12 +206,13 @@ def rank_candidates(cands: list[dict], airport: str | None) -> list[dict]:
 
 def nearest_airport(lat: float, lng: float, max_km: float = 15) -> dict | None:
     best, best_d = None, max_km
-    for icao, a in geo._airports().items():  # noqa: SLF001
+    core = geo._core()  # noqa: SLF001
+    for icao, a in {**geo._airports(), **geo.custom()}.items():  # noqa: SLF001
         if abs(a["lat"] - lat) > 0.3 or abs(a["lon"] - lng) > 0.4:
             continue
         d = geo.haversine_km(lat, lng, a["lat"], a["lon"])
         # On préfère les aéroports dotés d'un code IATA (aéroports commerciaux)
-        d_eff = d * (0.6 if a.get("iata") else 1)
+        d_eff = d * (0.6 if a.get("iata") else 1) * (1 if icao in core or a.get("custom") else 3)     # hélistations et petits terrains : seulement s'ils sont bien plus proches
         if d_eff < best_d:
             best, best_d = icao, d_eff
     return geo.airport(best) if best else None
@@ -233,6 +234,22 @@ def refdb_status():
 
 class RefdbDownload(BaseModel):
     source: str = "tar1090"
+
+
+@router.get("/api/refdb/fleet")
+def refdb_fleet():
+    """Types de ta collection avec leur effectif mondial : base ADS-B, valeur retenue et origine (base, table corrigée, toi)."""
+    from ..services import refdb
+    raw, eff, over = refdb.raw_type_counts(), refdb.type_counts(), refdb._user_overrides()  # noqa: SLF001
+    cur = refdb._curated()  # noqa: SLF001
+    rows = q("SELECT aircraft_icao t, MAX(aircraft) name, COUNT(*) n FROM spotting WHERE aircraft_icao IS NOT NULL "
+             "GROUP BY aircraft_icao ORDER BY n DESC")
+    out = []
+    for r in rows:
+        t = r["t"]
+        src = "user" if t in over else ("curated" if t in cur else ("db" if t in raw else None))
+        out.append({"type": t, "name": r["name"], "spots": r["n"], "db": raw.get(t), "count": eff.get(t), "source": src})
+    return {"items": out, "overrides": over}
 
 
 @router.post("/api/refdb/download")

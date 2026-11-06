@@ -239,15 +239,19 @@ export function regFlag(country) {
 const BADGE_STYLE = {
   first_type: ['accent', 'sparkles'], first_airline: ['violet', 'building-2'], first_airport: ['green', 'map-pin'],
   seen_again: ['slate', 'history'], most_spotted: ['gold', 'trophy'], special_livery: ['rose', 'palette'], primer: ['green', 'paint-bucket'], white: ['slate', 'paint-bucket'],
-  flown: ['violet', 'ticket'], military: ['slate', 'shield'], night: ['night', 'moon'], golden_hour: ['gold', 'sunset'], rarity: ['rose', 'gem'],
+  flown: ['violet', 'ticket'], military: ['slate', 'shield'], night: ['night', 'moon'], golden_hour: ['gold', 'sunset'], twilight: ['violet', 'sunset'], rarity: ['rose', 'gem'],
 };
 
+const RARITY_CLS = { legendary: 'gold', epic: 'violet', rare: 'rose', uncommon: 'green', common: 'slate' };
+
 export function badgeHtml(b, { withIcon = true } = {}) {
-  const [cls, ic] = BADGE_STYLE[b.code] || ['slate', 'tag'];
+  let [cls, ic] = BADGE_STYLE[b.code] || ['slate', 'tag'];
   let label = t(`badge.${b.code}`, b.n ? { n: b.n } : undefined);
-  if (b.code === 'rarity') label = t(`rarity.${b.tier}`, { n: b.n });
+  let cls2;
+  if (b.code === 'rarity') { label = t(`rarity.${b.tier}`, { n: b.n.toLocaleString() }); cls2 = RARITY_CLS[b.tier]; }
+  if (b.code === 'twilight') { label = t(`badge.twilight_${b.phase}`); if (b.phase === 'dawn') ic = 'sunrise'; }
   if (b.code === 'special_livery' && b.cat && b.cat !== 'special') label = t(`livery.${b.cat}`);
-  return `<span class="badge ${cls}">${withIcon ? icon(ic, '', 12) : ''}${esc(label)}</span>`;
+  return `<span class="badge ${cls2 || cls}">${withIcon ? icon(ic, '', 12) : ''}${esc(label)}</span>`;
 }
 
 export function badgesHtml(list = [], max = 4) {
