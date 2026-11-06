@@ -250,7 +250,7 @@ def test_refdb_import_and_radar_enrichment(client, tmp_path):
     # le radar classe les appareils grâce à la base locale
     opensky._cache.clear()
     orig = opensky._states
-    opensky._states = lambda params: {"time": 1, "states": [
+    opensky._states = lambda params, timeout=None: {"time": 1, "states": [
         {"icao24": "39e68b", "callsign": "AFR1", "lat": 43.6, "lng": 1.4, "alt_m": 1000, "on_ground": False, "track": 90, "category": 0},
         {"icao24": "abcdef", "callsign": "HELI", "lat": 43.6, "lng": 1.4, "alt_m": 300, "on_ground": False, "track": 0, "category": 8}]}
     try:
@@ -268,6 +268,8 @@ def test_radar_falls_back_to_free_source_on_quota(client, monkeypatch):
     from app.services import opensky
     opensky._cache.clear()
     opensky._blocked_until = 0.0
+    opensky._failed_until = 0.0
+    opensky._tile_cache.clear()
     calls = []
 
     def handler(req: httpx.Request):
@@ -294,6 +296,8 @@ def test_radar_falls_back_to_free_source_on_quota(client, monkeypatch):
     client.get("/api/radar", params={"lamin": 40, "lomin": 1, "lamax": 41, "lomax": 2})
     assert calls.count("opensky-network.org") == n
     opensky._blocked_until = 0.0
+    opensky._failed_until = 0.0
+    opensky._tile_cache.clear()
 
 
 def test_radar_wide_view_uses_free_tiles(client, monkeypatch):
@@ -301,6 +305,8 @@ def test_radar_wide_view_uses_free_tiles(client, monkeypatch):
     from app.services import opensky
     opensky._cache.clear()
     opensky._blocked_until = 0.0
+    opensky._failed_until = 0.0
+    opensky._tile_cache.clear()
     hosts = []
 
     def handler(req: httpx.Request):
@@ -316,6 +322,39 @@ def test_radar_wide_view_uses_free_tiles(client, monkeypatch):
     assert r.status_code == 200 and "opensky-network.org" not in hosts[-6:]
     assert len(r.json()["states"]) >= 4 and r.json()["source"] == "adsb.lol"
     assert client.get("/api/radar", params={"lamin": 30, "lomin": -10, "lamax": 55, "lomax": 20}).status_code == 422
+
+
+def test_radar_survives_opensky_timeout_and_partial_tiles(client, monkeypatch):
+    import httpx
+    from app.services import opensky
+    opensky._cache.clear(); opensky._tile_cache.clear()
+    opensky._blocked_until = 0.0; opensky._failed_until = 0.0
+    n = {"os": 0}
+
+    def handler(req: httpx.Request):
+        if req.url.host == "opensky-network.org":
+            n["os"] += 1
+            raise httpx.ReadTimeout("lent", request=req)
+        lat = float(req.url.path.split("/")[-3])
+        if req.url.host == "api.adsb.lol" and lat > 47:       # une partie de la zone : les deux sources échouent
+            return httpx.Response(429)
+        if req.url.host == "api.airplanes.live" and lat > 47:
+            return httpx.Response(503)
+        return httpx.Response(200, json={"ac": [{"hex": "39e68b", "lat": lat, "lon": 1.5, "alt_baro": 9000}]})
+
+    orig = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda *a, **k: orig(*a, **{**k, "transport": httpx.MockTransport(handler)}))
+    # 1) OpenSky expire : repli immédiat, puis mise en pause de 60 s (pas de nouvel essai)
+    r = client.get("/api/radar", params={"lamin": 43, "lomin": 1, "lamax": 44, "lomax": 2})
+    assert r.status_code == 200 and r.json()["source"] == "adsb.lol" and n["os"] == 1
+    client.get("/api/radar", params={"lamin": 42, "lomin": 1, "lamax": 43, "lomax": 2})
+    assert n["os"] == 1
+    # 2) vue large dont une tuile échoue : résultat partiel, pas d'erreur
+    r = client.get("/api/radar", params={"lamin": 38, "lomin": -4, "lamax": 52, "lomax": 10})
+    assert r.status_code == 200 and r.json()["partial"] >= 1 and r.json()["states"]
+    # 3) tout échoue et rien en cache : 502
+    r = client.get("/api/radar", params={"lamin": 60, "lomin": 1, "lamax": 61, "lomax": 2})
+    assert r.status_code == 502
 
 
 def test_fleet_airlabs_pagination_and_exclusions(client, monkeypatch):

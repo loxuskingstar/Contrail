@@ -400,7 +400,7 @@
 "radar.zoom_in": "拡大すると航空機が表示されます",
 "radar.rate_limited": "OpenSky の上限に達しました。お待ちください",
 "radar.count": "{n} 機",
-"radar.error": "OpenSky を利用できません",
+"radar.error": "レーダーを利用できません。自動的に再試行します",
 "radar.no_geo": "位置情報を取得できません。",
 "radar.unknown": "未識別の機体",
 "radar.altitude": "高度",
@@ -1282,5 +1282,6 @@
 "ach.step_todo": "今後",
 "ach.remaining": "あと{n}",
 "spot.preview_map": "地図で確認",
-"radar.source_fallback": "予備ソース: {src}（OpenSky の上限に達したため）"
+"radar.source_fallback": "予備ソース: {src}（OpenSky の上限に達したため）",
+"radar.partial": "一部のみ"
 }

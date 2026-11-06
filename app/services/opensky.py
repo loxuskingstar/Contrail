@@ -26,6 +26,8 @@ TOKEN_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protoc
 _token: dict = {"value": None, "exp": 0.0}
 _token_lock = threading.Lock()
 _cache: dict[str, tuple[float, dict]] = {}
+_failed_until = 0.0   # OpenSky en panne ou lent : on passe directement aux sources gratuites pendant 60 s
+_tile_cache: dict[str, tuple[float, str, list[dict]]] = {}
 _blocked_until = 0.0  # OpenSky a répondu 429 : on le laisse tranquille jusqu'à cette date (secondes epoch)
 
 # Sources ADS-B communautaires gratuites, sans clé, au format « readsb » (point + rayon en milles nautiques)
@@ -55,9 +57,9 @@ def _auth_headers(c: httpx.Client) -> dict:
             return {}
 
 
-def _states(params: list[tuple[str, str]]) -> dict:
+def _states(params: list[tuple[str, str]], timeout: float | None = None) -> dict:
     with ac.client() as c:
-        r = c.get(f"{API}/states/all", params=params, headers=_auth_headers(c))
+        r = c.get(f"{API}/states/all", params=params, headers=_auth_headers(c), **({"timeout": timeout} if timeout else {}))
         if r.status_code == 429:
             global _blocked_until
             try:
@@ -115,7 +117,7 @@ def _free_tile(lamin: float, lomin: float, lamax: float, lomax: float) -> tuple[
     for name, tpl in FREE_SOURCES:
         try:
             with ac.client() as c:
-                r = c.get(tpl.format(lat=lat, lon=lon, r=radius), timeout=12)
+                r = c.get(tpl.format(lat=lat, lon=lon, r=radius), timeout=6)
                 if r.status_code == 429:
                     last = RuntimeError(f"{name}: 429")
                     continue
@@ -146,18 +148,41 @@ def _free_tile(lamin: float, lomin: float, lamax: float, lomax: float) -> tuple[
     raise httpx.HTTPError(f"sources gratuites indisponibles : {last}")
 
 
+def _free_tile_cached(tile: tuple[float, float, float, float]) -> tuple[str, list[dict]] | None:
+    """Une tuile, avec cache de 8 s ; en cas d'échec, la dernière version connue (moins de 2 min) ; sinon None."""
+    key = ",".join(f"{v:.1f}" for v in tile)
+    hit = _tile_cache.get(key)
+    if hit and time.time() - hit[0] < 8:
+        return hit[1], hit[2]
+    try:
+        name, sts = _free_tile(*tile)
+    except (httpx.HTTPError, ValueError) as e:
+        log.info("Tuile radar indisponible (%s) : %s", key, e)
+        return (hit[1], hit[2]) if hit and time.time() - hit[0] < 120 else None
+    if len(_tile_cache) > 200:
+        _tile_cache.clear()
+    _tile_cache[key] = (time.time(), name, sts)
+    return name, sts
+
+
 def _free_states(lamin: float, lomin: float, lamax: float, lomax: float) -> dict:
-    """Radar de secours (et vues très larges) : agrégateurs ADS-B gratuits, une requête par tuile."""
+    """Radar de secours (et vues très larges) : agrégateurs ADS-B gratuits, une requête par tuile.
+
+    Tolérant aux pannes partielles : une tuile manquante n'invalide pas les autres (champ `partial`)."""
     from concurrent.futures import ThreadPoolExecutor
 
     tiles = _tiles(lamin, lomin, lamax, lomax)
     with ThreadPoolExecutor(max_workers=min(3, len(tiles))) as ex:
-        parts = list(ex.map(lambda t: _free_tile(*t), tiles))
+        parts = list(ex.map(_free_tile_cached, tiles))
+    ok = [p for p in parts if p]
+    if not ok:
+        raise httpx.HTTPError("sources gratuites indisponibles")
     seen: dict[str, dict] = {}
-    for _, sts in parts:
+    for _, sts in ok:
         for st in sts:
             seen[st["icao24"]] = st
-    return {"time": int(time.time()), "states": list(seen.values()), "source": parts[0][0]}
+    return {"time": int(time.time()), "states": list(seen.values()), "source": ok[0][0],
+            "partial": len(parts) - len(ok)}
 
 
 def radar(lamin: float, lomin: float, lamax: float, lomax: float) -> dict:
@@ -168,11 +193,13 @@ def radar(lamin: float, lomin: float, lamax: float, lomax: float) -> dict:
     else:
         raw = None
         wide = (lamax - lamin) * (lomax - lomin) > OPENSKY_MAX_AREA  # vue large : sources gratuites, on épargne les crédits OpenSky
-        if time.time() >= _blocked_until and not wide:
+        global _failed_until
+        if time.time() >= max(_blocked_until, _failed_until) and not wide:
             try:
                 raw = _states([("lamin", f"{lamin:.4f}"), ("lomin", f"{lomin:.4f}"), ("lamax", f"{lamax:.4f}"),
-                               ("lomax", f"{lomax:.4f}"), ("extended", "1")])
-            except httpx.HTTPError as e:
+                               ("lomax", f"{lomax:.4f}"), ("extended", "1")], timeout=5)
+            except (httpx.HTTPError, ValueError) as e:
+                _failed_until = time.time() + 60
                 log.info("OpenSky indisponible, bascule sur une source gratuite : %s", e)
         if raw is None or raw.get("error") == "rate_limited":
             raw = _free_states(lamin, lomin, lamax, lomax)  # lève httpx.HTTPError si tout est en panne
@@ -180,7 +207,7 @@ def radar(lamin: float, lomin: float, lamax: float, lomax: float) -> dict:
             _cache.clear()
         _cache[key] = (time.time(), raw)
     # Copie : l'enrichissement dépend du profil (données réelles ou session de test)
-    res = {"time": raw.get("time"), "error": raw.get("error"), "source": raw.get("source", "opensky"), "states": [dict(s) for s in raw["states"]]}
+    res = {"time": raw.get("time"), "error": raw.get("error"), "source": raw.get("source", "opensky"), "partial": raw.get("partial", 0), "states": [dict(s) for s in raw["states"]]}
     watch = {r["icao24"]: r["registration"] for r in q("SELECT icao24, value registration FROM wishes WHERE kind='aircraft' AND status='open' AND icao24 IS NOT NULL")}
     wish_match = wishes.radar_matcher()
     spotted = {r["icao24"]: r["registration"] for r in q(

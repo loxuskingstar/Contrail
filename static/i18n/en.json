@@ -433,7 +433,7 @@
 "one": "{n} aircraft",
 "other": "{n} aircraft"
 },
-"radar.error": "OpenSky unavailable",
+"radar.error": "Radar unavailable, retrying automatically",
 "radar.no_geo": "Position unavailable.",
 "radar.unknown": "Unidentified aircraft",
 "radar.altitude": "Altitude",
@@ -1453,5 +1453,6 @@
 "ach.step_todo": "Upcoming",
 "ach.remaining": "{n} to go",
 "spot.preview_map": "Preview on map",
-"radar.source_fallback": "Fallback source: {src} (OpenSky quota reached)"
+"radar.source_fallback": "Fallback source: {src} (OpenSky quota reached)",
+"radar.partial": "partial"
 }

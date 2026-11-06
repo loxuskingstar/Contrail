@@ -433,7 +433,7 @@
 "one": "{n} avión",
 "other": "{n} aviones"
 },
-"radar.error": "OpenSky no disponible",
+"radar.error": "Radar no disponible, reintento automático",
 "radar.no_geo": "Posición no disponible.",
 "radar.unknown": "Avión no identificado",
 "radar.altitude": "Altitud",
@@ -1453,5 +1453,6 @@
 "ach.step_todo": "Próximo",
 "ach.remaining": "Faltan {n}",
 "spot.preview_map": "Ver en el mapa",
-"radar.source_fallback": "Fuente de respaldo: {src} (cuota de OpenSky alcanzada)"
+"radar.source_fallback": "Fuente de respaldo: {src} (cuota de OpenSky alcanzada)",
+"radar.partial": "parcial"
 }

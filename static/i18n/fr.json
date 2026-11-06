@@ -433,7 +433,7 @@
 "one": "{n} appareil",
 "other": "{n} appareils"
 },
-"radar.error": "OpenSky indisponible",
+"radar.error": "Radar indisponible, nouvel essai automatique",
 "radar.no_geo": "Position indisponible.",
 "radar.unknown": "Appareil non identifié",
 "radar.altitude": "Altitude",
@@ -1453,5 +1453,6 @@
 "ach.step_todo": "À venir",
 "ach.remaining": "Encore {n}",
 "spot.preview_map": "Aperçu sur la carte",
-"radar.source_fallback": "Source de secours : {src} (quota OpenSky atteint)"
+"radar.source_fallback": "Source de secours : {src} (quota OpenSky atteint)",
+"radar.partial": "partiel"
 }
