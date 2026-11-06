@@ -34,7 +34,20 @@ _blocked_until = 0.0  # OpenSky a répondu 429 : on le laisse tranquille jusqu'�
 
 # Sources ADS-B communautaires gratuites, sans clé, au format « readsb » (point + rayon en milles nautiques)
 FREE_SOURCES = (("adsb.lol", "https://api.adsb.lol/v2/point/{lat:.4f}/{lon:.4f}/{r}"),
+                ("adsb.fi", "https://opendata.adsb.fi/api/v2/lat/{lat:.4f}/lon/{lon:.4f}/dist/{r}"),
                 ("airplanes.live", "https://api.airplanes.live/v2/point/{lat:.4f}/{lon:.4f}/{r}"))
+MIN_GAP = 1.05   # ces services limitent à ~1 requête par seconde et par client
+_src_off: dict[str, tuple[float, int]] = {}   # source -> (pause jusqu'à, code HTTP) après 429/403
+_src_last: dict[str, float] = {}
+_src_lock = {name: threading.Lock() for name, _ in FREE_SOURCES}
+
+
+def _throttle(name: str) -> None:
+    with _src_lock[name]:
+        wait = _src_last.get(name, 0.0) + MIN_GAP - time.time()
+        if wait > 0:
+            time.sleep(wait)
+        _src_last[name] = time.time()
 
 STATE_FIELDS = ("icao24", "callsign", "origin_country", "time_position", "last_contact", "lng", "lat",
                 "baro_alt", "on_ground", "velocity", "track", "vertical_rate", "sensors", "geo_alt",
@@ -108,7 +121,7 @@ def _tiles(lamin: float, lomin: float, lamax: float, lomax: float) -> list[tuple
             for i in range(rows) for j in range(cols)]
 
 
-def _free_tile(lamin: float, lomin: float, lamax: float, lomax: float) -> tuple[str, list[dict]]:
+def _free_tile(lamin: float, lomin: float, lamax: float, lomax: float, start: int = 0) -> tuple[str, list[dict]]:
     import math
 
     lat, lon = (lamin + lamax) / 2, (lomin + lomax) / 2
@@ -116,12 +129,21 @@ def _free_tile(lamin: float, lomin: float, lamax: float, lomax: float) -> tuple[
     dlon_nm = (lomax - lomin) / 2 * 60 * max(math.cos(math.radians(lat)), 0.1)
     radius = max(5, min(250, math.ceil(math.hypot(dlat_nm, dlon_nm))))
     errs: list[str] = []
-    for name, tpl in FREE_SOURCES:
+    order = FREE_SOURCES[start % len(FREE_SOURCES):] + FREE_SOURCES[:start % len(FREE_SOURCES)]
+    for name, tpl in order:
+        off = _src_off.get(name)
+        if off and off[0] > time.time():
+            errs.append(f"{name} : en pause (HTTP {off[1]})")
+            continue
         try:
+            _throttle(name)
             with ac.client() as c:
                 r = c.get(tpl.format(lat=lat, lon=lon, r=radius), timeout=6)
                 if r.status_code >= 400:
                     errs.append(f"{name} : HTTP {r.status_code}")
+                    if r.status_code in (403, 429):
+                        # 429 : trop de requêtes, on laisse souffler la source ; 403 : refus, on réessaie plus tard
+                        _src_off[name] = (time.time() + (45 if r.status_code == 429 else 600), r.status_code)
                     continue
                 data = r.json() or {}
         except httpx.HTTPError as e:
@@ -152,14 +174,14 @@ def _free_tile(lamin: float, lomin: float, lamax: float, lomax: float) -> tuple[
     raise httpx.HTTPError(" ; ".join(errs))
 
 
-def _free_tile_cached(tile: tuple[float, float, float, float]) -> tuple[str, list[dict]] | None:
+def _free_tile_cached(tile: tuple[float, float, float, float], start: int = 0) -> tuple[str, list[dict]] | None:
     """Une tuile, avec cache de 8 s ; en cas d'échec, la dernière version connue (moins de 2 min) ; sinon None."""
     key = ",".join(f"{v:.1f}" for v in tile)
     hit = _tile_cache.get(key)
     if hit and time.time() - hit[0] < 8:
         return hit[1], hit[2]
     try:
-        name, sts = _free_tile(*tile)
+        name, sts = _free_tile(*tile, start=start)
     except (httpx.HTTPError, ValueError) as e:
         global _last_error, _last_warn
         _last_error = str(e) or type(e).__name__
@@ -181,7 +203,7 @@ def _free_states(lamin: float, lomin: float, lamax: float, lomax: float) -> dict
 
     tiles = _tiles(lamin, lomin, lamax, lomax)
     with ThreadPoolExecutor(max_workers=min(3, len(tiles))) as ex:
-        parts = list(ex.map(_free_tile_cached, tiles))
+        parts = list(ex.map(lambda it: _free_tile_cached(it[1], it[0]), enumerate(tiles)))  # tuiles réparties sur les sources
     ok = [p for p in parts if p]
     if not ok:
         raise httpx.HTTPError(_last_error or "sources gratuites indisponibles")

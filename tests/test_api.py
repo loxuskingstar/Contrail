@@ -270,6 +270,8 @@ def test_radar_falls_back_to_free_source_on_quota(client, monkeypatch):
     opensky._blocked_until = 0.0
     opensky._failed_until = 0.0
     opensky._tile_cache.clear()
+    opensky._src_off.clear()
+    opensky.MIN_GAP = 0
     calls = []
 
     def handler(req: httpx.Request):
@@ -298,6 +300,8 @@ def test_radar_falls_back_to_free_source_on_quota(client, monkeypatch):
     opensky._blocked_until = 0.0
     opensky._failed_until = 0.0
     opensky._tile_cache.clear()
+    opensky._src_off.clear()
+    opensky.MIN_GAP = 0
 
 
 def test_radar_wide_view_uses_free_tiles(client, monkeypatch):
@@ -307,12 +311,17 @@ def test_radar_wide_view_uses_free_tiles(client, monkeypatch):
     opensky._blocked_until = 0.0
     opensky._failed_until = 0.0
     opensky._tile_cache.clear()
+    opensky._src_off.clear()
+    opensky.MIN_GAP = 0
     hosts = []
 
     def handler(req: httpx.Request):
         hosts.append(req.url.host)
+        if req.url.host == "opensky-network.org":
+            return httpx.Response(429)
         # un avion par tuile, positionné au centre du disque interrogé
-        _, _, _, lat, lon, _ = req.url.path.split("/")
+        import re
+        lat, lon = re.search(r"(?:point|lat)/(-?[\d.]+)/(?:lon/)?(-?[\d.]+)", req.url.path).groups()
         return httpx.Response(200, json={"ac": [{"hex": f"a{len(hosts):05x}", "lat": float(lat), "lon": float(lon), "alt_baro": 30000}]})
 
     orig = httpx.Client
@@ -320,7 +329,7 @@ def test_radar_wide_view_uses_free_tiles(client, monkeypatch):
     r = client.get("/api/radar", params={"lamin": 40, "lomin": -2, "lamax": 50, "lomax": 8})   # 100 °² : OpenSky d'abord
     r = client.get("/api/radar", params={"lamin": 38, "lomin": -4, "lamax": 52, "lomax": 10})  # 196 °² : tuiles gratuites
     assert r.status_code == 200 and "opensky-network.org" not in hosts[-6:]
-    assert len(r.json()["states"]) >= 4 and r.json()["source"] == "adsb.lol"
+    assert len(r.json()["states"]) >= 4 and r.json()["source"] in ("adsb.lol", "adsb.fi", "airplanes.live")
     assert client.get("/api/radar", params={"lamin": 30, "lomin": -10, "lamax": 55, "lomax": 20}).status_code == 422
 
 
@@ -329,17 +338,17 @@ def test_radar_survives_opensky_timeout_and_partial_tiles(client, monkeypatch):
     from app.services import opensky
     opensky._cache.clear(); opensky._tile_cache.clear()
     opensky._blocked_until = 0.0; opensky._failed_until = 0.0
+    opensky._src_off.clear(); opensky.MIN_GAP = 0
     n = {"os": 0}
 
     def handler(req: httpx.Request):
         if req.url.host == "opensky-network.org":
             n["os"] += 1
             raise httpx.ReadTimeout("lent", request=req)
-        lat = float(req.url.path.split("/")[-3])
-        if req.url.host == "api.adsb.lol" and lat > 47:       # une partie de la zone : les deux sources échouent
-            return httpx.Response(429)
-        if req.url.host == "api.airplanes.live" and lat > 47:
-            return httpx.Response(503)
+        import re
+        lat = float(re.search(r"(?:point|lat)/(-?[\d.]+)", req.url.path).group(1))
+        if lat > 47:       # une partie de la zone : toutes les sources échouent
+            return httpx.Response(429 if req.url.host == "api.adsb.lol" else 503)
         return httpx.Response(200, json={"ac": [{"hex": "39e68b", "lat": lat, "lon": 1.5, "alt_baro": 9000}]})
 
     orig = httpx.Client
@@ -355,6 +364,32 @@ def test_radar_survives_opensky_timeout_and_partial_tiles(client, monkeypatch):
     # 3) tout échoue et rien en cache : 502
     r = client.get("/api/radar", params={"lamin": 60, "lomin": 1, "lamax": 61, "lomax": 2})
     assert r.status_code == 502 and "HTTP 429" in r.json()["detail"]["reason"]
+
+
+def test_radar_pauses_blocked_source_and_uses_next(client, monkeypatch):
+    import httpx
+    from app.services import opensky
+    opensky._cache.clear(); opensky._tile_cache.clear(); opensky._src_off.clear()
+    opensky._blocked_until = 0.0; opensky._failed_until = 0.0; opensky.MIN_GAP = 0
+    calls = []
+
+    def handler(req: httpx.Request):
+        calls.append(req.url.host)
+        if req.url.host == "opensky-network.org":
+            return httpx.Response(429)
+        if req.url.host == "api.adsb.lol":
+            return httpx.Response(429)
+        if req.url.host == "api.airplanes.live":
+            return httpx.Response(403)
+        return httpx.Response(200, json={"aircraft": [{"hex": "39e68b", "lat": 43.6, "lon": 1.4, "alt_baro": 9000}]})
+
+    orig = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda *a, **k: orig(*a, **{**k, "transport": httpx.MockTransport(handler)}))
+    r = client.get("/api/radar", params={"lamin": 43, "lomin": 1, "lamax": 44, "lomax": 2}).json()
+    assert r["source"] == "adsb.fi" and len(r["states"]) == 1
+    opensky._cache.clear(); opensky._tile_cache.clear(); calls.clear()
+    r = client.get("/api/radar", params={"lamin": 43, "lomin": 1.1, "lamax": 44, "lomax": 2.1}).json()
+    assert r["source"] == "adsb.fi" and "api.adsb.lol" not in calls and "api.airplanes.live" not in calls
 
 
 def test_fleet_airlabs_pagination_and_exclusions(client, monkeypatch):

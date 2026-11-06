@@ -445,7 +445,7 @@
 "radar.l_spotted": "Already spotted",
 "radar.l_air": "Airborne",
 "radar.l_ground": "On the ground",
-"radar.about": "ADS-B data provided by OpenSky Network (refreshed every 12 s). Without an account the quota is limited: add an OpenSky API client in settings. When it runs out, the radar automatically switches to adsb.lol / airplanes.live (free).",
+"radar.about": "ADS-B data provided by OpenSky Network (refreshed every 12 s). Without an account the quota is limited: add an OpenSky API client in settings. When it runs out, the radar automatically switches to adsb.lol / adsb.fi / airplanes.live (free).",
 "watch.sub": "Get alerted when a tracked aircraft is detected airborne.",
 "watch.check_now": "Check",
 "watch.add": "Watch",

@@ -445,7 +445,7 @@
 "radar.l_spotted": "Déjà spotté",
 "radar.l_air": "En vol",
 "radar.l_ground": "Au sol",
-"radar.about": "Données ADS-B fournies par OpenSky Network (rafraîchies toutes les 12 s). Sans compte, le quota est limité : ajoutez un client API OpenSky dans les réglages. Quand il est atteint, le radar bascule automatiquement sur adsb.lol / airplanes.live (gratuits).",
+"radar.about": "Données ADS-B fournies par OpenSky Network (rafraîchies toutes les 12 s). Sans compte, le quota est limité : ajoutez un client API OpenSky dans les réglages. Quand il est atteint, le radar bascule automatiquement sur adsb.lol / adsb.fi / airplanes.live (gratuits).",
 "watch.sub": "Recevez une alerte quand un appareil suivi est détecté en vol.",
 "watch.check_now": "Vérifier",
 "watch.add": "Suivre",
