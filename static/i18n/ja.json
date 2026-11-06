@@ -1298,5 +1298,8 @@
 "radar.f_alt_max": "最大",
 "radar.f_classes": "機種（未選択＝すべて）",
 "radar.f_reset": "フィルターをリセット",
-"radar.trail_hint": "このセッションでレーダーが捉えてからの航跡を表示しています。"
+"radar.trail_hint": "このセッションでレーダーが捉えてからの航跡を表示しています。",
+"spot.loc_here": "{ap} のスポット",
+"spot.loc_others": "その他の場所",
+"spot.loc_none": "{ap} にスポットなし — すべての場所"
 }

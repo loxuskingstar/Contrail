@@ -1469,5 +1469,8 @@
 "radar.f_alt_max": "Max",
 "radar.f_classes": "Aircraft types (none checked = all)",
 "radar.f_reset": "Reset filters",
-"radar.trail_hint": "Trail drawn since the radar first saw this aircraft (this session)."
+"radar.trail_hint": "Trail drawn since the radar first saw this aircraft (this session).",
+"spot.loc_here": "At {ap}",
+"spot.loc_others": "Other locations",
+"spot.loc_none": "No viewpoint at {ap} — all locations"
 }

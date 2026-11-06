@@ -1469,5 +1469,8 @@
 "radar.f_alt_max": "Máx.",
 "radar.f_classes": "Tipos de aeronave (ninguno marcado = todos)",
 "radar.f_reset": "Restablecer filtros",
-"radar.trail_hint": "Trayectoria trazada desde que el radar vio esta aeronave (esta sesión)."
+"radar.trail_hint": "Trayectoria trazada desde que el radar vio esta aeronave (esta sesión).",
+"spot.loc_here": "En {ap}",
+"spot.loc_others": "Otros lugares",
+"spot.loc_none": "Ningún punto de vista en {ap} — todos los lugares"
 }
