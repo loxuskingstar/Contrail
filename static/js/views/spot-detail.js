@@ -3,7 +3,7 @@ import { api, mediaUrl } from '../api.js';
 import { store, navigate } from '../app.js';
 import { t, fmtDate, fmtNum, countryName, flag } from '../i18n.js';
 import { icon } from '../lib/icons.js';
-import { esc, regText, regLabel, badgeHtml, tagChips, lightbox, menu, confirmDialog, toast, errorToast } from '../ui.js';
+import { esc, regText, regLabel, badgeHtml, tagChips, lightbox, menu, confirmDialog, toast, errorToast, undoToast } from '../ui.js';
 
 const WX_ICON = { clear: 'sun', partly_cloudy: 'cloud-sun', cloudy: 'cloud', overcast: 'cloud', rain: 'cloud-rain', drizzle: 'cloud-rain', snow: 'cloud-snow', thunderstorm: 'cloud-lightning', fog: 'cloud-fog', mist: 'cloud-fog', haze: 'cloud-fog' };
 
@@ -50,6 +50,8 @@ export async function render(root, params) {
     </header>
     ${s.badges.length || s.tags.length ? `<div class="chips" style="margin:-8px 0 16px">${s.badges.map((b) => badgeHtml(b)).join('')}${tagChips(s.tags)}</div>` : ''}
 
+    ${s.outing ? `<a class="card row" style="margin-bottom:14px" href="#/outings/${s.outing.id}">${icon('calendar-days', '', 22)}
+      <div class="grow"><b>${esc(s.outing.name || t('outing.this'))}</b><div class="small muted">${esc(t('outing.of_n', { n: s.outing.n }))}</div></div>${icon('chevron-right')}</a>` : ''}
     ${s.is_patrol && s.patrol_size ? `<div class="card row" style="margin-bottom:14px">${icon('users', '', 22)}<b>${esc(t('patrol.n_aircraft', { n: s.patrol_size }))}</b></div>` : ''}
     ${s.patrol ? `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('users', '', 18)} ${esc(s.patrol.name || t('patrol.title'))}<a href="#/spots?patrol=${s.patrol.id}">${esc(t('patrol.view_all', { n: s.patrol.members.length }))} →</a></div>
       <div class="row wrap" style="gap:8px">${s.patrol.members.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}
@@ -126,6 +128,7 @@ export async function render(root, params) {
     } catch (err) { errorToast(err); } finally { b.disabled = false; }
   });
   root.querySelector('[data-menu]').onclick = (e) => menu(e.currentTarget, [
+    ...(s.image ? [{ icon: 'download', label: t('export.photo'), onClick: () => (location.href = `/api/export/spots/${s.id_spotting}/photo.jpg`) }] : []),
     { icon: 'history', label: t('nav.airframe'), onClick: () => navigate(`#/airframe/${encodeURIComponent(s.registration)}`) },
     { icon: 'image', label: t('share_img.title'), onClick: () => navigate(`#/spots/${s.id_spotting}/share`) },
     { icon: 'link', label: t('share.this_spot'), onClick: async () => (await import('./shares.js')).createShareFlow({ kind: 'spot', target: String(s.id_spotting) }) },
@@ -135,8 +138,8 @@ export async function render(root, params) {
     '-',
     { icon: 'trash-2', label: t('common.delete'), danger: true, onClick: async () => {
       if (!(await confirmDialog(esc(t('spot.confirm_delete')), { danger: true, ok: t('common.delete') }))) return;
-      await api(`/api/spots/${s.id_spotting}`, { method: 'DELETE' });
-      toast(esc(t('common.deleted')), { type: 'success' });
+      const r = await api(`/api/spots/${s.id_spotting}`, { method: 'DELETE' });
+      undoToast(esc(t('common.deleted')), r.trash, { onUndo: () => navigate('#/spots') });
       navigate('#/spots');
     } },
   ]);

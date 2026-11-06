@@ -23,32 +23,46 @@ def _maker(s: dict) -> str | None:
     return f"mfr:{m}" if m else None
 
 
-def group(reg: str) -> list[str]:
-    """Immatriculations rattachées à `reg` (elle-même comprise), la plus utilisée en premier."""
-    r = regs.normalize(reg)
-    rows = q("SELECT registration, test_registration, msn, manufacturer, aircraft_icao, aircraft FROM spotting")
+def _build() -> tuple[list[set[str]], dict[str, int], dict[str, list[int]]]:
+    """Liens entre immatriculations d'une même cellule + nombre de spots par immatriculation (une seule lecture de la table)."""
     by_msn: dict[tuple[str, str], set[str]] = {}
     links: list[set[str]] = []
-    for s in rows:
+    counts: dict[str, int] = {}
+    for s in q("SELECT registration, test_registration, msn, manufacturer, aircraft_icao, aircraft FROM spotting"):
+        counts[s["registration"]] = counts.get(s["registration"], 0) + 1
         own = {x for x in (s["registration"], s["test_registration"]) if x}
         if len(own) > 1:
             links.append(own)                       # immat d'essai ↔ immat portée sur ce spot
-        mk, msn = _maker(s), _msn(s["msn"])
-        if msn and mk:
-            by_msn.setdefault((mk, msn), set()).update(own)
+        msn = _msn(s["msn"])
+        if msn:
+            mk = _maker(s)
+            if mk:
+                by_msn.setdefault((mk, msn), set()).update(own)
     links += [v for v in by_msn.values() if len(v) > 1]
+    index: dict[str, list[int]] = {}
+    for i, l in enumerate(links):
+        for x in l:
+            index.setdefault(x, []).append(i)
+    return links, counts, index
+
+
+def group(reg: str) -> list[str]:
+    """Immatriculations rattachées à `reg` (elle-même comprise), la plus utilisée en premier."""
+    from ..core import memo
+
+    r = regs.normalize(reg)
+    links, counts, index = memo("airframe_links", _build)
     seen = {r}
-    changed = True
-    while changed:                                  # fermeture transitive : F-WWCF ↔ F-HXXX ↔ D-AXXX
-        changed = False
-        for l in links:
-            if seen & l and not l <= seen:
-                seen |= l
-                changed = True
+    todo = [r]
+    done: set[int] = set()
+    while todo:                                     # fermeture transitive : F-WWCF ↔ F-HXXX ↔ D-AXXX
+        for i in index.get(todo.pop(), ()):
+            if i not in done:
+                done.add(i)
+                for x in links[i]:
+                    if x not in seen:
+                        seen.add(x)
+                        todo.append(x)
     if len(seen) == 1:
         return [r]
-    n = {x: 0 for x in seen}
-    for s in rows:
-        if s["registration"] in n:
-            n[s["registration"]] += 1
-    return sorted(seen, key=lambda x: (x != r, -n[x], x))
+    return sorted(seen, key=lambda x: (x != r, -counts.get(x, 0), x))

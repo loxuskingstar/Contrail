@@ -23,7 +23,8 @@ export async function render(root) {
         ${groups.filter((g) => (!active && !PLAIN.includes(g.category)) || g.category === active).map((g) => `
           <div class="section"><h2>${icon(ICONS[g.category], '', 20)} ${esc(t(`livery.${g.category}`))}</h2><span class="muted small">${esc(t('livery.unique', { n: g.unique }))}</span></div>
           ${PLAIN.includes(g.category) ? `<p class="small muted" style="margin:-4px 0 12px">${esc(t(`livery.${g.category}_hint`))}</p>` : ''}
-          <div class="gallery">${g.items.map((s) => spotTile({ ...s, owner: s.livery })).join('')}</div>`).join('')}`
+          <div class="gallery">${g.items.map((s) => spotTile({ ...s, owner: s.livery })).join('')}</div>
+          ${g.count > g.items.length ? `<p class="center" style="margin:12px 0"><a class="btn" href="#/spots?livery_category=${g.category}">${esc(t('livery.see_all', { n: g.count }))}</a></p>` : ''}`).join('')}`
         : `<div class="card">${emptyState('palette', t('livery.empty'), t('livery.empty_text'))}</div>`}`;
     root.querySelectorAll('[data-c]').forEach((b) => (b.onclick = () => { active = b.dataset.c; draw(); }));
   };

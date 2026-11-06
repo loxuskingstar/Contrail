@@ -10,8 +10,8 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..core import db, execute, get_config, now_iso, q, q1
-from ..services import aircraft as ac
+from ..core import db, execute, get_config, memo, now_iso, q, q1
+from ..services import collection, aircraft as ac
 from ..services import airframes
 from ..services import collection, geo, wishes
 from ..services import registration as regs
@@ -26,6 +26,11 @@ def _period(year: str) -> tuple[str, list]:
 
 @router.get("/api/stats")
 def stats(year: str = ""):
+    from datetime import date
+    return memo("stats", lambda y, d: _stats(y), year, date.today().isoformat())
+
+
+def _stats(year: str = ""):
     w, p = _period(year)
     totals = q1(
         f"SELECT COUNT(*) spots, COUNT(DISTINCT known(registration)) registrations, "
@@ -97,6 +102,11 @@ def stats(year: str = ""):
 
 @router.get("/api/stats/flights")
 def flight_stats(year: str = ""):
+    from datetime import date
+    return memo("flight_stats", lambda y, d: _flight_stats(y), year, date.today().isoformat())
+
+
+def _flight_stats(year: str = ""):
     w, p = _period(year)
     rows = q(f"SELECT * FROM flights WHERE {w}", p)
     if not rows:
@@ -140,6 +150,11 @@ def flight_stats(year: str = ""):
 # --------------------------------------------------------------------------- #
 @router.get("/api/dashboard")
 def dashboard():
+    from datetime import date
+    return memo("dashboard", lambda d: _dashboard(), date.today().isoformat())
+
+
+def _dashboard():
     from datetime import date
 
     today = date.today()
@@ -235,16 +250,22 @@ def airframe(reg: str):
             "cover": next((s["image"] for s in reversed(spots) if s.get("image")), None)}
 
 
+LIVERY_PER_CAT = 90   # au-delà, la page renvoie vers la liste filtrée (évite des réponses de plusieurs Mo)
+
+
 @router.get("/api/liveries")
-def liveries():
-    rows = q(f"SELECT {LIST_COLS} FROM spotting s WHERE s.livery_category IS NOT NULL ORDER BY s.date DESC")
-    decorate(rows)
-    groups: dict = {}
-    for r in rows:
-        groups.setdefault(r["livery_category"], []).append(r)
+def liveries(limit: int = LIVERY_PER_CAT):
     order = ["retro", "alliance", "commemorative", "logojet", "cause", "special", "primer", "white"]
-    return [{"category": c, "items": groups[c], "count": len(groups[c]),
-             "unique": len({i["registration"] for i in groups[c]})} for c in order if c in groups]
+    stats_ = {r["c"]: r for r in q("SELECT livery_category c, COUNT(*) n, COUNT(DISTINCT registration) u FROM spotting "
+                                   "WHERE livery_category IS NOT NULL GROUP BY livery_category")}
+    out = []
+    ctx = collection.badge_context()
+    for c in order:
+        if c not in stats_:
+            continue
+        rows = q(f"SELECT {LIST_COLS} FROM spotting s WHERE s.livery_category = ? ORDER BY s.date DESC LIMIT ?", (c, limit))
+        out.append({"category": c, "items": decorate(rows, ctx), "count": stats_[c]["n"], "unique": stats_[c]["u"]})
+    return out
 
 
 def streaks(rows: list[dict], today=None) -> dict:

@@ -3,11 +3,11 @@ import { api, mediaUrl } from '../api.js';
 import { store } from '../app.js';
 import { t, fmtNum, fmtDate, countryName, flag } from '../i18n.js';
 import { icon } from '../lib/icons.js';
-import { esc, sheet, spotRow, spotTile, emptyState, confirmDialog, toast, errorToast, enableSwipe, menu, debounce, $ } from '../ui.js';
+import { esc, sheet, spotRow, spotTile, emptyState, confirmDialog, toast, errorToast, undoToast, enableSwipe, menu, debounce, $ } from '../ui.js';
 
 const PAGE = 60;
 const SCOPE_KEY = 'contrail.spotsScope';
-const FILTER_KEYS = ['search', 'tag', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'unknown', 'sort'];
+const FILTER_KEYS = ['search', 'tag', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'sort'];
 
 export async function render(root, _p, query) {
   const filters = Object.fromEntries(FILTER_KEYS.filter((k) => query[k] !== undefined && query[k] !== '').map((k) => [k, query[k]]));
@@ -88,7 +88,7 @@ export async function render(root, _p, query) {
       let label = v;
       if (k === 'tag') label = store.tags?.find((x) => String(x.id_tag) === String(v))?.name || v;
       if (k === 'country') label = `${flag(v)} ${countryName(v)}`;
-      if (['special', 'favorite', 'has_photo', 'has_audio', 'unknown'].includes(k)) label = t(`spots.f_${k}`);
+      if (['special', 'favorite', 'has_photo', 'has_audio', 'unknown', 'rare'].includes(k)) label = t(`spots.f_${k}`);
       if (k === 'military') label = v === '1' ? t('spot.military') : t('spots.civil');
       if (k === 'flight_type') label = t(`ftype.${v}`);
       if (k === 'livery_category') label = t(`livery.${v}`);
@@ -189,9 +189,11 @@ export async function render(root, _p, query) {
     bar.innerHTML = `<b>${esc(t('spots.selected', { n: selected.size }))}</b>
       <button class="btn-icon" data-a="tag" title="${esc(t('spots.add_tag'))}">${icon('tag')}</button>
       <button class="btn-icon" data-a="fav" title="${esc(t('spot.favorite'))}">${icon('star')}</button>
+      <button class="btn-icon" data-a="dl" title="${esc(t('export.photos'))}">${icon('download')}</button>
       <button class="btn-icon" data-a="del" title="${esc(t('common.delete'))}" style="color:var(--danger)">${icon('trash-2')}</button>
       <button class="btn-icon" data-a="x">${icon('x')}</button>`;
     bar.querySelector('[data-a=x]').onclick = () => { selecting = false; selected.clear(); selBar(); reload(true); };
+    bar.querySelector('[data-a=dl]').onclick = () => { location.href = `/api/export/photos.zip?ids=${[...selected].join(',')}`; };
     bar.querySelector('[data-a=fav]').onclick = () => bulk('favorite', true);
     bar.querySelector('[data-a=del]').onclick = async () => {
       if (await confirmDialog(esc(t('spots.confirm_bulk_delete', { n: selected.size })), { danger: true, ok: t('common.delete') })) bulk('delete');
@@ -202,8 +204,13 @@ export async function render(root, _p, query) {
   async function bulk(action, value) {
     if (!selected.size) return;
     try {
-      await api('/api/spots/bulk', { method: 'POST', body: { ids: [...selected], action, value } });
-      toast(esc(t('common.done')), { type: 'success' });
+      const r = await api('/api/spots/bulk', { method: 'POST', body: { ids: [...selected], action, value } });
+      if (action === 'delete' && r.trash?.length) {
+        const ids = r.trash.slice();
+        toast(esc(t('common.deleted')), { type: 'success', duration: 8000, action: t('common.undo'), onAction: async () => {
+          try { for (const id of ids) await api(`/api/trash/${id}/restore`, { method: 'POST' }); toast(esc(t('trash.restored')), { type: 'success' }); reload(true); } catch (e) { errorToast(e); }
+        } });
+      } else toast(esc(t('common.done')), { type: 'success' });
       selecting = false; selected.clear(); selBar(); reload(true);
     } catch (e) { errorToast(e); }
   }
@@ -215,7 +222,8 @@ export async function render(root, _p, query) {
 
   async function removeOne(id) {
     if (!(await confirmDialog(esc(t('spot.confirm_delete')), { danger: true, ok: t('common.delete') }))) return;
-    await api(`/api/spots/${id}`, { method: 'DELETE' }).catch(errorToast);
+    const r = await api(`/api/spots/${id}`, { method: 'DELETE' }).catch(errorToast);
+    if (r) undoToast(esc(t('common.deleted')), r.trash, { onUndo: () => reload(true) });
     reload(true);
   }
 
@@ -338,6 +346,7 @@ export async function render(root, _p, query) {
     { icon: 'share-2', label: t('share.this_gallery'), onClick: () => shareGallery(filters) },
     '-',
     { icon: 'download', label: t('settings.export_csv'), onClick: () => (location.href = '/api/export/spots.csv') },
+    { icon: 'images', label: t('export.photos_filtered'), onClick: () => exportPhotos(filters) },
   ]);
 
   root.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
@@ -380,7 +389,7 @@ async function openFilters(filters, onApply) {
         <label class="field"><span>${esc(t('spots.sort'))}</span><select data-k="sort">${['date_desc', 'date_asc', 'created', 'registration', 'type'].map((v) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${esc(t(`sort.${v}`))}</option>`).join('')}</select></label>
       </div>
       <div class="card" style="padding:4px 14px">
-        ${['favorite', 'special', 'has_photo', 'has_audio', 'unknown'].map((k) => `<label class="toggle-row"><span class="t">${esc(t(`spots.f_${k}`))}</span><span class="switch"><input type="checkbox" data-b="${k}" ${f[k] ? 'checked' : ''}><span></span></span></label>`).join('')}
+        ${['favorite', 'special', 'rare', 'has_photo', 'has_audio', 'unknown'].map((k) => `<label class="toggle-row"><span class="t">${esc(t(`spots.f_${k}`))}</span><span class="switch"><input type="checkbox" data-b="${k}" ${f[k] ? 'checked' : ''}><span></span></span></label>`).join('')}
       </div>
       <div class="row" style="justify-content:space-between"><button class="btn ghost" data-reset>${esc(t('spots.clear_filters'))}</button><button class="btn primary" data-apply>${esc(t('common.apply'))}</button></div>
     </div>` });
@@ -398,4 +407,10 @@ async function openFilters(filters, onApply) {
     s.close();
     onApply();
   };
+}
+
+function exportPhotos(filters) {
+  const qs = new URLSearchParams();
+  Object.entries(filters || {}).forEach(([k, v]) => { if (v !== '' && v != null && v !== false && k !== 'sort') qs.set(k, v === true ? '1' : v); });
+  location.href = `/api/export/photos.zip?${qs}`;
 }

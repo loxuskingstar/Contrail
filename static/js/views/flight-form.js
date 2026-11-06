@@ -4,7 +4,7 @@ import { navigate } from '../app.js';
 import { t, fmtNum, fmtDate } from '../i18n.js';
 import { icon } from '../lib/icons.js';
 import { airportInput } from '../lib/fields.js';
-import { esc, pageHead, confirmDialog, errorToast, toast } from '../ui.js';
+import { esc, pageHead, confirmDialog, errorToast, toast, undoToast } from '../ui.js';
 import { afterSave } from './spot-form.js';
 
 export async function render(root, params, query = {}) {
@@ -129,7 +129,8 @@ export async function render(root, params, query = {}) {
   };
   root.querySelector('[data-del]')?.addEventListener('click', async () => {
     if (!(await confirmDialog(esc(t('flight.confirm_delete')), { danger: true, ok: t('common.delete') }))) return;
-    await api(`/api/flights/${f.id_flight}`, { method: 'DELETE' });
+    const r = await api(`/api/flights/${f.id_flight}`, { method: 'DELETE' });
+    undoToast(esc(t('common.deleted')), r.trash, { onUndo: () => navigate('#/flights') });
     navigate('#/flights');
   });
 }

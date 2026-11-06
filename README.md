@@ -85,6 +85,16 @@
 - **Quatre langues** : français, anglais, espagnol, japonais.
 - Fonctions avancées repliées par défaut (volets, menus contextuels), **modules désactivables** (vols, flottes, radar, météo, OCR, points de vue, watchlist, gamification) pour garder une interface épurée.
 
+### Nouveautés de la version 3.0
+- **Sorties de spotting** : les spots d'un même jour et d'un même site (aéroport ou lieu libre) sont regroupés automatiquement en une sortie, avec chiffres clés (spots, avions, types, nouveaux avions, livrées spéciales…), METAR, chronologie, nom et notes modifiables, navigation de sortie en sortie. Les spots existants sont rattachés à la migration.
+- **Rareté** : avec la base de référence importée, chaque type reçoit un palier d'après le nombre d'exemplaires connus (rare, très rare, exceptionnel) : badge sur les spots et filtre « Types rares ».
+- **Page par aéroport** (Plus › Aéroports) : fréquentation, saisonnalité, types et compagnies les plus vus, points de vue, sorties, derniers spots.
+- **Métadonnées IPTC/XMP à l'export** : photo seule (menu de la fiche), sélection multiple ou liste filtrée en archive .zip. Légende, titre, mots-clés (immatriculation, type, compagnie, aéroport, livrée, étiquettes), lieu, date, GPS, auteur et copyright (Réglages › Données). Si l'original est conservé et en JPEG, il n'est pas ré-encodé.
+- **Corbeille** : suppressions (spots, vols, groupes) réversibles pendant 30 jours (réglable), restauration complète (étiquettes, patrouille), fichiers conservés jusqu'à la purge, bouton « Annuler » après chaque suppression.
+- **Photos HEIC/HEIF** (iPhone) acceptées à l'import, converties en WebP, aperçu JPEG généré par le serveur pour les navigateurs qui ne les lisent pas.
+- **Performances** : index dédiés, résultats mémorisés tant que les données ne changent pas (statistiques, tableau de bord, badges, succès, carte, facettes), badges calculés en une passe, pagination par clé. Mesuré avec `python scripts/bench.py --n 10000` ; la liste, la fiche et le tableau de bord restent sous quelques dizaines de millisecondes à 50 000 spots.
+- **Watchlist** : repli sur adsb.lol, adsb.fi et airplanes.live quand OpenSky est en quota.
+
 ### Ajouts par rapport au cahier des charges
 Recherche globale (`/` ou `Ctrl+K`), notifications in-app et système, relais **ntfy / webhook**, authentification facultative par mot de passe, enregistrement audio au micro, cible de partage Android (« Partager vers Contrail » depuis la galerie), coller une image depuis le presse-papiers, aéroport le plus proche via le GPS de la photo, notes et favoris, sélection multiple, pays d'immatriculation et drapeaux, heure dorée / nuit calculées, import myFlightradar24, restauration de sauvegarde, script de données de démonstration, documentation OpenAPI, tests automatisés.
 
@@ -289,7 +299,7 @@ data/
 
 **Import de vols** : compatible avec l'export CSV de **myFlightradar24** (codes de siège, de classe et de motif convertis, codes OACI extraits de « Air France (AF/AFR) » ou « Toulouse / Blagnac (TLS/LFBO) ») et avec les CSV génériques.
 
-**Export** : spots et vols en CSV (UTF-8 avec BOM, lisible par Excel), export JSON intégral de toutes les tables.
+**Export** : spots et vols en CSV (UTF-8 avec BOM, lisible par Excel), export JSON intégral de toutes les tables, photos en JPEG avec métadonnées IPTC/XMP (une à une ou en archive .zip, jusqu'à 2 000 par archive).
 
 ## Architecture technique
 

@@ -3,7 +3,7 @@ import { api, mediaUrl } from '../api.js';
 import { store, navigate } from '../app.js';
 import { t, fmtNum, fmtDate, fmtDuration, flag } from '../i18n.js';
 import { icon } from '../lib/icons.js';
-import { esc, menu, sheet, toast, errorToast, confirmDialog } from '../ui.js';
+import { esc, menu, sheet, toast, errorToast, confirmDialog, undoToast } from '../ui.js';
 import { FONTS, loadFonts, rrect, rgba, fit, fitSize, barcode, dashed, grain, canvasBlob, flagEmoji } from '../lib/canvas.js';
 import { drawAircraft, loadTypes, classify, typeName } from '../lib/shapes.js';
 
@@ -140,7 +140,8 @@ export async function render(root, params) {
     '-',
     { icon: 'trash-2', label: t('common.delete'), danger: true, onClick: async () => {
       if (!(await confirmDialog(esc(t('flight.confirm_delete')), { danger: true, ok: t('common.delete') }))) return;
-      await api(`/api/flights/${f.id_flight}`, { method: 'DELETE' }).catch(errorToast);
+      const r = await api(`/api/flights/${f.id_flight}`, { method: 'DELETE' }).catch(errorToast);
+      if (r) undoToast(esc(t('common.deleted')), r.trash, { onUndo: () => navigate('#/flights') });
       navigate('#/flights');
     } },
   ]);

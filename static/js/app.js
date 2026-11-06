@@ -45,6 +45,7 @@ const NAV = [
   { group: 'nav.g.collection' },
   { href: '#/', icon: 'house', key: 'nav.home', match: /^$/ },
   { href: '#/spots', icon: 'camera', key: 'nav.spots', match: /^spots/ },
+  { href: '#/outings', icon: 'calendar-days', key: 'nav.outings', match: /^outings/ },
   { href: '#/flights', icon: 'ticket', key: 'nav.flights', match: /^flights/, mod: 'flights' },
   { href: '#/fleets', icon: 'building-2', key: 'nav.fleets', match: /^(fleets|liveries)/, mod: 'fleets' },
   { href: '#/stats', icon: 'chart-column', key: 'nav.stats', match: /^stats/ },
@@ -56,6 +57,7 @@ const NAV = [
   { href: '#/achievements', icon: 'trophy', key: 'nav.achievements', match: /^achievements/, mod: 'gamification' },
   { href: '#/story', icon: 'wand-sparkles', key: 'nav.story', match: /^story/, mod: 'gamification' },
   { href: '#/shares', icon: 'share-2', key: 'nav.shares', match: /^shares/ },
+  { href: '#/trash', icon: 'trash-2', key: 'nav.trash', match: /^trash/ },
   { href: '#/settings', icon: 'settings', key: 'nav.settings', match: /^(settings|drafts)/ },
 ];
 
@@ -74,6 +76,11 @@ const ROUTES = [
   [/^fleets$/, 'fleets'],
   [/^fleets\/(.+)$/, 'fleet-detail', ['key']],
   [/^liveries$/, 'liveries'],
+  [/^trash$/, 'trash'],
+  [/^outings$/, 'outings'],
+  [/^outings\/(\d+)$/, 'outing-detail', ['id']],
+  [/^airports$/, 'airports'],
+  [/^airports\/([^/]+)$/, 'airport', ['id']],
   [/^stats$/, 'stats'],
   [/^locations$/, 'locations'],
   [/^radar$/, 'radar'],
@@ -143,7 +150,7 @@ function updateNav(path) {
     a.classList.toggle('active', !!item?.match?.test(path));
   });
   const more = $('.bottomnav [data-more]');
-  if (more) more.classList.toggle('active', /^(more|fleets|liveries|stats|locations|wishlist|watchlist|achievements|story|shares|settings|drafts)/.test(path));
+  if (more) more.classList.toggle('active', /^(more|fleets|liveries|stats|locations|wishlist|watchlist|achievements|story|shares|settings|drafts|trash|outings)/.test(path));
 }
 
 // Le grand titre (One UI) se replie dans la barre supérieure au défilement
@@ -333,7 +340,7 @@ function openPalette() {
       grp(t('search.airframes'), r.airframes.map((a) => `<a href="#/airframe/${encodeURIComponent(a.registration)}">${icon('plane')}<span class="mono"><b>${esc(a.registration)}</b></span><span class="muted small ellipsis grow">${esc(a.aircraft || '')}</span><span class="badge">${a.n}×</span></a>`)),
       grp(t('search.spots'), r.spots.map((s) => `<a href="#/spots/${s.id_spotting}">${s.thumb ? `<img src="${mediaUrl('thumbs', s.thumb)}" alt="">` : icon('camera')}<span class="grow ellipsis"><b class="mono">${esc(s.registration)}</b> <span class="muted small">${s.test_registration && s.test_registration !== s.registration ? `<span class="mono">${esc(s.test_registration)}</span> · ` : ''}${esc(s.owner || '')} · ${esc(s.airport || '')}</span></span></a>`)),
       grp(t('search.flights'), r.flights.map((f) => `<a href="#/flights/${f.id_flight}">${icon('ticket')}<span class="grow"><b>${esc(f.dep_icao)} → ${esc(f.arr_icao)}</b> <span class="muted small">${esc(f.flight_number || '')} · ${esc(f.date)}</span></span></a>`)),
-      grp(t('search.airports'), r.airports.map((a) => `<a href="#/spots?airport=${a.icao}">${icon('map-pin')}<span class="grow"><b class="mono">${a.icao}</b> <span class="muted small">${esc(a.name)}</span></span></a>`)),
+      grp(t('search.airports'), r.airports.map((a) => `<a href="#/airports/${a.icao}">${icon('map-pin')}<span class="grow"><b class="mono">${a.icao}</b> <span class="muted small">${esc(a.name)}</span></span></a>`)),
       grp(t('search.tags'), r.tags.map((tg) => `<a href="#/spots?tag=${tg.id_tag}">${icon('tag')}<span>${esc(tg.name)}</span></a>`)),
     ].join('') || `<p class="muted small" style="padding:12px">${esc(t('search.none'))}</p>`;
     sel = 0; highlight();

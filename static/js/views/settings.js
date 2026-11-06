@@ -155,6 +155,11 @@ export async function render(root, params) {
           <div class="row wrap">${inTest
             ? `<button class="btn primary" data-tquit>${icon('log-out', '', 18)} ${esc(t('test.quit'))}</button><button class="btn" data-treset>${icon('rotate-ccw', '', 18)} ${esc(t('test.reset'))}</button>`
             : `<button class="btn" data-tenter>${icon('wand-sparkles', '', 18)} ${esc(t('test.enter'))}</button>`}</div></div>
+        <div class="card stack"><div class="card-title">${esc(t('nav.trash'))}</div>
+          <div class="field-row">
+            <label class="field"><span>${esc(t('settings.trash_days'))}</span><select data-trash>${[0, 7, 30, 90, 365].map((v) => `<option value="${v}" ${(S.trash_days ?? 30) === v ? 'selected' : ''}>${esc(v ? t('settings.trash_n', { n: v }) : t('settings.trash_off'))}</option>`).join('')}</select></label>
+            <a class="btn" href="#/trash" style="align-self:end">${icon('trash-2', '', 18)} ${esc(t('trash.title'))}</a>
+          </div></div>
         <div class="card stack"><div class="card-title">${esc(t('settings.backups'))}</div>
           <p class="small muted">${esc(t('settings.backups_d'))}</p>
           <div class="field-row">
@@ -177,6 +182,9 @@ export async function render(root, params) {
           <div class="row wrap"><button class="btn" data-imp="spots">${icon('camera', '', 18)} ${esc(t('settings.import_spots'))}</button>
           <button class="btn" data-imp="flights">${icon('ticket', '', 18)} ${esc(t('settings.import_flights'))}</button></div></div>
         <div class="card stack"><div class="card-title">${esc(t('settings.export'))}</div>
+          <p class="small muted">${esc(t('export.meta_d'))}</p>
+          <div class="field-row"><label class="field"><span>${esc(t('export.photographer'))}</span><input data-meta="photographer" value="${esc(S.photographer || '')}" maxlength="60"></label>
+          <label class="field"><span>${esc(t('export.copyright'))}</span><input data-meta="copyright" value="${esc(S.copyright || '')}" maxlength="120" placeholder="© ${new Date().getFullYear()}"></label></div>
           <div class="row wrap"><a class="btn" href="/api/export/spots.csv">${icon('download', '', 18)} ${esc(t('settings.export_spots'))}</a>
           <a class="btn" href="/api/export/flights.csv">${icon('download', '', 18)} ${esc(t('settings.export_flights'))}</a>
           <a class="btn" href="/api/export/full.json">${icon('database', '', 18)} JSON</a></div>
@@ -190,6 +198,8 @@ export async function render(root, params) {
       body.querySelector('[data-treset]')?.addEventListener('click', resetTestSession);
       body.querySelector('[data-int]').onchange = (e) => save({ backup_interval_hours: Number(e.target.value) });
       body.querySelector('[data-keep]').onchange = (e) => save({ backup_keep: Number(e.target.value) });
+      body.querySelectorAll('[data-meta]').forEach((i) => (i.onchange = () => save({ [i.dataset.meta]: i.value.trim() })));
+      body.querySelector('[data-trash]').onchange = (e) => save({ trash_days: Number(e.target.value) });
       body.querySelectorAll('[data-k]').forEach((c) => (c.onchange = () => save({ [c.dataset.k]: c.checked })));
       const mk = async (full, btn) => {
         btn.disabled = true;

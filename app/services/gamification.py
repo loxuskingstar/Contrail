@@ -11,7 +11,7 @@ import math
 from datetime import date, timedelta
 from functools import lru_cache
 
-from ..core import STATIC_DIR, db, get_setting, now_iso, q, q1
+from ..core import STATIC_DIR, db, get_setting, memo, now_iso, q, q1
 from . import actypes, geo
 from .notify import notify, texts
 
@@ -148,6 +148,11 @@ def _km(a: tuple[float, float], b: tuple[float, float]) -> float:
 
 
 def metrics() -> dict[str, float]:
+    """Mesures des succès, mémorisées tant que les données (et le jour) ne changent pas — lecture seule."""
+    return memo("metrics", lambda d: _metrics(), date.today().isoformat())
+
+
+def _metrics() -> dict[str, float]:
     m: dict[str, float] = {}
     r = q1(
         "SELECT COUNT(*) spots, COUNT(DISTINCT known(registration)) regs, "

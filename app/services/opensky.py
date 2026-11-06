@@ -121,6 +121,58 @@ def _tiles(lamin: float, lomin: float, lamax: float, lomax: float) -> list[tuple
             for i in range(rows) for j in range(cols)]
 
 
+def _parse_ac(a: dict) -> dict | None:
+    """Un avion au format adsb.lol / adsb.fi / airplanes.live → état de type OpenSky (None sans position)."""
+    la, lo = _num(a.get("lat")), _num(a.get("lon"))
+    hx = (a.get("hex") or "").lower().lstrip("~")
+    if la is None or lo is None or not hx:
+        return None
+    alt = a.get("alt_geom") if _num(a.get("alt_geom")) is not None else a.get("alt_baro")
+    ground = alt == "ground"
+    alt_ft = _num(alt)
+    return {
+        "icao24": hx, "callsign": (a.get("flight") or "").strip() or None,
+        "origin_country": None, "lat": la, "lng": lo,
+        "alt_m": round(alt_ft * 0.3048, 1) if alt_ft is not None else (0 if ground else None),
+        "on_ground": ground,
+        "velocity": round(a["gs"] * 0.514444, 1) if _num(a.get("gs")) is not None else None,
+        "track": _num(a.get("track")),
+        "vertical_rate": round((_num(a.get("baro_rate")) or _num(a.get("geom_rate")) or 0) * 0.00508, 1),
+        "squawk": a.get("squawk"), "category": None, "last_contact": None}
+
+
+HEX_URLS = {"adsb.lol": "https://api.adsb.lol/v2/hex/{h}", "adsb.fi": "https://opendata.adsb.fi/api/v2/hex/{h}",
+            "airplanes.live": "https://api.airplanes.live/v2/hex/{h}"}
+
+
+def _free_by_hex(hexes: list[str]) -> dict[str, dict]:
+    """Position actuelle d'appareils précis via les sources gratuites (repli de la watchlist quand OpenSky ne répond pas)."""
+    errs: list[str] = []
+    for name, _ in FREE_SOURCES:
+        off = _src_off.get(name)
+        if off and off[0] > time.time():
+            errs.append(f"{name} : en pause")
+            continue
+        out: dict[str, dict] = {}
+        try:
+            for i in range(0, len(hexes), 20):
+                _throttle(name)
+                with ac.client() as c:
+                    r = c.get(HEX_URLS[name].format(h=",".join(hexes[i:i + 20])), timeout=8)
+                if r.status_code >= 400:
+                    if r.status_code in (403, 429):
+                        _src_off[name] = (time.time() + (45 if r.status_code == 429 else 600), r.status_code)
+                    raise httpx.HTTPError(f"HTTP {r.status_code}")
+                for a in (r.json() or {}).get("ac") or (r.json() or {}).get("aircraft") or []:
+                    st = _parse_ac(a)
+                    if st:
+                        out[st["icao24"]] = st
+            return out
+        except (httpx.HTTPError, ValueError) as e:
+            errs.append(f"{name} : {str(e)[:60]}")
+    raise httpx.HTTPError(" ; ".join(errs))
+
+
 def _free_tile(lamin: float, lomin: float, lamax: float, lomax: float, start: int = 0) -> tuple[str, list[dict]]:
     import math
 
@@ -154,22 +206,9 @@ def _free_tile(lamin: float, lomin: float, lamax: float, lomax: float, start: in
             continue
         states = []
         for a in data.get("ac") or data.get("aircraft") or []:
-            la, lo = _num(a.get("lat")), _num(a.get("lon"))
-            hx = (a.get("hex") or "").lower().lstrip("~")
-            if la is None or lo is None or not hx or not (lamin <= la <= lamax and lomin <= lo <= lomax):
-                continue
-            alt = a.get("alt_geom") if _num(a.get("alt_geom")) is not None else a.get("alt_baro")
-            ground = alt == "ground"
-            alt_ft = _num(alt)
-            states.append({
-                "icao24": hx, "callsign": (a.get("flight") or "").strip() or None,
-                "origin_country": None, "lat": la, "lng": lo,
-                "alt_m": round(alt_ft * 0.3048, 1) if alt_ft is not None else (0 if ground else None),
-                "on_ground": ground,
-                "velocity": round(a["gs"] * 0.514444, 1) if _num(a.get("gs")) is not None else None,
-                "track": _num(a.get("track")),
-                "vertical_rate": round((_num(a.get("baro_rate")) or _num(a.get("geom_rate")) or 0) * 0.00508, 1),
-                "squawk": a.get("squawk"), "category": None, "last_contact": None})
+            st = _parse_ac(a)
+            if st and lamin <= st["lat"] <= lamax and lomin <= st["lng"] <= lomax:
+                states.append(st)
         return name, states
     raise httpx.HTTPError(" ; ".join(errs))
 
@@ -299,11 +338,17 @@ def check_watchlist() -> int:
     live: dict[str, dict] = {}
     if hexes:
         try:
+            if time.time() < _blocked_until:
+                raise httpx.HTTPError("OpenSky en pause (quota)")
             res = _states([("icao24", h) for h in hexes])
             live = {s["icao24"]: s for s in res["states"]}
         except (httpx.HTTPError, ValueError) as e:
-            log.info("OpenSky indisponible : %s", e)
-            return 0
+            log.info("OpenSky indisponible (%s), repli sur les sources gratuites", e)
+            try:
+                live = _free_by_hex(hexes)
+            except (httpx.HTTPError, ValueError) as e2:
+                log.info("Sources gratuites indisponibles : %s", e2)
+                return 0
     homes = {h.upper() for h in (get_setting("home_airports") or [])}
     alerts = 0
     for it in items:

@@ -7,3 +7,4 @@ airportsdata>=20240101
 pytesseract>=0.3.10
 itsdangerous>=2.2
 tzdata>=2024.1
+pillow-heif>=0.18

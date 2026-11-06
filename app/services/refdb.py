@@ -103,6 +103,25 @@ def by_hex(hexes: list[str]) -> dict[str, dict]:
     return out
 
 
+_tc: dict = {"mtime": None, "data": {}}
+
+
+def type_counts() -> dict[str, int]:
+    """Nombre d'appareils connus par code type (base de référence), recalculé uniquement si le fichier change."""
+    c = _conn()
+    if not c:
+        return {}
+    mt = REF_PATH.stat().st_mtime
+    if _tc["mtime"] != mt:
+        try:
+            _tc["data"] = {r["t"]: r["n"] for r in c.execute(
+                "SELECT typecode t, COUNT(*) n FROM aircraft WHERE typecode IS NOT NULL GROUP BY typecode")}
+        except sqlite3.Error:
+            _tc["data"] = {}
+        _tc["mtime"] = mt
+    return _tc["data"]
+
+
 def by_reg(reg: str) -> dict | None:
     c = _conn()
     if not c:

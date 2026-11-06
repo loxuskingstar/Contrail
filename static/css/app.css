@@ -856,3 +856,22 @@ body.radar-mode .main { padding: 0; }
 .radar-ui .status { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: block; }
 .radar-ui .status svg { vertical-align: -3px; margin-right: 4px; }
 @media (max-width: 480px) { .radar-ui .rtime { display: none; } }
+
+/* Performance : les lignes et vignettes hors écran ne sont ni mises en page ni peintes (listes de milliers de spots) */
+.list-row { content-visibility: auto; contain-intrinsic-size: auto 72px; }
+.tile { content-visibility: auto; contain-intrinsic-size: auto 165px; }
+
+/* Sorties */
+.card.outing { display: flex; gap: 14px; padding: 10px; align-items: stretch; color: inherit; text-decoration: none; }
+.card.outing:hover { background: var(--surface-2); }
+.o-thumbs { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 3px; width: 112px; height: 84px; flex-shrink: 0; border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2); }
+.o-thumbs img { width: 100%; height: 100%; object-fit: cover; }
+.o-thumbs img:only-child { grid-column: 1 / -1; grid-row: 1 / -1; }
+.o-ph { grid-column: 1 / -1; grid-row: 1 / -1; display: grid; place-items: center; color: var(--muted); }
+.o-body { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.o-body .ttl { font-weight: 650; font-size: 16px; }
+.o-body .meta { color: var(--muted); font-size: 13px; }
+.o-stats { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--text-2); margin-top: 2px; }
+.o-stats span { display: inline-flex; align-items: center; gap: 4px; }
+.o-stats .o-new { color: var(--accent); font-weight: 650; }
+@media (max-width: 480px) { .o-thumbs { width: 84px; height: 84px; } }
