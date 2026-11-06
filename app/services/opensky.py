@@ -1,7 +1,8 @@
 """OpenSky Network : radar en direct et suivi de la watchlist.
 
 L'accès anonyme fonctionne (quota réduit). Avec un client API OpenSky
-(OAuth2 client credentials), le quota augmente nettement.
+(OAuth2 client credentials), le quota augmente nettement. Quand le quota est épuisé (429), le radar
+bascule automatiquement sur des agrégateurs ADS-B gratuits (adsb.lol, airplanes.live).
 """
 from __future__ import annotations
 
@@ -25,6 +26,11 @@ TOKEN_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protoc
 _token: dict = {"value": None, "exp": 0.0}
 _token_lock = threading.Lock()
 _cache: dict[str, tuple[float, dict]] = {}
+_blocked_until = 0.0  # OpenSky a répondu 429 : on le laisse tranquille jusqu'à cette date (secondes epoch)
+
+# Sources ADS-B communautaires gratuites, sans clé, au format « readsb » (point + rayon en milles nautiques)
+FREE_SOURCES = (("adsb.lol", "https://api.adsb.lol/v2/point/{lat:.4f}/{lon:.4f}/{r}"),
+                ("airplanes.live", "https://api.airplanes.live/v2/point/{lat:.4f}/{lon:.4f}/{r}"))
 
 STATE_FIELDS = ("icao24", "callsign", "origin_country", "time_position", "last_contact", "lng", "lat",
                 "baro_alt", "on_ground", "velocity", "track", "vertical_rate", "sensors", "geo_alt",
@@ -53,6 +59,12 @@ def _states(params: list[tuple[str, str]]) -> dict:
     with ac.client() as c:
         r = c.get(f"{API}/states/all", params=params, headers=_auth_headers(c))
         if r.status_code == 429:
+            global _blocked_until
+            try:
+                wait = int(r.headers.get("X-Rate-Limit-Retry-After-Seconds", 600))
+            except ValueError:
+                wait = 600
+            _blocked_until = time.time() + min(max(wait, 30), 6 * 3600)
             return {"error": "rate_limited", "states": []}
         r.raise_for_status()
         data = r.json() or {}
@@ -69,19 +81,106 @@ def _states(params: list[tuple[str, str]]) -> dict:
     return {"time": data.get("time"), "states": states}
 
 
+def _num(v):
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+OPENSKY_MAX_AREA = 100  # degrés carrés (au-delà : 3 à 4 crédits par requête)
+MAX_TILES = 9
+TILE_DEG = 5.8  # un disque de 250 nm (maximum accepté) couvre une tuile de ~5,8° de côté
+
+
+def _tiles(lamin: float, lomin: float, lamax: float, lomax: float) -> list[tuple[float, float, float, float]]:
+    """Découpe la zone en tuiles couvrables chacune par un disque de 250 nm."""
+    import math
+
+    mid = (lamin + lamax) / 2
+    rows = max(1, math.ceil((lamax - lamin) / TILE_DEG))
+    cols = max(1, math.ceil((lomax - lomin) * max(math.cos(math.radians(mid)), 0.1) / TILE_DEG))
+    if rows * cols > MAX_TILES:
+        raise ValueError("area_too_large")
+    dla, dlo = (lamax - lamin) / rows, (lomax - lomin) / cols
+    return [(lamin + i * dla, lomin + j * dlo, lamin + (i + 1) * dla, lomin + (j + 1) * dlo)
+            for i in range(rows) for j in range(cols)]
+
+
+def _free_tile(lamin: float, lomin: float, lamax: float, lomax: float) -> tuple[str, list[dict]]:
+    import math
+
+    lat, lon = (lamin + lamax) / 2, (lomin + lomax) / 2
+    dlat_nm = (lamax - lamin) / 2 * 60
+    dlon_nm = (lomax - lomin) / 2 * 60 * max(math.cos(math.radians(lat)), 0.1)
+    radius = max(5, min(250, math.ceil(math.hypot(dlat_nm, dlon_nm))))
+    last: Exception | None = None
+    for name, tpl in FREE_SOURCES:
+        try:
+            with ac.client() as c:
+                r = c.get(tpl.format(lat=lat, lon=lon, r=radius), timeout=12)
+                if r.status_code == 429:
+                    last = RuntimeError(f"{name}: 429")
+                    continue
+                r.raise_for_status()
+                data = r.json() or {}
+        except (httpx.HTTPError, ValueError) as e:
+            last = e
+            continue
+        states = []
+        for a in data.get("ac") or data.get("aircraft") or []:
+            la, lo = _num(a.get("lat")), _num(a.get("lon"))
+            hx = (a.get("hex") or "").lower().lstrip("~")
+            if la is None or lo is None or not hx or not (lamin <= la <= lamax and lomin <= lo <= lomax):
+                continue
+            alt = a.get("alt_geom") if _num(a.get("alt_geom")) is not None else a.get("alt_baro")
+            ground = alt == "ground"
+            alt_ft = _num(alt)
+            states.append({
+                "icao24": hx, "callsign": (a.get("flight") or "").strip() or None,
+                "origin_country": None, "lat": la, "lng": lo,
+                "alt_m": round(alt_ft * 0.3048, 1) if alt_ft is not None else (0 if ground else None),
+                "on_ground": ground,
+                "velocity": round(a["gs"] * 0.514444, 1) if _num(a.get("gs")) is not None else None,
+                "track": _num(a.get("track")),
+                "vertical_rate": round((_num(a.get("baro_rate")) or _num(a.get("geom_rate")) or 0) * 0.00508, 1),
+                "squawk": a.get("squawk"), "category": None, "last_contact": None})
+        return name, states
+    raise httpx.HTTPError(f"sources gratuites indisponibles : {last}")
+
+
+def _free_states(lamin: float, lomin: float, lamax: float, lomax: float) -> dict:
+    """Radar de secours (et vues très larges) : agrégateurs ADS-B gratuits, une requête par tuile."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    tiles = _tiles(lamin, lomin, lamax, lomax)
+    with ThreadPoolExecutor(max_workers=min(3, len(tiles))) as ex:
+        parts = list(ex.map(lambda t: _free_tile(*t), tiles))
+    seen: dict[str, dict] = {}
+    for _, sts in parts:
+        for st in sts:
+            seen[st["icao24"]] = st
+    return {"time": int(time.time()), "states": list(seen.values()), "source": parts[0][0]}
+
+
 def radar(lamin: float, lomin: float, lamax: float, lomax: float) -> dict:
     key = f"{lamin:.1f},{lomin:.1f},{lamax:.1f},{lomax:.1f}"
     hit = _cache.get(key)
     if hit and time.time() - hit[0] < 8:
         raw = hit[1]
     else:
-        raw = _states([("lamin", f"{lamin:.4f}"), ("lomin", f"{lomin:.4f}"), ("lamax", f"{lamax:.4f}"),
-                       ("lomax", f"{lomax:.4f}"), ("extended", "1")])
+        raw = None
+        wide = (lamax - lamin) * (lomax - lomin) > OPENSKY_MAX_AREA  # vue large : sources gratuites, on épargne les crédits OpenSky
+        if time.time() >= _blocked_until and not wide:
+            try:
+                raw = _states([("lamin", f"{lamin:.4f}"), ("lomin", f"{lomin:.4f}"), ("lamax", f"{lamax:.4f}"),
+                               ("lomax", f"{lomax:.4f}"), ("extended", "1")])
+            except httpx.HTTPError as e:
+                log.info("OpenSky indisponible, bascule sur une source gratuite : %s", e)
+        if raw is None or raw.get("error") == "rate_limited":
+            raw = _free_states(lamin, lomin, lamax, lomax)  # lève httpx.HTTPError si tout est en panne
         if len(_cache) > 50:
             _cache.clear()
         _cache[key] = (time.time(), raw)
     # Copie : l'enrichissement dépend du profil (données réelles ou session de test)
-    res = {"time": raw.get("time"), "error": raw.get("error"), "states": [dict(s) for s in raw["states"]]}
+    res = {"time": raw.get("time"), "error": raw.get("error"), "source": raw.get("source", "opensky"), "states": [dict(s) for s in raw["states"]]}
     watch = {r["icao24"]: r["registration"] for r in q("SELECT icao24, value registration FROM wishes WHERE kind='aircraft' AND status='open' AND icao24 IS NOT NULL")}
     wish_match = wishes.radar_matcher()
     spotted = {r["icao24"]: r["registration"] for r in q(

@@ -445,7 +445,7 @@
 "radar.l_spotted": "Already spotted",
 "radar.l_air": "Airborne",
 "radar.l_ground": "On the ground",
-"radar.about": "ADS-B data provided by OpenSky Network (refreshed every 12 s). Without an account the quota is limited: add an OpenSky API client in settings.",
+"radar.about": "ADS-B data provided by OpenSky Network (refreshed every 12 s). Without an account the quota is limited: add an OpenSky API client in settings. When it runs out, the radar automatically switches to adsb.lol / airplanes.live (free).",
 "watch.sub": "Get alerted when a tracked aircraft is detected airborne.",
 "watch.check_now": "Check",
 "watch.add": "Watch",
@@ -1452,5 +1452,6 @@
 "ach.step_first": "First level",
 "ach.step_todo": "Upcoming",
 "ach.remaining": "{n} to go",
-"spot.preview_map": "Preview on map"
+"spot.preview_map": "Preview on map",
+"radar.source_fallback": "Fallback source: {src} (OpenSky quota reached)"
 }

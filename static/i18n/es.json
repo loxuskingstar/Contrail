@@ -445,7 +445,7 @@
 "radar.l_spotted": "Ya fotografiado",
 "radar.l_air": "En vuelo",
 "radar.l_ground": "En tierra",
-"radar.about": "Datos ADS-B proporcionados por OpenSky Network (actualizados cada 12 s). Sin cuenta la cuota es limitada: añade un cliente API de OpenSky en los ajustes.",
+"radar.about": "Datos ADS-B proporcionados por OpenSky Network (actualizados cada 12 s). Sin cuenta la cuota es limitada: añade un cliente API de OpenSky en los ajustes. Cuando se agota, el radar cambia automáticamente a adsb.lol / airplanes.live (gratuitos).",
 "watch.sub": "Recibe una alerta cuando un avión seguido se detecte en vuelo.",
 "watch.check_now": "Comprobar",
 "watch.add": "Seguir",
@@ -1452,5 +1452,6 @@
 "ach.step_first": "Primer nivel",
 "ach.step_todo": "Próximo",
 "ach.remaining": "Faltan {n}",
-"spot.preview_map": "Ver en el mapa"
+"spot.preview_map": "Ver en el mapa",
+"radar.source_fallback": "Fuente de respaldo: {src} (cuota de OpenSky alcanzada)"
 }

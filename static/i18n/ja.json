@@ -412,7 +412,7 @@
 "radar.l_spotted": "撮影済み",
 "radar.l_air": "飛行中",
 "radar.l_ground": "地上",
-"radar.about": "ADS-B データは OpenSky Network 提供（12 秒ごとに更新）。アカウントなしでは利用上限があります。設定で OpenSky API クライアントを追加してください。",
+"radar.about": "ADS-B データは OpenSky Network 提供（12 秒ごとに更新）。アカウントなしでは利用上限があります。設定で OpenSky API クライアントを追加してください。上限に達すると、レーダーは自動的に adsb.lol / airplanes.live（無料）に切り替わります。",
 "watch.sub": "追跡中の機体が飛行中に検出されると通知します。",
 "watch.check_now": "確認",
 "watch.add": "追跡",
@@ -1281,5 +1281,6 @@
 "ach.step_first": "最初の段階",
 "ach.step_todo": "今後",
 "ach.remaining": "あと{n}",
-"spot.preview_map": "地図で確認"
+"spot.preview_map": "地図で確認",
+"radar.source_fallback": "予備ソース: {src}（OpenSky の上限に達したため）"
 }

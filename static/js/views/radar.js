@@ -71,7 +71,7 @@ export async function render(root) {
     const b = cm.bounds();
     const status = root.querySelector('[data-status]');
     const area = (b.north - b.south) * (b.east - b.west);
-    if (area > 100) {
+    if (area > 600) {
       status.innerHTML = `${icon('search', '', 16)} ${esc(t('radar.zoom_in'))}`;
       map.getSource('planes')?.setData({ type: 'FeatureCollection', features: [] });
       states.clear();
@@ -90,9 +90,15 @@ export async function render(root) {
       });
       map.getSource('planes')?.setData({ type: 'FeatureCollection', features });
       if (res.error === 'rate_limited') status.innerHTML = `${icon('triangle-alert', '', 16)} ${esc(t('radar.rate_limited'))}`;
-      else status.innerHTML = `${icon('radar', '', 16)} ${esc(t('radar.count', { n: res.states.length }))} · <span class="muted">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>`;
+      else status.innerHTML = `${icon('radar', '', 16)} ${esc(t('radar.count', { n: res.states.length }))}${res.source && res.source !== 'opensky' ? ` <span class="muted" title="${esc(t('radar.source_fallback', { src: res.source }))}">· ${esc(res.source)}</span>` : ''} · <span class="muted">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>`;
     } catch (e) {
       if (e.name === 'AbortError') return;
+      if (e.status === 422) {
+        status.innerHTML = `${icon('search', '', 16)} ${esc(t('radar.zoom_in'))}`;
+        map.getSource('planes')?.setData({ type: 'FeatureCollection', features: [] });
+        states.clear();
+        return;
+      }
       status.innerHTML = `${icon('wifi-off', '', 16)} ${esc(e.offline ? t('err.offline') : t('radar.error'))}`;
     }
   }
