@@ -18,15 +18,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-<<<<<<< HEAD
-<<<<<<< HEAD
-APP_VERSION = "1.4.5"
-=======
-APP_VERSION = "2.1.0"
->>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
-=======
-APP_VERSION = "2.2.0"
->>>>>>> 19300ad55f560bc90a73e1b03619748514384aa6
+APP_VERSION = "2.3.1"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -96,6 +88,8 @@ def ensure_dirs() -> None:
         for d in DIRS.values():
             d.mkdir(parents=True, exist_ok=True)
     except PermissionError as e:
+        if not hasattr(os, "getuid"):       # Windows
+            raise SystemExit(f"Contrail ne peut pas écrire dans {DATA_DIR} : choisissez un dossier de données accessible.") from e
         raise SystemExit(
             f"Contrail ne peut pas écrire dans {DATA_DIR} (UID {os.getuid()}). "
             f"Donnez-lui les droits sur le dossier de données, par exemple : "
@@ -188,11 +182,8 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout = 10000")
     from app.services import operators
     operators.register(conn)
-<<<<<<< HEAD
-=======
     from app.services import registration as _regs
     conn.create_function("known", 1, _regs.known, deterministic=True)
->>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
     return conn
 
 

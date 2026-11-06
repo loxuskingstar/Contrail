@@ -7,6 +7,8 @@
 
 ---
 
+> 💻 **Sans Docker** : des installeurs prêts à l'emploi (Windows `.exe`, macOS `.dmg`, Linux `.deb` / `.tar.gz`) installent Contrail comme un logiciel ordinaire, avec choix du dossier et raccourci sur le Bureau — voir [`desktop/README.md`](desktop/README.md).
+
 ## Sommaire
 
 1. [Fonctionnalités](#fonctionnalités)
