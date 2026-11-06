@@ -92,11 +92,28 @@ def _search_index() -> list[tuple[str, str]]:
     return [(icao, _fold(f"{icao} {al.get(icao, '')} {a.get('iata','')} {a['name']} {a['city']} {words(a)}")) for icao, a in _airports().items()]
 
 
+def _load_custom() -> dict[str, dict]:
+    from ..core import q
+    try:
+        rows = q("SELECT * FROM custom_airfields")
+    except Exception:  # noqa: BLE001 — base pas encore migrée
+        return {}
+    return {r["code"]: {"icao": r["code"], "iata": "", "name": r["name"], "city": r["city"] or "", "country": r["country"] or "",
+                        "lat": r["lat"], "lon": r["lng"], "elevation": r["elevation_ft"], "tz": "", "kind": r["kind"], "custom": True}
+            for r in rows}
+
+
+def custom() -> dict[str, dict]:
+    """Terrains ajoutés par l'utilisateur (propres à chaque profil), prioritaires sur les bases embarquées."""
+    from ..core import memo
+    return memo("custom_airfields", _load_custom)
+
+
 def airport(code: str | None) -> dict | None:
     if not code:
         return None
     c = code.strip().upper()
-    a = _airports().get(c)
+    a = custom().get(c) or _airports().get(c)
     if a is None and len(c) == 3:
         icao = _iata_index().get(c)
         a = _airports().get(icao) if icao else None
@@ -107,7 +124,7 @@ def airport(code: str | None) -> dict | None:
     return {
         "icao": a["icao"], "iata": a.get("iata") or None, "name": a["name"], "city": a["city"],
         "country": a["country"], "lat": a["lat"], "lng": a["lon"], "tz": a.get("tz") or tz_at(a["lat"], a["lon"]),
-        "elevation_ft": a.get("elevation"), "kind": a.get("kind", "airport"),
+        "elevation_ft": a.get("elevation"), "kind": a.get("kind", "airport"), "custom": bool(a.get("custom")),
     }
 
 
@@ -164,6 +181,10 @@ def search_airports(query: str, limit: int = 12) -> list[dict]:
     results: list[dict] = [exact] if exact else []
     seen = {exact["icao"]} if exact else set()
     tokens = qf.split()
+    for icao, a in custom().items():
+        if icao not in seen and all(t in _fold(f"{icao} {a['name']} {a['city']}") for t in tokens):
+            results.append(airport(icao))
+            seen.add(icao)
     scored = []
     for icao, hay in _search_index():
         if icao in seen:

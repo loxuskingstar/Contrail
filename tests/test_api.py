@@ -1317,3 +1317,25 @@ def test_purpan_heliport(client):
     r = client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZHE3", "date": "2047-06-01", "airport": "LF362"})})
     s = client.get(f"/api/spots/{r.json()['spot']['id_spotting']}").json()
     assert s["airport"] == "LF362" and not s.get("place")
+
+
+def test_custom_airfield(client):
+    from app.services import geo
+    assert geo.airport("ZZHEL1") is None
+    body = {"code": "zzhel1", "name": "Hôpital Test", "kind": "heliport", "city": "Toulouse", "country": "FR", "lat": 43.6, "lng": 1.4}
+    r = client.post("/api/airport-pages", json=body)
+    assert r.status_code == 200, r.text
+    assert client.post("/api/airport-pages", json=body).status_code == 409
+    assert client.post("/api/airport-pages", json={**body, "code": "a"}).status_code == 422
+    a = geo.airport("ZZHEL1")
+    assert a["kind"] == "heliport" and a["custom"] and a["tz"] == "Europe/Paris"
+    items = client.get("/api/airport-pages").json()["items"]
+    row = next(i for i in items if i["icao"] == "ZZHEL1")      # visible dans la liste sans aucun spot
+    assert row["n"] == 0 and row["custom"] and row["lat"] == 43.6
+    assert client.get("/api/airports/search", params={"q": "hôpital test"}).json()[0]["icao"] == "ZZHEL1"
+    s = client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZHE4", "date": "2047-08-01", "airport": "ZZHEL1"})})
+    assert client.get(f"/api/spots/{s.json()['spot']['id_spotting']}").json()["airport"] == "ZZHEL1"
+    assert client.get("/api/airport-pages").json()["items"][0]["icao"] != "x"
+    assert client.put("/api/airport-pages/custom/ZZHEL1", json={**body, "name": "Autre nom"}).json()["name"] == "Autre nom"
+    assert client.delete("/api/airport-pages/custom/ZZHEL1").status_code == 200
+    assert geo.airport("ZZHEL1") is None

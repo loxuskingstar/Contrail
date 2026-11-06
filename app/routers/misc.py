@@ -207,12 +207,12 @@ def rank_candidates(cands: list[dict], airport: str | None) -> list[dict]:
 def nearest_airport(lat: float, lng: float, max_km: float = 15) -> dict | None:
     best, best_d = None, max_km
     core = geo._core()  # noqa: SLF001
-    for icao, a in geo._airports().items():  # noqa: SLF001
+    for icao, a in {**geo._airports(), **geo.custom()}.items():  # noqa: SLF001
         if abs(a["lat"] - lat) > 0.3 or abs(a["lon"] - lng) > 0.4:
             continue
         d = geo.haversine_km(lat, lng, a["lat"], a["lon"])
         # On préfère les aéroports dotés d'un code IATA (aéroports commerciaux)
-        d_eff = d * (0.6 if a.get("iata") else 1) * (1 if icao in core else 3)     # hélistations et petits terrains : seulement s'ils sont bien plus proches
+        d_eff = d * (0.6 if a.get("iata") else 1) * (1 if icao in core or a.get("custom") else 3)     # hélistations et petits terrains : seulement s'ils sont bien plus proches
         if d_eff < best_d:
             best, best_d = icao, d_eff
     return geo.airport(best) if best else None

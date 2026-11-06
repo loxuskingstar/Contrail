@@ -1,9 +1,12 @@
 """Pages par aéroport : fréquentation, appareils vus, points de vue, sorties."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+import re
 
-from ..core import memo, q, q1
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from ..core import execute, memo, now_iso, q, q1
 from ..services import collection, geo, refdb
 from .spots import LIST_COLS, decorate
 
@@ -19,7 +22,15 @@ def _list(_search: str = ""):
     for r in rows:
         a = geo.airport(r["icao"]) or {}
         r.update({"name": a.get("name"), "city": a.get("city"), "country": a.get("country"), "iata": a.get("iata"),
-                  "lat": a.get("lat"), "lng": a.get("lng")})
+                  "lat": a.get("lat"), "lng": a.get("lng"), "kind": a.get("kind"), "custom": a.get("custom", False)})
+    have = {r["icao"] for r in rows}
+    # terrains ajoutés à la main, même sans aucun spot : ils doivent apparaître dans la liste et sur la carte
+    for code in geo.custom():
+        if code not in have:
+            a = geo.airport(code)
+            rows.append({"icao": code, "n": 0, "regs": 0, "first_at": None, "last_at": None, "specials": 0, "name": a["name"],
+                         "city": a["city"], "country": a["country"], "iata": None, "lat": a["lat"], "lng": a["lng"],
+                         "kind": a["kind"], "custom": True})
     return rows
 
 
@@ -69,6 +80,64 @@ def _detail(icao: str):
     rows = q(f"SELECT {LIST_COLS} FROM spotting s WHERE s.airport = ? ORDER BY COALESCE(s.date, s.created_at) DESC, s.id_spotting DESC LIMIT 12", (icao,))
     st["recent"] = decorate(rows)
     return st
+
+
+KINDS = ("airport", "heliport", "airfield", "seaplane", "balloonport")
+
+
+class AirfieldIn(BaseModel):
+    code: str
+    name: str
+    kind: str = "airport"
+    city: str | None = None
+    country: str | None = None
+    lat: float
+    lng: float
+    elevation_ft: int | None = None
+
+
+def _clean(body: AirfieldIn) -> dict:
+    code = re.sub(r"\s+", "", body.code).upper()
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9-]{1,9}", code):
+        raise HTTPException(422, "invalid_airfield_code")
+    if not body.name.strip():
+        raise HTTPException(422, "airfield_name_required")
+    if body.kind not in KINDS or not (-90 <= body.lat <= 90 and -180 <= body.lng <= 180):
+        raise HTTPException(422, "invalid_airfield")
+    country = (body.country or "").strip().upper() or None
+    if country and not re.fullmatch(r"[A-Z]{2}", country):
+        raise HTTPException(422, "invalid_country")
+    return {"code": code, "name": body.name.strip()[:120], "kind": body.kind, "city": (body.city or "").strip()[:80] or None,
+            "country": country, "lat": body.lat, "lng": body.lng, "elevation_ft": body.elevation_ft}
+
+
+@router.post("")
+def create_airfield(body: AirfieldIn):
+    d = _clean(body)
+    if q1("SELECT 1 FROM custom_airfields WHERE code = ?", (d["code"],)):
+        raise HTTPException(409, "airfield_exists")
+    execute("INSERT INTO custom_airfields (code, name, kind, city, country, lat, lng, elevation_ft, created_at) "
+            "VALUES (:code, :name, :kind, :city, :country, :lat, :lng, :elevation_ft, :now)", {**d, "now": now_iso()})
+    return geo.airport(d["code"])
+
+
+@router.put("/custom/{code}")
+def update_airfield(code: str, body: AirfieldIn):
+    code = code.strip().upper()
+    if not q1("SELECT 1 FROM custom_airfields WHERE code = ?", (code,)):
+        raise HTTPException(404, "not_found")
+    d = _clean(body)
+    d["code"] = code        # le code est l'identifiant des spots : on ne le renomme pas ici
+    execute("UPDATE custom_airfields SET name=:name, kind=:kind, city=:city, country=:country, lat=:lat, lng=:lng, "
+            "elevation_ft=:elevation_ft WHERE code=:code", d)
+    return geo.airport(code)
+
+
+@router.delete("/custom/{code}")
+def delete_airfield(code: str):
+    code = code.strip().upper()
+    execute("DELETE FROM custom_airfields WHERE code = ?", (code,))
+    return {"ok": True}
 
 
 @router.get("/{code}")

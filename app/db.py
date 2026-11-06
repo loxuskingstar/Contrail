@@ -341,7 +341,22 @@ CREATE TABLE IF NOT EXISTS outing_items (
 CREATE INDEX IF NOT EXISTS idx_item_outing ON outing_items(outing_id);
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12]
+SCHEMA_V13 = """
+-- Aéroports, hélistations et terrains ajoutés à la main (absents des bases embarquées)
+CREATE TABLE IF NOT EXISTS custom_airfields (
+    code          TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    kind          TEXT NOT NULL DEFAULT 'airport',     -- airport | heliport | airfield | seaplane | balloonport
+    city          TEXT,
+    country       TEXT,
+    lat           REAL NOT NULL,
+    lng           REAL NOT NULL,
+    elevation_ft  INTEGER,
+    created_at    TEXT NOT NULL
+);
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13]
 
 
 def init_db() -> None:
