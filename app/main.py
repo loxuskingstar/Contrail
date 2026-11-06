@@ -35,6 +35,17 @@ def _backfill_countries() -> None:
             execute("UPDATE spotting SET country=? WHERE id_spotting=?", (c, r["id"]))
 
 
+def _reclassify_fields() -> None:
+    """Hélistations et terrains saisis avant leur prise en charge (LF362 rangé en « lieu ») : on les repasse en aéroports."""
+    from .core import execute, q
+    from .services import geo
+    for table in ("spotting",):    # les sorties se rattachent d'elles-mêmes aux spots déplacés
+        for r in q(f"SELECT DISTINCT place FROM {table} WHERE (airport IS NULL OR airport='') AND place GLOB '[A-Z][A-Z0-9]*' AND length(place) BETWEEN 4 AND 8"):
+            a = geo.airport(r["place"])
+            if a:
+                execute(f"UPDATE {table} SET airport=?, place=NULL WHERE place=? AND (airport IS NULL OR airport='')", (a["icao"], r["place"]))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     ensure_dirs()
@@ -49,6 +60,10 @@ async def lifespan(app: FastAPI):
         _backfill_countries()
     except Exception:  # noqa: BLE001
         log.exception("Rattrapage des pays en échec")
+    try:
+        _reclassify_fields()
+    except Exception:  # noqa: BLE001
+        log.exception("Reclassement des terrains en échec")
     tasks = scheduler.start()
     threading.Thread(target=refdb.compact_file, daemon=True, name="refdb-compact").start()   # allège une ancienne base de référence
     threading.Thread(target=media.backfill_phash, daemon=True, name="phash-backfill").start()   # empreintes des photos déjà enregistrées

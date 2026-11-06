@@ -18,6 +18,8 @@ def _core() -> dict[str, dict]:
     return airportsdata.load("ICAO")
 
 
+CODE_OVERRIDES = {"FR-0121": "LF362"}      # héliport du CHU Purpan (Toulouse)
+
 _KIND = {"H": "heliport", "A": "airfield", "S": "seaplane", "B": "balloonport"}
 
 
@@ -44,6 +46,11 @@ def _extra() -> tuple[dict[str, dict], dict[str, str]]:
                       "elevation": elev, "tz": "", "kind": _KIND.get(kind, "airfield")}
         if al:
             alias[al] = code
+    # codes SIA absents d'OurAirports, confirmés à la main
+    for old, new in CODE_OVERRIDES.items():
+        if old in rows:
+            rows[new] = {**rows.pop(old), "icao": new}
+            alias[old] = new
     return rows, alias
 
 
@@ -65,7 +72,24 @@ def _fold(s: str) -> str:
 @lru_cache(maxsize=1)
 def _search_index() -> list[tuple[str, str]]:
     al = {v: k for k, v in _extra()[1].items()}
-    return [(icao, _fold(f"{icao} {al.get(icao, '')} {a.get('iata','')} {a['name']} {a['city']}")) for icao, a in _airports().items()]
+
+    def words(a: dict) -> str:
+        # noms OurAirports en anglais : on ajoute les mots qu'on tape en français (hôpital, hélistation, altiport…)
+        n, k = a["name"].lower(), a.get("kind", "")
+        extra = []
+        if k == "heliport":
+            extra.append("heliport helistation helipad dzh")
+        if "hospital" in n:
+            extra.append("hopital chu centre hospitalier clinique")
+        if "altiport" in n or "altisurface" in n:
+            extra.append("altiport altisurface montagne")
+        if "ultralight" in n:
+            extra.append("ulm base ulm")
+        if "seaplane" in n or k == "seaplane":
+            extra.append("hydrobase hydravion")
+        return " ".join(extra)
+
+    return [(icao, _fold(f"{icao} {al.get(icao, '')} {a.get('iata','')} {a['name']} {a['city']} {words(a)}")) for icao, a in _airports().items()]
 
 
 def airport(code: str | None) -> dict | None:
