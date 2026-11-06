@@ -158,8 +158,11 @@ def badges_for(spot: dict, ctx: dict) -> list[dict]:
         b.append({"code": "rarity", "tier": tier, "n": tn})
     el = spot.get("sun_elevation")
     if el is not None:
-        if el < -6:
+        if el < -12:                                    # nuit noire (au-delà du crépuscule astronomique)
             b.append({"code": "night"})
+        elif el < -4:                                   # crépuscule civil avancé / nautique : ciel encore clair, soleil sous l'horizon
+            hour = int(spot["date"][11:13]) if len(spot.get("date") or "") >= 13 else 18
+            b.append({"code": "twilight", "phase": "dawn" if hour < 12 else "dusk"})
         elif el <= 8:
             b.append({"code": "golden_hour"})
     return b

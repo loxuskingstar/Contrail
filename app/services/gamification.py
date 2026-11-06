@@ -165,7 +165,7 @@ def _metrics() -> dict[str, float]:
         "COUNT(DISTINCT CASE WHEN livery_category = 'primer' THEN registration END) primers, "
         "COUNT(DISTINCT CASE WHEN livery_category = 'white' THEN registration END) whites, "
         "COUNT(DISTINCT CASE WHEN military = 1 THEN registration END) military, "
-        "SUM(CASE WHEN sun_elevation < -6 THEN 1 ELSE 0 END) night, "
+        "SUM(CASE WHEN sun_elevation < -12 THEN 1 ELSE 0 END) night, "
         "SUM(CASE WHEN sun_elevation BETWEEN -4 AND 8 THEN 1 ELSE 0 END) golden, "
         "SUM(CASE WHEN length(date) >= 16 AND substr(date, 12, 5) < '07:00' THEN 1 ELSE 0 END) early, "
         "SUM(CASE WHEN length(date) >= 16 AND substr(date, 12, 5) >= '22:00' THEN 1 ELSE 0 END) late, "

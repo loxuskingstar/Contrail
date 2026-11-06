@@ -1628,5 +1628,7 @@
 "err.bad_day": "Invalid date.",
 "err.need_two": "Pick at least two outings.",
 "err.not_multi_day": "This outing only covers one day.",
-"err.label_required": "Write something."
+"err.label_required": "Write something.",
+"badge.twilight_dawn": "Dawn",
+"badge.twilight_dusk": "Dusk"
 }

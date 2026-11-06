@@ -1628,5 +1628,7 @@
 "err.bad_day": "Fecha no válida.",
 "err.need_two": "Elige al menos dos salidas.",
 "err.not_multi_day": "Esta salida solo cubre un día.",
-"err.label_required": "Escribe algo."
+"err.label_required": "Escribe algo.",
+"badge.twilight_dawn": "Amanecer",
+"badge.twilight_dusk": "Crepúsculo"
 }

@@ -1457,5 +1457,7 @@
 "err.bad_day": "日付が正しくありません。",
 "err.need_two": "2件以上選んでください。",
 "err.not_multi_day": "この遠征は1日のみです。",
-"err.label_required": "内容を入力してください。"
+"err.label_required": "内容を入力してください。",
+"badge.twilight_dawn": "夜明け",
+"badge.twilight_dusk": "夕暮れ"
 }

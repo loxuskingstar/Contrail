@@ -1628,5 +1628,7 @@
 "err.bad_day": "Date invalide.",
 "err.need_two": "Choisis au moins deux sorties.",
 "err.not_multi_day": "Cette sortie ne couvre qu'un jour.",
-"err.label_required": "Écris quelque chose."
+"err.label_required": "Écris quelque chose.",
+"badge.twilight_dawn": "Aube",
+"badge.twilight_dusk": "Crépuscule"
 }
