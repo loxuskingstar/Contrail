@@ -15,6 +15,18 @@ function nowLocal() {
   return d.toISOString().slice(0, 16);
 }
 
+// Points de vue : ceux de l'aéroport saisi d'abord, les autres regroupés dessous (la liste complète reste accessible)
+function locOptions(locations, airport, selectedId) {
+  const ap = String(airport || '').trim().toUpperCase();
+  const opt = (l) => `<option value="${l.id_location}" ${selectedId === l.id_location ? 'selected' : ''}>${esc(l.name)}${l.airport ? ` (${esc(l.airport)})` : ''}</option>`;
+  const here = ap ? locations.filter((l) => (l.airport || '').toUpperCase() === ap) : [];
+  if (!here.length && !ap) return `<option value="">—</option>${locations.map(opt).join('')}`;
+  const rest = locations.filter((l) => !here.includes(l));
+  return `<option value="">—</option>`
+    + (here.length ? `<optgroup label="${esc(t('spot.loc_here', { ap }))}">${here.map(opt).join('')}</optgroup>` : '')
+    + (rest.length ? `<optgroup label="${esc(here.length ? t('spot.loc_others') : t('spot.loc_none', { ap }))}">${rest.map(opt).join('')}</optgroup>` : '');
+}
+
 export async function render(root, params, query) {
   const editing = !!params.id;
   // Lieu en cours : celui choisi dans la liste des spots (sinon l'aéroport par défaut)
@@ -115,7 +127,7 @@ export async function render(root, params, query) {
             <span class="row" style="gap:6px;margin-top:6px"><button type="button" class="chip" data-primer style="height:28px;font-size:12.5px">${icon('paint-bucket', '', 14)} ${esc(t('livery.primer_chip'))}</button><button type="button" class="chip" data-white style="height:28px;font-size:12.5px">${icon('paint-bucket', '', 14)} ${esc(t('livery.white_chip'))}</button></span></label>
           <div class="field-row">
             <label class="field"><span>${esc(t('spot.flight_type'))}</span><select name="flight_type"><option value="">—</option>${FLIGHT_TYPES.map((f) => `<option value="${f}" ${s.flight_type === f ? 'selected' : ''}>${esc(t(`ftype.${f}`))}</option>`).join('')}</select></label>
-            ${locations.length ? `<label class="field"><span>${esc(t('spot.location'))}</span><select name="location_id"><option value="">—</option>${locations.map((l) => `<option value="${l.id_location}" ${s.location_id === l.id_location ? 'selected' : ''}>${esc(l.name)}${l.airport ? ` (${esc(l.airport)})` : ''}</option>`).join('')}</select></label>` : ''}
+            ${locations.length ? `<label class="field"><span>${esc(t('spot.location'))}</span><select name="location_id">${locOptions(locations, s.airport, s.location_id)}</select></label>` : ''}
           </div>
           <label class="field optional"><span>${esc(t('spot.test_registration'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
             <input name="test_registration" value="${esc(s.test_registration)}" placeholder="${esc(t('spot.test_registration_ph'))}" autocapitalize="characters" autocomplete="off" spellcheck="false">
@@ -182,6 +194,13 @@ export async function render(root, params, query) {
     else if (placeLL && F('lat').value === placeLL[0]) { F('lat').value = ''; F('lng').value = ''; placeLL = null; }
     checkDup();
   } });
+  const locSel = F('location_id');
+  const refreshLocs = () => {
+    if (!locSel) return;
+    const cur = locSel.value ? Number(locSel.value) : null;
+    locSel.innerHTML = locOptions(locations, F('airport').dataset.kind === 'place' ? '' : F('airport').value, cur);
+  };
+  ['input', 'change', 'blur'].forEach((ev) => F('airport').addEventListener(ev, refreshLocs));
   F('airport').addEventListener('input', () => { if (placeLL && F('lat').value === placeLL[0]) { F('lat').value = ''; F('lng').value = ''; placeLL = null; } });
   // Immatriculation inconnue : on désactive le champ (l'avion pourra être identifié plus tard en modifiant le spot)
   const unk = F('unknown_registration');

@@ -107,10 +107,12 @@ def sun(lat: float, lng: float, bearing: float | None = None, date: str = "", ai
 # --------------------------------------------------------------------------- #
 @router.get("/api/radar")
 def radar(lamin: float, lomin: float, lamax: float, lomax: float):
-    # Limite la zone pour rester dans le quota anonyme d'OpenSky
-    if (lamax - lamin) * (lomax - lomin) > 100:
+    # Au-delà de 100 °², le radar passe par les sources gratuites (tuiles de 250 nm, 9 au plus)
+    if (lamax - lamin) * (lomax - lomin) > 600:
         raise HTTPException(422, "area_too_large")
     try:
         return opensky.radar(lamin, lomin, lamax, lomax)
+    except ValueError as e:
+        raise HTTPException(422, "area_too_large") from e
     except httpx.HTTPError as e:
-        raise HTTPException(502, "opensky_unreachable") from e
+        raise HTTPException(502, {"code": "opensky_unreachable", "reason": str(e)[:300]}) from e
