@@ -106,15 +106,15 @@ export async function render(root, params, query) {
         <div class="field"><span>${esc(t('spot.tags'))}</span><div data-tags></div></div>
       </div>
 
-      ${simpleOnly ? '' : `<details class="card fold" data-patrol ${s.patrol ? 'open' : ''}>
-        <summary>${icon('users', '', 18)} ${esc(t('patrol.title'))} ${icon('chevron-down', 'chev', 18)}</summary>
+      ${s.is_patrol ? '' : `<details class="card fold" data-patrol ${s.patrol ? 'open' : ''}>
+        <summary>${icon('plus', '', 18)} ${esc(t('multi.title'))} ${icon('chevron-down', 'chev', 18)}</summary>
         <div class="fold-body stack">
-          <label class="field"><span>${esc(t('patrol.name'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
+          <p class="tiny muted">${esc(t('multi.hint'))}</p>
+          <label class="field"><span>${esc(t('multi.group_name'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
             <input name="patrol_name" list="patrol-names" value="${esc(s.patrol?.name)}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off"></label>
           ${s.patrol ? `<div class="stack" style="gap:6px"><span class="tiny muted">${esc(t('patrol.members'))}</span><div class="row wrap" style="gap:6px">${s.patrol.members.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}
           <div class="stack" style="gap:8px" data-pat-rows></div>
-          <div><button type="button" class="btn sm" data-pat-add>${icon('plus', '', 16)} ${esc(t('patrol.add'))}</button></div>
-          <p class="tiny muted">${esc(t('patrol.hint'))}</p>
+          <div><button type="button" class="btn sm" data-pat-add>${icon('plus', '', 16)} ${esc(t('multi.add'))}</button></div>
           ${s.patrol ? `<label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" name="patrol_leave"> <span>${esc(t('patrol.leave'))}</span></label>` : ''}
         </div>
       </details>`}
@@ -384,14 +384,27 @@ export async function render(root, params, query) {
   const patRows = root.querySelector('[data-pat-rows]') || document.createElement('div');
   const addPatRow = () => {
     const row = document.createElement('div');
-    row.className = 'row';
-    row.style.gap = '8px';
-    row.innerHTML = `<input class="grow" data-pr placeholder="${esc(t('patrol.reg_ph'))}" autocapitalize="characters" autocomplete="off" spellcheck="false" style="min-width:0">
-      <label class="row tiny" style="gap:4px;white-space:nowrap;cursor:pointer"><input type="checkbox" data-pu> ${esc(t('patrol.unknown'))}</label>
-      <button type="button" class="btn sm ghost" data-px aria-label="${esc(t('common.remove'))}">${icon('x', '', 16)}</button>`;
-    const inp = row.querySelector('[data-pr]'), unkBox = row.querySelector('[data-pu]');
+    row.className = 'stack card-sub';
+    row.style.cssText = 'gap:6px;padding:10px;border:1px solid var(--line);border-radius:var(--r-sm)';
+    row.innerHTML = `<div class="row" style="gap:8px">
+        <input class="grow" data-pr placeholder="${esc(t('patrol.reg_ph'))}" autocapitalize="characters" autocomplete="off" spellcheck="false" style="min-width:0">
+        <label class="row tiny" style="gap:4px;white-space:nowrap;cursor:pointer"><input type="checkbox" data-pu> ${esc(t('patrol.unknown'))}</label>
+        <button type="button" class="btn sm ghost" data-px aria-label="${esc(t('common.remove'))}">${icon('x', '', 16)}</button></div>
+      <div class="row" style="gap:8px"><input class="grow" data-pt placeholder="${esc(t('multi.type_ph'))}" autocomplete="off" style="min-width:0"><input class="grow" data-po placeholder="${esc(t('multi.owner_ph'))}" autocomplete="off" style="min-width:0"></div>
+      <label class="row tiny" style="gap:6px;cursor:pointer"><input type="checkbox" data-ps> ${esc(t('multi.same'))}</label>`;
+    const inp = row.querySelector('[data-pr]'), unkBox = row.querySelector('[data-pu]'), ty = row.querySelector('[data-pt]'), ow = row.querySelector('[data-po]');
     unkBox.onchange = () => { inp.disabled = unkBox.checked; if (unkBox.checked) inp.value = ''; };
     row.querySelector('[data-px]').onclick = () => row.remove();
+    // Type et compagnie proposés d'après l'immatriculation (historique, cache, base locale) ; modifiables
+    inp.addEventListener('change', async () => {
+      const reg = inp.value.trim();
+      if (reg.length < 3 || (ty.value && ow.value)) return;
+      try {
+        const r = await api(`/api/lookup/aircraft/${encodeURIComponent(reg)}`);
+        if (!ty.value && (r.aircraft || r.aircraft_icao)) { ty.value = r.aircraft || r.aircraft_icao; row.dataset.icao = r.aircraft_icao || ''; row.dataset.tyname = ty.value; row.dataset.mfr = r.manufacturer || ''; }
+        if (!ow.value && r.owner) { ow.value = r.owner; row.dataset.alc = r.airline_icao || ''; }
+      } catch { /* hors ligne ou inconnu : l'utilisateur saisit lui-même */ }
+    });
     patRows.append(row);
     inp.focus();
   };
@@ -417,6 +430,7 @@ export async function render(root, params, query) {
     const on = !!patSimple?.checked;
     root.querySelector('[data-patsimple]')?.toggleAttribute('hidden', !on);
     root.querySelector('[data-regblock]').hidden = on;
+    root.querySelector('[data-patrol]')?.toggleAttribute('hidden', on);
     F('registration').required = !on && !unk.checked;
   };
   if (patSimple) { patSimple.addEventListener('change', syncPatrol); syncPatrol(); }
@@ -441,8 +455,20 @@ export async function render(root, params, query) {
     data.rating = rating || null;
     data.tags = picker.value();
     if (asPatrol) data.patrol = { simple: true, name: F('patrol_sname').value.trim(), size: F('patrol_size').value.trim(), country: F('patrol_country').value };
-    const members = asPatrol ? [] : [...patRows.children].map((r) => ({ registration: r.querySelector('[data-pr]').value.trim(), unknown_registration: r.querySelector('[data-pu]').checked }))
-      .filter((m) => m.registration || m.unknown_registration);
+    const members = asPatrol ? [] : [...patRows.children].map((r) => {
+      const ty = r.querySelector('[data-pt]').value.trim(), ow = r.querySelector('[data-po]').value.trim();
+      const same = r.querySelector('[data-ps]').checked;
+      const m = { registration: r.querySelector('[data-pr]').value.trim(), unknown_registration: r.querySelector('[data-pu]').checked, inherit_aircraft: same };
+      if (!same) {
+        if (ty) {
+          if (/^[A-Za-z0-9]{2,4}$/.test(ty)) m.aircraft_icao = ty.toUpperCase();
+          else { m.aircraft = ty; if (r.dataset.icao && ty === r.dataset.tyname) m.aircraft_icao = r.dataset.icao; }
+          if (r.dataset.mfr) m.manufacturer = r.dataset.mfr;
+        }
+        if (ow) { m.owner = ow; if (r.dataset.alc) m.airline_icao = r.dataset.alc; }
+      }
+      return m;
+    }).filter((m) => m.registration || m.unknown_registration);
     const patName = F('patrol_name')?.value.trim() || '';
     if (asPatrol) { /* déjà renseigné */ }
     else if (editing && s.patrol && F('patrol_leave')?.checked) data.patrol = null;

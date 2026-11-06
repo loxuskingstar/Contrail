@@ -53,7 +53,7 @@ export async function render(root, params) {
     ${s.outing ? `<a class="card row" style="margin-bottom:14px" href="#/outings/${s.outing.id}">${icon('calendar-days', '', 22)}
       <div class="grow"><b>${esc(s.outing.name || t('outing.this'))}</b><div class="small muted">${esc(t('outing.of_n', { n: s.outing.n }))}</div></div>${icon('chevron-right')}</a>` : ''}
     ${s.is_patrol && s.patrol_size ? `<div class="card row" style="margin-bottom:14px">${icon('users', '', 22)}<b>${esc(t('patrol.n_aircraft', { n: s.patrol_size }))}</b></div>` : ''}
-    ${s.patrol ? `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('users', '', 18)} ${esc(s.patrol.name || t('patrol.title'))}<a href="#/spots?patrol=${s.patrol.id}">${esc(t('patrol.view_all', { n: s.patrol.members.length }))} →</a></div>
+    ${s.patrol ? `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('users', '', 18)} ${esc(s.patrol.name || t('multi.on_photo'))}<a href="#/spots?patrol=${s.patrol.id}">${esc(t('patrol.view_all', { n: s.patrol.members.length }))} →</a></div>
       <div class="row wrap" style="gap:8px">${s.patrol.members.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}
     ${s.flights.length ? `<a class="card row" style="margin-bottom:14px;background:rgb(139 92 246 / .1)" href="#/airframe/${encodeURIComponent(s.registration)}">${icon('ticket', '', 26)}
       <div class="grow"><b>${esc(t('crossref.spot', { reg: s.registration, n: s.flights.length }))}</b>

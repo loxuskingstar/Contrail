@@ -590,6 +590,7 @@ MEMBER_FIELDS = ("registration", "aircraft", "aircraft_icao", "manufacturer", "m
 INHERIT = ("aircraft", "aircraft_icao", "manufacturer", "owner", "airline_icao", "livery", "military", "flight_type",
            "date", "airport", "place", "location_id", "lat", "lng", "description", "camera", "lens", "focal", "aperture",
            "iso", "shutter")
+IDENTITY = ("aircraft", "aircraft_icao", "manufacturer", "owner", "airline_icao", "livery", "military")
 INHERIT_RAW = ("exif_json", "image", "thumb", "image_w", "image_h", "phash")
 
 
@@ -600,7 +601,8 @@ def _prepare_members(base: dict, members: list | None) -> list[dict]:
     for m in members or []:
         if not isinstance(m, dict):
             continue
-        inp = {k: base[k] for k in INHERIT if base.get(k) not in (None, "")}
+        own = m.get("inherit_aircraft") is False          # autre appareil que l'avion principal : ni type ni compagnie hérités
+        inp = {k: base[k] for k in INHERIT if base.get(k) not in (None, "") and not (own and k in IDENTITY)}
         inp.update({k: v for k, v in m.items() if k in MEMBER_FIELDS and v not in (None, "")})
         inp["unknown_registration"] = bool(m.get("unknown_registration"))
         row = prepare(inp)

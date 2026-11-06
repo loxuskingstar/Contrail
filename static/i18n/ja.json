@@ -1478,5 +1478,13 @@
 "f.wind": "風",
 "f.wind.calm": "穏やか（8 kt 未満）",
 "f.wind.moderate": "中程度（8–17 kt）",
-"f.wind.strong": "強風（18 kt 以上・突風）"
+"f.wind.strong": "強風（18 kt 以上・突風）",
+"multi.title": "この写真の他の機体",
+"multi.hint": "同じ写真に複数の機体：それぞれが独立したスポットになり（統計にも加算）、写真・日時・場所を共有します。",
+"multi.group_name": "グループ名（編隊・展示チーム）",
+"multi.add": "機体を追加",
+"multi.type_ph": "機種（A320, Rafale…）",
+"multi.owner_ph": "航空会社・運用者",
+"multi.same": "主役の機体と同じ機種・航空会社（編隊）",
+"multi.on_photo": "同じ写真の機体"
 }

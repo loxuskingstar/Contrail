@@ -1649,5 +1649,13 @@
 "f.wind": "Viento",
 "f.wind.calm": "Calma (< 8 kt)",
 "f.wind.moderate": "Moderado (8–17 kt)",
-"f.wind.strong": "Fuerte (≥ 18 kt o rachas)"
+"f.wind.strong": "Fuerte (≥ 18 kt o rachas)",
+"multi.title": "Otros aviones en esta foto",
+"multi.hint": "Varios aviones en la misma foto: cada uno pasa a ser un spot propio (cuenta en las estadísticas), con la misma foto, fecha y lugar.",
+"multi.group_name": "Nombre del grupo (patrulla, formación)",
+"multi.add": "Añadir un avión",
+"multi.type_ph": "Tipo (A320, Rafale…)",
+"multi.owner_ph": "Aerolínea / operador",
+"multi.same": "Mismo tipo y aerolínea que el avión principal (formación)",
+"multi.on_photo": "En la misma foto"
 }

@@ -1649,5 +1649,13 @@
 "f.wind": "Wind",
 "f.wind.calm": "Calm (< 8 kt)",
 "f.wind.moderate": "Moderate (8–17 kt)",
-"f.wind.strong": "Strong (≥ 18 kt or gusts)"
+"f.wind.strong": "Strong (≥ 18 kt or gusts)",
+"multi.title": "Other aircraft in this photo",
+"multi.hint": "Several aircraft in the same photo: each becomes a spot of its own (counted in the stats), sharing this photo, date and place.",
+"multi.group_name": "Group name (display team, formation)",
+"multi.add": "Add an aircraft",
+"multi.type_ph": "Type (A320, Rafale…)",
+"multi.owner_ph": "Airline / operator",
+"multi.same": "Same type and airline as the main aircraft (formation)",
+"multi.on_photo": "In the same photo"
 }

@@ -1223,3 +1223,19 @@ def test_daytime_weather_wind_filters(client):
     assert regs("daytime=dawn") == {"F-HDWN"} and regs("daytime=dusk") == set() and regs("daytime=night") == {"F-HNGT"}
     assert regs("weather=rain") == {"F-HDAY"} and regs("weather=clear") == {"F-HGLD"} and regs("weather=none") == {"F-HDWN", "F-HNGT"}
     assert regs("wind=strong") == {"F-HDAY"} and regs("wind=calm") == {"F-HGLD"}
+
+
+def test_extra_aircraft_on_same_photo_do_not_inherit_identity(client):
+    import io as _io
+    from PIL import Image
+    buf = _io.BytesIO(); Image.new("RGB", (64, 48), (200, 90, 30)).save(buf, "JPEG")
+    data = {"registration": "F-HMU1", "aircraft": "Airbus A320", "aircraft_icao": "A320", "owner": "Air France", "airport": "LFBO", "date": "2044-02-02T10:00",
+            "patrol": {"members": [{"registration": "F-HMU2", "inherit_aircraft": False, "aircraft_icao": "B738", "owner": "Ryanair"},
+                                   {"registration": "F-HMU3", "inherit_aircraft": True}]}}
+    r = client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("a.jpg", buf.getvalue(), "image/jpeg")})
+    assert r.status_code in (200, 201), r.text
+    got = {s["registration"]: s for s in client.get("/api/spots?year=2044").json()["items"]}
+    assert set(got) == {"F-HMU1", "F-HMU2", "F-HMU3"}
+    assert got["F-HMU2"]["aircraft_icao"] == "B738" and got["F-HMU2"]["owner"] == "Ryanair"
+    assert got["F-HMU3"]["aircraft_icao"] == "A320"
+    assert len({s["thumb"] for s in got.values()}) == 1                 # une seule photo partagée
