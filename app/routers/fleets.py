@@ -22,7 +22,11 @@ MAX_PAGES = 80             # garde-fou : 4 000 appareils avec une clé gratuite
 
 def _airline_groups() -> list[dict]:
     return q("SELECT opg(airline_icao, owner) AS key, MAX(airline_icao) icao, MAX(owner) name, COUNT(*) spots, "
+<<<<<<< HEAD
+             "COUNT(DISTINCT registration) regs, MAX(date) last FROM spotting "
+=======
              "COUNT(DISTINCT known(registration)) regs, MAX(date) last FROM spotting "
+>>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
              "WHERE opg(airline_icao, owner) IS NOT NULL AND military = 0 GROUP BY key ORDER BY regs DESC")
 
 

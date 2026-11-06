@@ -8,3 +8,7 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
+
+# Installeurs de bureau
+dist/
+build/

@@ -5,10 +5,13 @@ Le code OACI d'un spot (`airline_icao`) vient souvent d'une base d'appareils qui
 `group_key(icao, owner)` garde le code OACI tant que le propriétaire saisi est compatible avec le nom
 connu de ce code, et bascule sur le nom du propriétaire sinon. Elle est enregistrée dans SQLite sous
 le nom `opg` et remplace `COALESCE(airline_icao, owner)` partout.
+<<<<<<< HEAD
+=======
 
 Inversement, un propriétaire qui porte le nom d'un *autre* code connu est rattaché à ce code : un spot
 « Ryanair » saisi sous le code MAY (Malta Air) rejoint RYR, et un spot « Air France » sans code rejoint AFR,
 au lieu de former une compagnie à part.
+>>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
 """
 from __future__ import annotations
 
@@ -83,6 +86,10 @@ def _refs(icao: str) -> frozenset[str]:
     return out
 
 
+<<<<<<< HEAD
+def reset_cache() -> None:
+    _cache.clear()
+=======
 _names: dict[str, tuple[float, dict[str, str]]] = {}
 
 
@@ -129,6 +136,7 @@ def _code_for_name(owner: str) -> str | None:
 def reset_cache() -> None:
     _cache.clear()
     _names.clear()
+>>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
 
 
 def group_key(icao: str | None, owner: str | None) -> str | None:
@@ -137,11 +145,19 @@ def group_key(icao: str | None, owner: str | None) -> str | None:
     if not owner:
         return icao
     if not icao:
+<<<<<<< HEAD
+        return owner
+    refs = _refs(icao)
+    if not refs or compatible(_key(owner), refs):
+        return icao
+    return owner
+=======
         return _code_for_name(owner) or owner
     refs = _refs(icao)
     if not refs or compatible(_key(owner), refs):
         return icao
     return _code_for_name(owner) or owner
+>>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
 
 
 def register(conn: sqlite3.Connection) -> None:
