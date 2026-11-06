@@ -1451,5 +1451,6 @@
 "ach.step_next": "Siguiente nivel",
 "ach.step_first": "Primer nivel",
 "ach.step_todo": "Próximo",
-"ach.remaining": "Faltan {n}"
+"ach.remaining": "Faltan {n}",
+"spot.preview_map": "Ver en el mapa"
 }

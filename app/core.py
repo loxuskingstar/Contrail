@@ -19,10 +19,14 @@ from typing import Any
 
 APP_NAME = "Contrail"
 <<<<<<< HEAD
+<<<<<<< HEAD
 APP_VERSION = "1.4.5"
 =======
 APP_VERSION = "2.1.0"
 >>>>>>> f04f40360544dbd43d4a4c562449716509ebcf0f
+=======
+APP_VERSION = "2.2.0"
+>>>>>>> 19300ad55f560bc90a73e1b03619748514384aa6
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
