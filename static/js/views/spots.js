@@ -7,7 +7,7 @@ import { esc, sheet, spotRow, spotTile, emptyState, confirmDialog, toast, errorT
 
 const PAGE = 60;
 const SCOPE_KEY = 'contrail.spotsScope';
-const FILTER_KEYS = ['search', 'tag', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'sort'];
+const FILTER_KEYS = ['search', 'tag', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'daytime', 'weather', 'wind', 'sort'];
 
 export async function render(root, _p, query) {
   const filters = Object.fromEntries(FILTER_KEYS.filter((k) => query[k] !== undefined && query[k] !== '').map((k) => [k, query[k]]));
@@ -89,6 +89,7 @@ export async function render(root, _p, query) {
       if (k === 'tag') label = store.tags?.find((x) => String(x.id_tag) === String(v))?.name || v;
       if (k === 'country') label = `${flag(v)} ${countryName(v)}`;
       if (['special', 'favorite', 'has_photo', 'has_audio', 'unknown', 'rare'].includes(k)) label = t(`spots.f_${k}`);
+      if (['daytime', 'weather', 'wind'].includes(k)) label = t(`f.${k}.${v}`);
       if (k === 'rarity') label = t(`rarity.n.${v}`);
       if (k === 'military') label = v === '1' ? t('spot.military') : t('spots.civil');
       if (k === 'flight_type') label = t(`ftype.${v}`);
@@ -390,6 +391,10 @@ async function openFilters(filters, onApply) {
         <label class="field"><span>${esc(t('rarity.title'))}</span><select data-k="rarity"><option value="">${esc(t('common.all'))}</option>${['legendary', 'epic', 'rare', 'uncommon', 'common'].map((v) => `<option value="${v}" ${f.rarity === v ? 'selected' : ''}>${esc(t(`rarity.n.${v}`))}</option>`).join('')}</select></label>
       </div>
       <div class="field-row">
+        ${[['daytime', ['day', 'golden', 'dawn', 'dusk', 'night']], ['weather', ['clear', 'partly_cloudy', 'cloudy', 'rain', 'snow', 'storm', 'fog', 'none']]].map(([k, vals]) => `<label class="field"><span>${esc(t(`f.${k}`))}</span><select data-k="${k}"><option value="">${esc(t('common.all'))}</option>${vals.map((v) => `<option value="${v}" ${f[k] === v ? 'selected' : ''}>${esc(t(`f.${k}.${v}`))}</option>`).join('')}</select></label>`).join('')}
+      </div>
+      <div class="field-row">
+        <label class="field"><span>${esc(t('f.wind'))}</span><select data-k="wind"><option value="">${esc(t('common.all'))}</option>${['calm', 'moderate', 'strong'].map((v) => `<option value="${v}" ${f.wind === v ? 'selected' : ''}>${esc(t(`f.wind.${v}`))}</option>`).join('')}</select></label>
         <label class="field"><span>${esc(t('spots.sort'))}</span><select data-k="sort">${['date_desc', 'date_asc', 'created', 'registration', 'type'].map((v) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${esc(t(`sort.${v}`))}</option>`).join('')}</select></label>
       </div>
       <div class="card" style="padding:4px 14px">

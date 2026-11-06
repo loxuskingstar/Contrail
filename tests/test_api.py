@@ -1202,3 +1202,24 @@ def test_airshow_merge_plan_and_program(client):
     f = client.get(f"/api/outings/{future}").json()
     assert f["n"] == 0 and len(f["days"]) == 2
     assert client.delete(f"/api/outings/{future}").status_code == 200
+
+
+def test_daytime_weather_wind_filters(client):
+    from app.core import db
+    ids = {}
+    for reg, el in (("F-HDAY", 30), ("F-HGLD", 2), ("F-HDWN", -8), ("F-HNGT", -20)):
+        r = client.post("/api/spots", data={"data": json.dumps({"registration": reg, "aircraft_icao": "A320", "airport": "LFBO", "date": "2043-03-01T07:00"})})
+        sid = r.json()["spot"]["id_spotting"]
+        ids[reg] = sid
+        conn = db()
+        conn.execute("UPDATE spotting SET sun_elevation = ? WHERE id_spotting = ?", (el, sid))
+        conn.commit()
+    conn = db()
+    conn.execute("UPDATE spotting SET metar_json = ? WHERE id_spotting = ?", (json.dumps({"summary": "rain", "wind_kt": 22}), ids["F-HDAY"]))
+    conn.execute("UPDATE spotting SET metar_json = ? WHERE id_spotting = ?", (json.dumps({"summary": "clear", "wind_kt": 3}), ids["F-HGLD"]))
+    conn.commit()
+    regs = lambda qs: {s["registration"] for s in client.get(f"/api/spots?year=2043&{qs}").json()["items"]}
+    assert regs("daytime=day") == {"F-HDAY"} and regs("daytime=golden") == {"F-HGLD"}
+    assert regs("daytime=dawn") == {"F-HDWN"} and regs("daytime=dusk") == set() and regs("daytime=night") == {"F-HNGT"}
+    assert regs("weather=rain") == {"F-HDAY"} and regs("weather=clear") == {"F-HGLD"} and regs("weather=none") == {"F-HDWN", "F-HNGT"}
+    assert regs("wind=strong") == {"F-HDAY"} and regs("wind=calm") == {"F-HGLD"}

@@ -39,6 +39,41 @@ SORTS = {
 # --------------------------------------------------------------------------- #
 # Filtres partagés (liste, carte, export, partage)
 # --------------------------------------------------------------------------- #
+# Moment de la journée d'après la hauteur du soleil (mêmes seuils que les badges) ; aube / crépuscule se distinguent par l'heure
+_HOUR = "CAST(substr(s.date, 12, 2) AS INTEGER)"
+DAYTIME_SQL = {
+    "day": "s.sun_elevation > 8",
+    "golden": "s.sun_elevation BETWEEN -4 AND 8",
+    "dawn": f"s.sun_elevation >= -12 AND s.sun_elevation < -4 AND {_HOUR} < 12",
+    "dusk": f"s.sun_elevation >= -12 AND s.sun_elevation < -4 AND {_HOUR} >= 12",
+    "night": "s.sun_elevation < -12",
+}
+_WX = "json_extract(s.metar_json, '$.summary')"
+
+
+def _wx_in(*vals: str) -> str:
+    return f"{_WX} IN ({','.join(repr(v) for v in vals)})"
+
+
+WEATHER_SQL = {
+    "clear": _wx_in("clear"),
+    "partly_cloudy": _wx_in("partly_cloudy"),
+    "cloudy": _wx_in("cloudy", "overcast"),
+    "rain": _wx_in("rain", "drizzle", "showers", "freezing"),
+    "snow": _wx_in("snow", "snow_grains", "ice_crystals", "ice_pellets", "hail", "small_hail"),
+    "storm": _wx_in("thunderstorm", "squalls", "funnel_cloud"),
+    "fog": _wx_in("fog", "mist", "haze", "smoke", "dust", "sand", "volcanic_ash"),
+    "none": "s.metar_json IS NULL",
+}
+_KT = "COALESCE(json_extract(s.metar_json, '$.wind_kt'), -1)"
+_GUST = "COALESCE(json_extract(s.metar_json, '$.gust_kt'), 0)"
+WIND_SQL = {
+    "calm": f"{_KT} BETWEEN 0 AND 7 AND {_GUST} < 15",
+    "moderate": f"{_KT} BETWEEN 8 AND 17 AND {_GUST} < 25",
+    "strong": f"({_KT} >= 18 OR {_GUST} >= 25)",
+}
+
+
 def build_filters(f: dict) -> tuple[str, list]:
     where, params = ["1=1"], []
     if f.get("search"):
@@ -83,6 +118,12 @@ def build_filters(f: dict) -> tuple[str, list]:
     if f.get("military") is not None and f.get("military") != "":
         where.append("s.military = ?")
         params.append(int(f["military"]))
+    if f.get("daytime") in DAYTIME_SQL:
+        where.append(DAYTIME_SQL[f["daytime"]])
+    if f.get("weather") in WEATHER_SQL:
+        where.append(WEATHER_SQL[f["weather"]])
+    if f.get("wind") in WIND_SQL:
+        where.append(WIND_SQL[f["wind"]])
     if f.get("rare") or f.get("rarity"):
         rt = collection.rare_types((f["rarity"],) if f.get("rarity") else None)
         where.append(f"s.aircraft_icao IN ({','.join('?' * len(rt)) or 'NULL'})")
@@ -147,7 +188,7 @@ def list_spots(
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
-    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False, outing: int | None = None, rare: bool = False, rarity: str = "",
+    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False, outing: int | None = None, rare: bool = False, rarity: str = "", daytime: str = "", weather: str = "", wind: str = "",
     sort: str = "date_desc", limit: int = Query(60, le=500), offset: int = 0,
 ):
     f = dict(locals())

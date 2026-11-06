@@ -141,8 +141,8 @@ def get_outing(outing_id: int):
         if r.get("metar_json"):
             try:
                 d = json.loads(r["metar_json"])
-                w = {"raw": r["metar"], "category": d.get("category"), "wind": d.get("wind"), "temp": d.get("temp"),
-                     "visibility": d.get("visibility"), "at": r["date"]}
+                w = {"raw": r["metar"], "category": d.get("category"), "summary": d.get("summary"), "wind_kt": d.get("wind_kt"),
+                     "gust_kt": d.get("gust_kt"), "temp": d.get("temp_c"), "at": r["date"]}
                 weather = weather or w
                 weather_by_day.setdefault((r["date"] or "")[:10], w)
             except (TypeError, ValueError):

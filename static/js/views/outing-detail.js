@@ -6,7 +6,7 @@ import { esc, pageHead, spotRow, sheet, toast, errorToast, confirmDialog } from 
 import { outingSite, outingTitle, outingDates } from './outings.js';
 
 const hhmm = (iso) => (iso || '').slice(11, 16);
-const wxText = (w) => w ? [w.category, w.wind ? `${w.wind.dir ?? ''}${w.wind.speed != null ? '/' + w.wind.speed + ' kt' : ''}` : '', w.temp != null ? `${w.temp}°` : ''].filter(Boolean).join(' · ') : '';
+const wxText = (w) => w ? [w.category, w.wind_kt != null ? `${w.wind_kt} kt` : '', w.temp != null ? `${w.temp}°` : ''].filter(Boolean).join(' · ') : '';
 
 function duration(a, b) {
   if (!a || !b) return '';
