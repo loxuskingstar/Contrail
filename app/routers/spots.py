@@ -441,7 +441,7 @@ def _split_place(airport_raw: str | None, place_raw: str | None) -> tuple[str | 
     if a:
         return a["icao"], None
     if airport_raw and not place_raw:
-        if re.fullmatch(r"[A-Z]{4}", airport_raw):        # code OACI en majuscules mais absent de la base : conservé tel quel
+        if re.fullmatch(r"[A-Z]{4}|[A-Z]{2}\d{2,5}", airport_raw):    # code OACI ou code terrain/hélistation (LF362) absent de la base : conservé tel quel
             return airport_raw, None
         return None, airport_raw[:120]
     return None, (place_raw or "")[:120] or None

@@ -1291,3 +1291,19 @@ def test_manual_country_override(client):
     put({"registration": "F-ZZZZ", "country": ""})
     assert client.get(f"/api/spots/{sid}").json()["country"] == "FR"
     assert put({"country": "france"}).status_code == 422
+
+
+def test_heliports_and_small_fields(client):
+    from app.services import geo
+    a = geo.airport("LF3624")                      # code SIA d'un terrain absent d'airportsdata
+    assert a and a["icao"] == "LF3624" and a["kind"] == "airfield" and a["tz"] == "Europe/Paris"
+    assert geo.airport("FR-0001")["kind"] == "heliport"
+    assert [x["icao"] for x in client.get("/api/airports/search", params={"q": "LF362"}).json()][:1] == ["LF3623"]
+    assert client.get("/api/airports/LF3624").json()["name"].startswith("Grange Dieu")
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZHEL", "date": "2047-05-01", "airport": "LF3624"})})
+    assert client.get(f"/api/spots/{r.json()['spot']['id_spotting']}").json()["airport"] == "LF3624"
+    # code inconnu de toute base (LF362) : conservé comme terrain, pas rangé en « lieu »
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZHE2", "date": "2047-05-02", "airport": "LF362"})})
+    d = client.get(f"/api/spots/{r.json()['spot']['id_spotting']}").json()
+    assert d["airport"] == "LF362" and not d.get("place")
+    assert geo.airport("LFBO")["name"] and geo.airport("TLS")["icao"] == "LFBO"
