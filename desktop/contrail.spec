@@ -10,7 +10,7 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 VERSION = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', open(os.path.join(ROOT, "app", "core.py"), encoding="utf-8").read()).group(1)
 ICON = {"win32": "icon.ico", "darwin": "icon.icns"}.get(sys.platform, "icon.png")
 
-hidden = (collect_submodules("uvicorn") + collect_submodules("tzdata") + collect_submodules("app") + collect_submodules("pystray")
+hidden = (collect_submodules("uvicorn") + collect_submodules("tzdata") + collect_submodules("app") + collect_submodules("pystray") + collect_submodules("pillow_heif")
           + ["multipart", "python_multipart", "itsdangerous"])
 datas = ([(os.path.join(ROOT, "static"), "static"),
           (os.path.join(ROOT, "app", "fixtures"), os.path.join("app", "fixtures")),

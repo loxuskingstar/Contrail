@@ -191,5 +191,10 @@ def update_flight(flight_id: int, f: FlightIn):
 
 @router.delete("/{flight_id}")
 def delete_flight(flight_id: int):
+    from ..services import trash
+    row = q1("SELECT * FROM flights WHERE id_flight = ?", (flight_id,))
+    if not row:
+        raise HTTPException(404, "not_found")
+    tid = trash.put("flight", [row]) if trash.enabled() else []
     execute("DELETE FROM flights WHERE id_flight = ?", (flight_id,))
-    return {"deleted": flight_id}
+    return {"deleted": flight_id, "trash": tid[0] if tid else None}

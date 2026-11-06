@@ -60,7 +60,7 @@ export async function render(root, params, query) {
         ${s.image ? `<img class="preview" src="${mediaUrl('images', s.image)}" alt="">` : ''}
         <div class="dz-in" ${s.image ? 'hidden' : ''}>${icon('image-plus', '', 40)}<b>${esc(t('spot.photo_drop'))}</b><span class="small muted">${esc(t('spot.photo_hint'))}</span></div>
         <div class="dz-tools" ${s.image ? '' : 'hidden'}><button type="button" class="btn-icon" data-rmimg title="${esc(t('common.remove'))}">${icon('trash-2', '', 18)}</button></div>
-        <input type="file" accept="image/*" hidden data-file>
+        <input type="file" accept="image/*,.heic,.heif" hidden data-file>
       </div>
       <div data-analysis></div>
 
@@ -210,6 +210,19 @@ export async function render(root, params, query) {
   F('date').addEventListener('input', () => (dateTouched = true));
 
   // ------------------------------------------------------------ photo
+  const isImg = (f) => !!f && (f.type?.startsWith('image/') || /\.(heic|heif)$/i.test(f.name || ''));
+  const isHeic = (f) => /^image\/hei[cf]/i.test(f.type || '') || /\.(heic|heif)$/i.test(f.name || '');
+  // Les navigateurs (hors Safari) ne savent pas afficher le HEIC : le serveur renvoie un aperçu JPEG
+  async function previewSrc(file) {
+    if (isHeic(file) && navigator.onLine) {
+      try {
+        const fd = new FormData(); fd.append('image', file);
+        const r = await fetch('/api/media/preview', { method: 'POST', body: fd, credentials: 'same-origin' });
+        if (r.ok) return URL.createObjectURL(await r.blob());
+      } catch { /* aperçu indisponible : on retombe sur le fichier brut */ }
+    }
+    return URL.createObjectURL(file);
+  }
   const setPreview = (file) => {
     imageFile = file;
     removeImage = false;
@@ -217,7 +230,7 @@ export async function render(root, params, query) {
     drop.querySelector('img.preview')?.remove();
     const img = document.createElement('img');
     img.className = 'preview';
-    img.src = URL.createObjectURL(file);
+    previewSrc(file).then((u) => { if (imageFile === file) img.src = u; });
     drop.prepend(img);
     drop.querySelector('.dz-in').hidden = true;
     drop.querySelector('.dz-tools').hidden = false;
@@ -242,7 +255,7 @@ export async function render(root, params, query) {
   fileInput.onchange = () => fileInput.files[0] && setPreview(fileInput.files[0]);
   ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('drag'); }));
   ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('drag'); }));
-  drop.addEventListener('drop', (e) => { const f = e.dataTransfer.files?.[0]; if (f?.type.startsWith('image/')) setPreview(f); });
+  drop.addEventListener('drop', (e) => { const f = e.dataTransfer.files?.[0]; if (isImg(f)) setPreview(f); });
   root.querySelector('[data-rmimg]').onclick = () => {
     imageFile = null; removeImage = true;
     drop.classList.remove('has'); drop.querySelector('img.preview')?.remove();
@@ -250,7 +263,7 @@ export async function render(root, params, query) {
     root.querySelector('[data-analysis]').innerHTML = '';
   };
   // Coller une image depuis le presse-papiers
-  const onPaste = (e) => { const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith('image/')); if (f) setPreview(f); };
+  const onPaste = (e) => { const f = [...(e.clipboardData?.files || [])].find((x) => isImg(x)); if (f) setPreview(f); };
   document.addEventListener('paste', onPaste);
 
   async function analyze(file) {

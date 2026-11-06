@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from ..core import q
+from ..core import memo, q
 
 # Avion d'essai pas encore peint (apprêt vert ou métal nu) : catégorie à part, jamais comptée comme livrée spéciale
 PRIMER_RX = re.compile(r"\bprimers?\b|appr[eê]ts?\b|non\s?peint|pas\s?(encore\s?)?peint|unpainted|bare\s?metal|"
@@ -61,31 +61,66 @@ def livery_category(livery: str | None) -> str | None:
 # --------------------------------------------------------------------------- #
 # Badges dynamiques
 # --------------------------------------------------------------------------- #
+RARITY_TIERS = ((25, "legendary"), (250, "epic"), (2000, "rare"))   # nombre d'appareils connus au monde pour ce type
+
+
+def rarity_tier(n: int | None) -> str | None:
+    if not n:
+        return None
+    for lim, name in RARITY_TIERS:
+        if n <= lim:
+            return name
+    return None
+
+
+def rare_types(tiers: tuple[str, ...] | None = None) -> list[str]:
+    """Types présents dans la collection dont la rareté mondiale est connue (liste vide sans base de référence)."""
+    from . import refdb
+    tc = refdb.type_counts()
+    if not tc:
+        return []
+    mine = {r["t"] for r in q("SELECT DISTINCT aircraft_icao t FROM spotting WHERE aircraft_icao IS NOT NULL")}
+    return sorted(t for t in mine if (tier := rarity_tier(tc.get(t))) and (not tiers or tier in tiers))
+
+
 def badge_context() -> dict:
-    """Pré-calcule une fois les agrégats nécessaires à l'attribution des badges."""
-    ctx: dict = {}
-    order = "COALESCE(date, created_at), id_spotting"
-    ctx["first_type"] = {r["id"] for r in q(
-        f"SELECT (SELECT id_spotting FROM spotting s2 WHERE COALESCE(s2.aircraft_icao, s2.aircraft) = g.k "
-        f"ORDER BY {order} LIMIT 1) AS id FROM (SELECT DISTINCT COALESCE(aircraft_icao, aircraft) AS k "
-        f"FROM spotting WHERE COALESCE(aircraft_icao, aircraft) IS NOT NULL) g")}
-    ctx["first_airline"] = {r["id"] for r in q(
-        f"SELECT (SELECT id_spotting FROM spotting s2 WHERE opg(s2.airline_icao, s2.owner) = g.k "
-        f"ORDER BY {order} LIMIT 1) AS id FROM (SELECT DISTINCT opg(airline_icao, owner) AS k "
-        f"FROM spotting WHERE opg(airline_icao, owner) IS NOT NULL) g")}
-    ctx["first_airport"] = {r["id"] for r in q(
-        f"SELECT (SELECT id_spotting FROM spotting s2 WHERE s2.airport = g.k ORDER BY {order} LIMIT 1) AS id "
-        f"FROM (SELECT DISTINCT airport AS k FROM spotting WHERE airport IS NOT NULL AND airport <> '') g")}
-    counts = {r["registration"]: r["n"] for r in q(
-        "SELECT registration, COUNT(*) n FROM spotting GROUP BY registration")}
+    """Agrégats nécessaires aux badges, mémorisés tant que les données ne changent pas (lecture seule : ne pas modifier)."""
+    from . import refdb
+    return memo("badge_context", _badge_context, refdb.REF_PATH.stat().st_mtime if refdb.available() else 0)
+
+
+def _badge_context(_ref_mtime=0) -> dict:
+    """Une seule passe, dans l'ordre chronologique : premier spot de chaque type / compagnie / aéroport, rang par immatriculation."""
+    from . import operators
+
+    ctx: dict = {"first_type": set(), "first_airline": set(), "first_airport": set(), "rank": {}}
+    seen_t: set = set()
+    seen_a: set = set()
+    seen_p: set = set()
+    counts: dict[str, int] = {}
+    opg_cache: dict[tuple, str | None] = {}
+    for r in q("SELECT id_spotting, registration, COALESCE(aircraft_icao, aircraft) t, airline_icao, owner, airport "
+               "FROM spotting ORDER BY COALESCE(date, created_at), id_spotting"):
+        sid = r["id_spotting"]
+        if r["t"] and r["t"] not in seen_t:
+            seen_t.add(r["t"]); ctx["first_type"].add(sid)
+        k = (r["airline_icao"], r["owner"])
+        if k not in opg_cache:
+            opg_cache[k] = operators.group_key(*k)
+        al = opg_cache[k]
+        if al and al not in seen_a:
+            seen_a.add(al); ctx["first_airline"].add(sid)
+        if r["airport"] and r["airport"] not in seen_p:
+            seen_p.add(r["airport"]); ctx["first_airport"].add(sid)
+        n = counts[r["registration"]] = counts.get(r["registration"], 0) + 1
+        ctx["rank"][sid] = n
     ctx["reg_counts"] = counts
+    from . import refdb
+    ctx["type_counts"] = refdb.type_counts()
     top = max(counts.values(), default=0)
     ctx["most_spotted"] = {r for r, n in counts.items() if n == top and n >= 2}
     ctx["flown"] = {r["registration"] for r in q(
         "SELECT DISTINCT registration FROM flights WHERE registration IS NOT NULL AND registration <> ''")}
-    # rang chronologique de chaque spot pour son immatriculation
-    ctx["rank"] = {r["id_spotting"]: r["rk"] for r in q(
-        f"SELECT id_spotting, ROW_NUMBER() OVER (PARTITION BY registration ORDER BY {order}) rk FROM spotting")}
     return ctx
 
 
@@ -115,6 +150,10 @@ def badges_for(spot: dict, ctx: dict) -> list[dict]:
         b.append({"code": "flown"})
     if spot.get("military"):
         b.append({"code": "military"})
+    tn = ctx.get("type_counts", {}).get(spot.get("aircraft_icao"))
+    tier = rarity_tier(tn)
+    if tier:
+        b.append({"code": "rarity", "tier": tier, "n": tn})
     el = spot.get("sun_elevation")
     if el is not None:
         if el < -6:

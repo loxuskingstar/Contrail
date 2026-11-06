@@ -14,6 +14,14 @@ from PIL import ExifTags, Image, ImageFilter, ImageOps
 from ..core import DIRS, get_setting
 from . import registration as regs
 
+try:                                    # photos HEIC / HEIF (iPhone, certains Android) : lecture via pillow-heif
+    import pillow_heif
+
+    pillow_heif.register_heif_opener()
+    HEIF = True
+except Exception:  # noqa: BLE001 — bibliothèque absente ou incompatible : le reste de l'application fonctionne
+    HEIF = False
+
 log = logging.getLogger("contrail.media")
 
 Image.MAX_IMAGE_PIXELS = 200_000_000  # photos de reflex plein format OK, bombes de décompression non
@@ -113,6 +121,16 @@ def open_image(data: bytes) -> Image.Image:
     img = Image.open(io.BytesIO(data))
     img.load()
     return img
+
+
+def preview_jpeg(data: bytes, max_px: int = 1600) -> bytes:
+    """JPEG d'aperçu (orientation corrigée) : pour afficher dans le navigateur une photo qu'il ne sait pas lire (HEIC)."""
+    img = ImageOps.exif_transpose(open_image(data))
+    img = img.convert("RGB")
+    img.thumbnail((max_px, max_px), Image.Resampling.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=82)
+    return buf.getvalue()
 
 
 def dhash(img: Image.Image) -> str:

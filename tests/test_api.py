@@ -937,7 +937,97 @@ def test_patrol_lifecycle(client):
     client.delete(f"/api/spots/{main['id_spotting']}")
     assert media_file_exists(img)                                  # l'avion détaché garde la photo
     client.delete(f"/api/spots/{sid}")
+    assert media_file_exists(img)                                  # à la corbeille : le fichier reste récupérable
+    assert client.delete("/api/trash").status_code == 200          # vidage : la photo n'est plus référencée nulle part
     assert not media_file_exists(img)
+
+
+def test_trash_restore_and_purge(client):
+    from app.services import trash
+    tag = client.post("/api/tags", json={"name": "corbeille-test"}).json()
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "F-TRSH1", "aircraft": "Airbus A320", "airport": "LFBO",
+                                                            "date": "2026-05-01T10:00", "tags": [tag["name"]]})},
+                    files={"image": ("a.jpg", jpeg_bytes((1, 2, 3)), "image/jpeg")}).json()["spot"]
+    sid, img = r["id_spotting"], r["image"]
+    d = client.delete(f"/api/spots/{sid}").json()
+    assert d["trash"] and client.get(f"/api/spots/{sid}").status_code == 404
+    assert client.get("/api/spots", params={"registration": "F-TRSH1"}).json()["total"] == 0
+    assert any(i["label"].startswith("F-TRSH1") for i in client.get("/api/trash").json()["items"])
+    assert media_file_exists(img)
+    back = client.post(f"/api/trash/{d['trash']}/restore").json()
+    assert back["kind"] == "spot"
+    s = client.get(f"/api/spots/{back['id']}").json()
+    assert s["registration"] == "F-TRSH1" and s["image"] == img and [t["name"] for t in s["tags"]] == ["corbeille-test"]
+    # suppression groupée, puis purge définitive d'une seule entrée
+    out = client.post("/api/spots/bulk", json={"ids": [back["id"]], "action": "delete"}).json()
+    assert len(out["trash"]) == 1
+    assert client.delete(f"/api/trash/{out['trash'][0]}").status_code == 200
+    assert not media_file_exists(img)
+    # un vol aussi
+    f = client.post("/api/flights", json={"date": "2026-05-02", "dep_icao": "LFBO", "arr_icao": "LFPO", "registration": "F-TRSH2"}).json()
+    fid = f["flight"]["id_flight"] if "flight" in f else f["id_flight"]
+    tf = client.delete(f"/api/flights/{fid}").json()["trash"]
+    assert client.get(f"/api/flights/{fid}").status_code == 404
+    assert client.post(f"/api/trash/{tf}/restore").json()["kind"] == "flight"
+    # corbeille désactivée : suppression immédiate
+    client.put("/api/settings", json={"trash_days": 0})
+    r2 = client.post("/api/spots", data={"data": json.dumps({"registration": "F-TRSH3", "aircraft": "Airbus A320", "airport": "LFBO",
+                                                             "date": "2026-05-03T10:00"})},
+                     files={"image": ("a.jpg", jpeg_bytes((9, 8, 7)), "image/jpeg")}).json()["spot"]
+    assert client.delete(f"/api/spots/{r2['id_spotting']}").json()["trash"] is None
+    assert not media_file_exists(r2["image"])
+    client.put("/api/settings", json={"trash_days": 30})
+    # purge par ancienneté
+    r3 = client.post("/api/spots", data={"data": json.dumps({"registration": "F-TRSH4", "aircraft": "Airbus A320", "airport": "LFBO",
+                                                             "date": "2026-05-04T10:00"})}).json()["spot"]
+    t3 = client.delete(f"/api/spots/{r3['id_spotting']}").json()["trash"]
+    from app.core import execute
+    execute("UPDATE trash SET deleted_at = '2000-01-01T00:00:00Z' WHERE id_trash = ?", (t3,))
+    assert trash.purge_old() >= 1 and client.post(f"/api/trash/{t3}/restore").status_code == 404
+
+
+def test_outings_auto_grouping(client):
+    def mk(reg, date, airport="LFBO", **kw):
+        return client.post("/api/spots", data={"data": json.dumps({"registration": reg, "aircraft": "Airbus A320", "aircraft_icao": "A320",
+                                                                   "airport": airport, "date": date, **kw})}).json()["spot"]
+    a = mk("F-OUT01", "2031-03-04T09:00"); b = mk("F-OUT02", "2031-03-04T11:30"); c = mk("F-OUT03", "2031-03-05T10:00")
+    d = mk("F-OUT04", "2031-03-04T12:00", airport="LFPO")
+    assert a["outing_id"] == b["outing_id"] != c["outing_id"] and d["outing_id"] not in (a["outing_id"], c["outing_id"])
+    lst = client.get("/api/outings", params={"year": "2031"}).json()
+    assert lst["total"] == 3 and lst["items"][0]["day"] == "2031-03-05"
+    o = client.get(f"/api/outings/{a['outing_id']}").json()
+    assert o["n"] == 2 and o["regs"] == 2 and o["new_regs"] == 2 and [s["registration"] for s in o["spots"]] == ["F-OUT01", "F-OUT02"]
+    assert o["next_id"] == d["outing_id"] and o["airport_info"]["icao"] == "LFBO"
+    assert client.get("/api/spots", params={"outing": a["outing_id"]}).json()["total"] == 2
+    assert client.get(f"/api/spots/{a['id_spotting']}").json()["outing"]["n"] == 2
+    # nom et notes
+    r = client.put(f"/api/outings/{a['outing_id']}", json={"name": "Journée test", "notes": "beau temps"}).json()
+    assert r["name"] == "Journée test" and r["notes"] == "beau temps"
+    # déplacer un spot de jour : il change de sortie, l'ancienne se vide et disparaît
+    client.put(f"/api/spots/{c['id_spotting']}", data={"data": json.dumps({"date": "2031-03-04T15:00"})})
+    assert client.get(f"/api/spots/{c['id_spotting']}").json()["outing_id"] == a["outing_id"]
+    assert client.get("/api/outings", params={"year": "2031"}).json()["total"] == 2
+    # corbeille puis restauration : le spot retrouve sa sortie
+    tid = client.delete(f"/api/spots/{b['id_spotting']}").json()["trash"]
+    assert client.get(f"/api/outings/{a['outing_id']}").json()["n"] == 2
+    new = client.post(f"/api/trash/{tid}/restore").json()["id"]
+    assert client.get(f"/api/spots/{new}").json()["outing_id"] == a["outing_id"]
+
+
+def test_heic_upload_and_preview(client):
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+    im = Image.new("RGB", (800, 600), (30, 90, 160))
+    ex = Image.Exif(); ex[0x010F] = "Apple"; ex[0x0110] = "iPhone 15"; ex[0x0112] = 6
+    buf = io.BytesIO(); im.save(buf, "HEIF", exif=ex.tobytes())
+    a = client.post("/api/media/analyze", files={"image": ("IMG_1.HEIC", buf.getvalue(), "image/heic")}, params={"ocr": False}).json()
+    assert a["exif"]["camera"] == "Apple iPhone 15"
+    pv = client.post("/api/media/preview", files={"image": ("IMG_1.HEIC", buf.getvalue(), "image/heic")})
+    assert pv.status_code == 200 and pv.headers["content-type"] == "image/jpeg" and Image.open(io.BytesIO(pv.content)).size == (600, 800)
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "F-HEIC1", "aircraft": "Airbus A320", "airport": "LFBO",
+                                                            "date": "2026-05-05T10:00"})},
+                    files={"image": ("IMG_1.HEIC", buf.getvalue(), "image/heic")}).json()["spot"]
+    assert r["image"].endswith(".webp") and (r["image_w"], r["image_h"]) == (600, 800) and r["camera"] == "Apple iPhone 15"
 
 
 def media_file_exists(rel):
@@ -1016,3 +1106,54 @@ def test_patrol_country_and_unknown_filter(client):
     u = post({"unknown_registration": True, "aircraft": "Rafale", "airport": "LFBO", "date": "2026-10-11T10:00"}).json()["spot"]
     got = client.get("/api/spots", params={"unknown": True, "limit": 500}).json()["items"]
     assert u["id_spotting"] in {i["id_spotting"] for i in got} and all(i["registration"].startswith("SANS-IMMAT-") for i in got)
+
+
+def test_rarity_badge_and_filter(client, monkeypatch):
+    from app.services import collection, refdb
+    monkeypatch.setattr(refdb, "type_counts", lambda: {"A388": 12, "A320": 9000})
+    assert collection.rarity_tier(12) == "legendary" and collection.rarity_tier(9000) is None
+    client.post("/api/spots", data={"data": json.dumps({"registration": "F-HRAR", "aircraft_icao": "A388", "airport": "LFPG"})})
+    client.post("/api/spots", data={"data": json.dumps({"registration": "F-HCOM", "aircraft_icao": "A320", "airport": "LFPG"})})
+    got = client.get("/api/spots?rare=1").json()
+    regs = [s["registration"] for s in got["items"]]
+    assert "F-HRAR" in regs and "F-HCOM" not in regs
+    mine = next(s for s in got["items"] if s["registration"] == "F-HRAR")
+    assert any(b["code"] == "rarity" and b["tier"] == "legendary" for b in mine["badges"])
+
+
+def test_photo_export_has_iptc_and_xmp(client):
+    import io as _io
+    from PIL import Image
+    buf = _io.BytesIO()
+    Image.new("RGB", (64, 48), (30, 90, 200)).save(buf, "JPEG")
+    client.put("/api/settings", json={"photographer": "Jean"})
+    r = client.post("/api/spots", data={"data": json.dumps({"registration": "F-HEXP", "aircraft": "Airbus A320", "aircraft_icao": "A320",
+                                                          "owner": "Air France", "airport": "LFBO", "date": "2026-05-01T10:30"})},
+                    files={"image": ("a.jpg", buf.getvalue(), "image/jpeg")})
+    sid = r.json()["spot"]["id_spotting"]
+    out = client.get(f"/api/export/spots/{sid}/photo.jpg")
+    assert out.status_code == 200 and out.content[:2] == b"\xff\xd8"
+    assert b"http://ns.adobe.com/xap/1.0/" in out.content and b"Photoshop 3.0" in out.content
+    assert b"F-HEXP" in out.content and b"Jean" in out.content and b"LFBO" in out.content
+    Image.open(_io.BytesIO(out.content)).verify()
+    z = client.get(f"/api/export/photos.zip?ids={sid}")
+    assert z.status_code == 200 and z.content[:2] == b"PK"
+
+
+def test_watchlist_falls_back_to_free_hex_lookup(client, monkeypatch):
+    import httpx
+    from app.services import opensky
+    seen = []
+
+    def handler(req):
+        seen.append(str(req.url))
+        if "opensky" in req.url.host:
+            return httpx.Response(429)
+        return httpx.Response(200, json={"ac": [{"hex": "39bd85", "lat": 43.6, "lon": 1.4, "alt_baro": 12000, "gs": 400, "track": 90, "flight": "AFR123 "}]})
+    orig = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda *a, **k: orig(*a, **{**k, "transport": httpx.MockTransport(handler)}))
+    monkeypatch.setattr(opensky, "_throttle", lambda name: None)
+    opensky._src_off.clear()
+    out = opensky._free_by_hex(["39bd85"])
+    assert out["39bd85"]["callsign"] == "AFR123" and out["39bd85"]["on_ground"] is False
+    assert any("/hex/39bd85" in u for u in seen)

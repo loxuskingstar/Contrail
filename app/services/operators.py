@@ -127,11 +127,31 @@ def _code_for_name(owner: str) -> str | None:
 
 
 def reset_cache() -> None:
+    _gk.clear()
     _cache.clear()
     _names.clear()
 
 
+_gk: dict[tuple, str | None] = {}
+_gk_epoch = [0]
+
+
 def group_key(icao: str | None, owner: str | None) -> str | None:
+    """Clé de regroupement d'une compagnie ; résultat mémorisé 30 s (la fonction SQL `opg` est appelée des milliers de fois)."""
+    import time as _t
+    ep = int(_t.time() // 30)
+    if ep != _gk_epoch[0] or len(_gk) > 20000:
+        _gk.clear()
+        _gk_epoch[0] = ep
+    k = (icao, owner)
+    try:
+        return _gk[k]
+    except KeyError:
+        v = _gk[k] = _group_key(icao, owner)
+        return v
+
+
+def _group_key(icao: str | None, owner: str | None) -> str | None:
     icao = (icao or "").strip().upper() or None
     owner = (owner or "").strip() or None
     if not owner:

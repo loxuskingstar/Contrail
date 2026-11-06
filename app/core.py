@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-APP_VERSION = "2.4.1"
+APP_VERSION = "3.0.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -174,8 +174,48 @@ def _dict_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
     return {col[0]: row[i] for i, col in enumerate(cursor.description)}
 
 
+# --------------------------------------------------------------------------- #
+# Révision des données : un compteur par base, incrémenté à chaque écriture et à chaque COMMIT (toutes connexions).
+# Sert à mémoriser les agrégats coûteux (badges, statistiques…) sans jamais servir une valeur périmée.
+# --------------------------------------------------------------------------- #
+_REV: dict[str, int] = {}
+_REV_LOCK = threading.Lock()
+_WRITE_PREFIX = ("INSERT", "UPDATE", "DELETE", "REPLACE", "COMMIT", "ALTER", "DROP", "CREATE")
+
+
+def _bump(path: str, sql: str) -> None:
+    if sql[:7].lstrip().upper().startswith(_WRITE_PREFIX):
+        with _REV_LOCK:
+            _REV[path] = _REV.get(path, 0) + 1
+
+
+def data_rev() -> tuple[str, int]:
+    p = str(db_path())
+    return p, _REV.get(p, 0)
+
+
+_MEMO: dict[tuple, tuple[int, Any]] = {}
+
+
+def memo(name: str, compute, *args):
+    """Valeur mémorisée tant que la base du profil actif n'a pas changé."""
+    path, rev = data_rev()
+    key = (name, path, args)
+    hit = _MEMO.get(key)
+    if hit and hit[0] == rev:
+        return hit[1]
+    value = compute(*args)
+    if len(_MEMO) > 150:
+        _MEMO.clear()
+    _MEMO[key] = (rev, value)   # `rev` lue AVANT le calcul : une écriture concurrente invalide aussitôt
+    return value
+
+
 def connect(path: Path | None = None) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(path or db_path()), timeout=30, check_same_thread=False)
+    path = path or db_path()
+    conn = sqlite3.connect(str(path), timeout=30, check_same_thread=False)
+    _p = str(path)
+    conn.set_trace_callback(lambda sql: _bump(_p, sql))
     conn.row_factory = _dict_factory
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
@@ -249,6 +289,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "flights": True, "fleets": True, "radar": True, "weather": True,
         "ocr": True, "locations": True, "gamification": True, "watchlist": True,
     },
+    "trash_days": 30,              # durée de conservation des éléments supprimés (0 = suppression immédiate)
+    "photographer": "",            # nom écrit dans les métadonnées IPTC/XMP des photos exportées
+    "copyright": "",
     "keep_originals": False,
     "image_max_px": 2560,
     "image_quality": 85,

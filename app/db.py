@@ -272,7 +272,58 @@ ALTER TABLE spotting ADD COLUMN is_patrol INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE spotting ADD COLUMN patrol_size INTEGER;
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8]
+SCHEMA_V9 = """
+-- Performance : ordre chronologique par défaut (liste, précédent / suivant) servi par un index ; filtres fréquents
+CREATE INDEX IF NOT EXISTS idx_spot_sortkey ON spotting(COALESCE(date, created_at), id_spotting);
+CREATE INDEX IF NOT EXISTS idx_spot_fav ON spotting(favorite) WHERE favorite = 1;
+CREATE INDEX IF NOT EXISTS idx_spot_loc ON spotting(location_id);
+CREATE INDEX IF NOT EXISTS idx_spottags_tag ON spotting_tags(id_tag);
+ANALYZE;
+"""
+
+SCHEMA_V10 = """
+-- Corbeille : lignes supprimées (copie JSON), récupérables pendant `trash_days` jours
+CREATE TABLE IF NOT EXISTS trash (
+    id_trash   INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind       TEXT NOT NULL,            -- spot | flight
+    ref_id     INTEGER,
+    label      TEXT,
+    payload    TEXT NOT NULL,
+    image      TEXT,
+    thumb      TEXT,
+    audio      TEXT,
+    deleted_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_trash_image ON trash(image);
+CREATE INDEX IF NOT EXISTS idx_trash_deleted ON trash(deleted_at);
+"""
+
+SCHEMA_V11 = """
+-- Sorties de spotting : une journée sur un site (aéroport ou lieu libre). Les spots y sont rattachés automatiquement.
+CREATE TABLE IF NOT EXISTS outings (
+    id_outing  INTEGER PRIMARY KEY AUTOINCREMENT,
+    day        TEXT NOT NULL,            -- YYYY-MM-DD (heure locale du site)
+    airport    TEXT,
+    place      TEXT,
+    name       TEXT,                     -- facultatif : « Meeting de la Ferté-Alais »
+    notes      TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_outing_key ON outings(day, COALESCE(airport, ''), COALESCE(place, ''));
+CREATE INDEX IF NOT EXISTS idx_outing_day ON outings(day);
+ALTER TABLE spotting ADD COLUMN outing_id INTEGER REFERENCES outings(id_outing) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_spot_outing ON spotting(outing_id);
+CREATE INDEX IF NOT EXISTS idx_spot_no_outing ON spotting(id_spotting) WHERE outing_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_spot_no_outing ON spotting(id_spotting) WHERE outing_id IS NULL;
+INSERT OR IGNORE INTO outings (day, airport, place, created_at)
+    SELECT DISTINCT substr(date, 1, 10), NULLIF(airport, ''), NULLIF(place, ''), datetime('now') FROM spotting
+    WHERE date IS NOT NULL AND length(date) >= 10 AND (NULLIF(airport, '') IS NOT NULL OR NULLIF(place, '') IS NOT NULL);
+UPDATE spotting SET outing_id = (SELECT o.id_outing FROM outings o WHERE o.day = substr(spotting.date, 1, 10)
+        AND COALESCE(o.airport, '') = COALESCE(NULLIF(spotting.airport, ''), '') AND COALESCE(o.place, '') = COALESCE(NULLIF(spotting.place, ''), ''))
+    WHERE outing_id IS NULL AND date IS NOT NULL AND length(date) >= 10 AND (NULLIF(airport, '') IS NOT NULL OR NULLIF(place, '') IS NOT NULL);
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11]
 
 
 def init_db() -> None:

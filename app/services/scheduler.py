@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timedelta
 
 from ..core import get_settings, q
-from . import backup, opensky, weather, wishes
+from . import backup, opensky, trash, weather, wishes
 from .notify import notify, texts
 
 log = logging.getLogger("contrail.scheduler")
@@ -26,6 +26,10 @@ async def _backup_loop() -> None:
             log.exception("Sauvegarde automatique en échec")
             title, body = texts("backup_failed", error=str(e)[:200])
             notify("backup", title, body, "#/settings/data")
+        try:
+            await asyncio.to_thread(trash.purge_old)
+        except Exception:  # noqa: BLE001
+            log.exception("Purge de la corbeille en échec")
         await asyncio.sleep(600)
 
 

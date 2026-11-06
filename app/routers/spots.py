@@ -9,8 +9,8 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
-from ..core import db, execute, get_settings, now_iso, q, q1
-from ..services import airframes, collection, gamification, geo, media, weather, wishes
+from ..core import db, execute, get_settings, memo, now_iso, q, q1
+from ..services import outings as outings_svc, trash, airframes, collection, gamification, geo, media, weather, wishes
 from ..services import registration as regs
 from ..services.notify import notify, texts
 
@@ -83,6 +83,10 @@ def build_filters(f: dict) -> tuple[str, list]:
     if f.get("military") is not None and f.get("military") != "":
         where.append("s.military = ?")
         params.append(int(f["military"]))
+    if f.get("rare"):
+        rt = collection.rare_types()
+        where.append(f"s.aircraft_icao IN ({','.join('?' * len(rt)) or 'NULL'})")
+        params += rt
     if f.get("favorite"):
         where.append("s.favorite = 1")
     if f.get("has_photo"):
@@ -94,6 +98,9 @@ def build_filters(f: dict) -> tuple[str, list]:
     if f.get("patrol"):
         where.append("s.patrol_id = ?")
         params.append(int(f["patrol"]))
+    if f.get("outing"):
+        where.append("s.outing_id = ?")
+        params.append(int(f["outing"]))
     if f.get("location_id"):
         where.append("s.location_id = ?")
         params.append(int(f["location_id"]))
@@ -140,7 +147,7 @@ def list_spots(
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
-    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False,
+    location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False, outing: int | None = None, rare: bool = False,
     sort: str = "date_desc", limit: int = Query(60, le=500), offset: int = 0,
 ):
     f = dict(locals())
@@ -160,7 +167,11 @@ def spots_map(
     location_id: int | None = None, date_from: str = "", date_to: str = "",
 ):
     """Spots regroupés par lieu (point de vue, coordonnées GPS ou aéroport), puis par appareil."""
-    f = dict(locals())
+    return memo("map", _spots_map, tuple(sorted(dict(locals()).items())))
+
+
+def _spots_map(items):
+    f = dict(items)
     where, params = build_filters(f)
     rows = q(f"SELECT s.id_spotting, s.registration, s.aircraft_icao, s.aircraft, s.owner, s.thumb, s.airport, s.place, "
              f"s.lat, s.lng, s.location_id, s.date, s.livery_category, s.military, s.favorite, "
@@ -223,6 +234,10 @@ def spots_map(
 
 @router.get("/facets")
 def facets():
+    return memo("facets", _facets)
+
+
+def _facets():
     """Valeurs disponibles pour les filtres."""
     def col(sql):
         return [r["v"] for r in q(sql) if r["v"]]
@@ -352,14 +367,16 @@ def get_spot(spot_id: int, sort: str = "date_desc"):
     s["location"] = q1("SELECT * FROM spot_locations WHERE id_location = ?", (s["location_id"],)) if s["location_id"] else None
     s["flights"] = collection.crossref_for_spot(s["registration"])
     s["patrol"] = None if s.get("is_patrol") else patrol_of(s)
+    s["outing"] = q1("SELECT o.id_outing id, o.day, o.name, (SELECT COUNT(*) FROM spotting x WHERE x.outing_id = o.id_outing) n "
+                     "FROM outings o WHERE o.id_outing = ?", (s["outing_id"],)) if s.get("outing_id") else None
     s["patrol_name"] = (q1("SELECT name FROM patrols WHERE id_patrol = ?", (s["patrol_id"],)) or {}).get("name") if s.get("patrol_id") else None
     ids = airframes.group(s["registration"])
     s["encounters"] = q1(f"SELECT COUNT(*) n FROM spotting WHERE registration IN ({','.join('?' * len(ids))})", ids)["n"]
     s["aliases"] = [i for i in ids if i != s["registration"]]
-    key = "COALESCE(date, created_at) || printf('%010d', id_spotting)"
-    cur = q1(f"SELECT {key} k FROM spotting WHERE id_spotting = ?", (spot_id,))["k"]
-    newer = q1(f"SELECT id_spotting FROM spotting WHERE {key} > ? ORDER BY {key} ASC LIMIT 1", (cur,))
-    older = q1(f"SELECT id_spotting FROM spotting WHERE {key} < ? ORDER BY {key} DESC LIMIT 1", (cur,))
+    k = "COALESCE(date, created_at)"
+    cur = q1(f"SELECT {k} d FROM spotting WHERE id_spotting = ?", (spot_id,))["d"]
+    newer = q1(f"SELECT id_spotting FROM spotting WHERE ({k}, id_spotting) > (?, ?) ORDER BY {k} ASC, id_spotting ASC LIMIT 1", (cur, spot_id))
+    older = q1(f"SELECT id_spotting FROM spotting WHERE ({k}, id_spotting) < (?, ?) ORDER BY {k} DESC, id_spotting DESC LIMIT 1", (cur, spot_id))
     s["prev_id"] = newer["id_spotting"] if newer else None   # "précédent" dans une liste triée du plus récent
     s["next_id"] = older["id_spotting"] if older else None
     return s
@@ -505,6 +522,7 @@ def _apply_image(out: dict, image: UploadFile | None, data: dict) -> None:
 
 def _post_save(spot_id: int, reg: str, is_new: bool, weather_needed: bool, bg: BackgroundTasks) -> dict:
     extra: dict = {"crossref": [], "achievements": [], "wishes": []}
+    outings_svc.attach(spot_id)
     settings = get_settings()
     if weather_needed and settings["modules"].get("weather", True):
         execute("UPDATE spotting SET weather_status='pending' WHERE id_spotting=?", (spot_id,))
@@ -790,15 +808,30 @@ def delete_spot_files(s: dict) -> None:
     media.delete_audio(s.get("atc_audio"))
 
 
+def _remove_spots(rows: list[dict]) -> list[int]:
+    """Retire des spots : à la corbeille (récupérables) ou définitivement si la corbeille est désactivée."""
+    if not rows:
+        return []
+    conn = db()
+    ids = [r["id_spotting"] for r in rows]
+    tids = trash.put("spot", rows) if trash.enabled() else []
+    conn.execute(f"DELETE FROM spotting WHERE id_spotting IN ({','.join('?' * len(ids))})", ids)
+    conn.commit()
+    if not trash.enabled():
+        for r in rows:
+            _free_files(r)
+    _gc_patrols()
+    outings_svc.gc()
+    return tids
+
+
 @router.delete("/{spot_id}")
 def delete_spot(spot_id: int):
     s = q1("SELECT * FROM spotting WHERE id_spotting = ?", (spot_id,))
     if not s:
         raise HTTPException(404, "not_found")
-    execute("DELETE FROM spotting WHERE id_spotting = ?", (spot_id,))
-    _free_files(s)
-    _gc_patrols()
-    return {"deleted": spot_id}
+    tid = _remove_spots([s])
+    return {"deleted": spot_id, "trash": tid[0] if tid else None}
 
 
 class Bulk(BaseModel):
@@ -815,11 +848,7 @@ def bulk(body: Bulk):
     conn = db()
     if body.action == "delete":
         rows = q(f"SELECT * FROM spotting WHERE id_spotting IN ({marks})", body.ids)
-        conn.execute(f"DELETE FROM spotting WHERE id_spotting IN ({marks})", body.ids)
-        conn.commit()
-        for r in rows:
-            _free_files(r)
-        _gc_patrols()
+        return {"updated": len(rows), "trash": _remove_spots(rows)}
     elif body.action in ("add_tag", "remove_tag"):
         tag_id = int(body.value)
         for i in body.ids:

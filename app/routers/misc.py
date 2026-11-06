@@ -156,6 +156,17 @@ def airport_info(code: str):
     return a
 
 
+@router.post("/api/media/preview")
+def preview_photo(image: UploadFile = File(...)):
+    """Aperçu JPEG d'une photo (HEIC notamment) ; rien n'est enregistré."""
+    from fastapi.responses import Response
+    try:
+        jpg = media.preview_jpeg(image.file.read())
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(422, "invalid_image") from e
+    return Response(jpg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @router.post("/api/media/analyze")
 def analyze_photo(image: UploadFile = File(...), ocr: bool = True, airport: str = ""):
     """Pré-analyse d'une photo avant enregistrement : EXIF + OCR de l'immatriculation."""

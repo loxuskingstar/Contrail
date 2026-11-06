@@ -9,15 +9,15 @@ import shutil
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from ..core import APP_VERSION, DIRS, db, execute, now_iso, q, q1
 from ..services import aircraft as ac
-from ..services import backup, gamification, geo
+from ..services import backup, gamification, geo, metadata
 from ..services import registration as regs
 from . import flights as flights_router
-from .spots import find_duplicates, prepare, set_tags
+from .spots import build_filters, find_duplicates, prepare, set_tags
 
 router = APIRouter(tags=["io"])
 
@@ -378,3 +378,44 @@ def backups_restore(file: UploadFile = File(...)):
         raise HTTPException(422, "invalid_backup") from e
     finally:
         tmp.unlink(missing_ok=True)
+
+
+@router.get("/api/export/spots/{spot_id}/photo.jpg")
+def export_photo(spot_id: int):
+    """Photo d'un spot en JPEG, avec légende, mots-clés, lieu, date et GPS (IPTC + XMP)."""
+    s = q1("SELECT * FROM spotting WHERE id_spotting = ?", (spot_id,))
+    if not s:
+        raise HTTPException(404, "not_found")
+    res = metadata.export_spot(s)
+    if not res:
+        raise HTTPException(404, "no_photo")
+    data, name = res
+    return Response(data, media_type="image/jpeg", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@router.get("/api/export/photos.zip")
+def export_photos(request: Request):
+    """Archive des photos (mêmes filtres que la liste des spots, ou `ids=1,2,3`), métadonnées incluses. 2 000 photos max."""
+    import tempfile
+    import zipfile
+
+    where, params = build_filters(dict(request.query_params))
+    rows = q(f"SELECT s.* FROM spotting s WHERE {where} AND s.image IS NOT NULL ORDER BY COALESCE(s.date, s.created_at) LIMIT 2000", params)
+    if not rows:
+        raise HTTPException(404, "no_photo")
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip", dir=DIRS["tmp"])
+    used: set[str] = set()
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:     # JPEG déjà compressés : inutile de les recompresser
+        for s in rows:
+            try:
+                res = metadata.export_spot(s)
+            except Exception:  # noqa: BLE001 — une photo illisible ne bloque pas l'archive
+                continue
+            if res and res[1] not in used:
+                used.add(res[1])
+                z.writestr(res[1], res[0])
+    tmp.close()
+    from starlette.background import BackgroundTask
+    import os
+    return FileResponse(tmp.name, media_type="application/zip", filename=f"contrail-photos-{datetime.now():%Y%m%d}.zip",
+                        background=BackgroundTask(os.unlink, tmp.name))

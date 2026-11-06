@@ -16,8 +16,8 @@ import asyncio
 
 from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs, set_profile, _profile
 from .db import init_db
-from .routers import field, fleets, flights, io, misc, share, spots, stats, wishes
-from .services import collection, gamification, media, refdb, sandbox, scheduler
+from .routers import airports as airports_router, field, fleets, flights, io, misc, outings as outings_router, share, spots, stats, trash as trash_router, wishes
+from .services import collection, gamification, media, refdb, sandbox, scheduler, trash
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -30,6 +30,10 @@ async def lifespan(app: FastAPI):
     init_db()
     collection.recategorize()
     gamification.sync_definitions()
+    try:
+        trash.purge_old()
+    except Exception:  # noqa: BLE001
+        log.exception("Purge de la corbeille en échec")
     tasks = scheduler.start()
     threading.Thread(target=refdb.compact_file, daemon=True, name="refdb-compact").start()   # allège une ancienne base de référence
     threading.Thread(target=media.backfill_phash, daemon=True, name="phash-backfill").start()   # empreintes des photos déjà enregistrées
@@ -86,7 +90,7 @@ async def guard(request: Request, call_next):
     return response
 
 
-for r in (auth.router, misc.router, spots.router, flights.router, stats.router, fleets.router, field.router, share.router, io.router, wishes.router):
+for r in (auth.router, misc.router, spots.router, flights.router, stats.router, fleets.router, field.router, share.router, io.router, wishes.router, trash_router.router, outings_router.router, airports_router.router):
     app.include_router(r)
 
 
