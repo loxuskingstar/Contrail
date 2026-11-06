@@ -78,7 +78,7 @@ export async function render(root, params, query) {
         </div>` : ''}
         <div data-regblock class="stack">
         <label class="field"><span>${esc(t('spot.registration'))}</span>
-          <div class="input-wrap"><input class="input big" name="registration" value="${esc(s.registration)}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="F-HBXA" required>
+          <div class="input-wrap"><input class="input big" name="registration" value="${esc(s.registration)}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AB-CDE" required>
           <button type="button" class="btn-icon" data-lookup title="${esc(t('spot.lookup'))}">${icon('wand-sparkles')}</button></div></label>
         <label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" name="unknown_registration" ${isUnknown ? 'checked' : ''}> <span>${esc(t('spot.unknown_reg'))}</span> <span class="tiny muted">${esc(t('spot.unknown_reg_hint'))}</span></label>
         <div data-lookup-res></div>
@@ -86,12 +86,12 @@ export async function render(root, params, query) {
         <div data-dup></div>
         <div data-photodup></div>
         <div class="field-row">
-          <label class="field"><span>${esc(t('spot.aircraft'))}</span><input name="aircraft" value="${esc(s.aircraft)}" placeholder="Airbus A320-214"></label>
-          <label class="field"><span>${esc(t('spot.type_code'))}</span><input name="aircraft_icao" value="${esc(s.aircraft_icao)}" placeholder="A320" autocapitalize="characters"></label>
+          <label class="field"><span>${esc(t('spot.aircraft'))}</span><input name="aircraft" value="${esc(s.aircraft)}" placeholder="…"></label>
+          <label class="field"><span>${esc(t('spot.type_code'))}</span><input name="aircraft_icao" value="${esc(s.aircraft_icao)}" placeholder="ABCD" autocapitalize="characters"></label>
         </div>
         <div class="field-row">
-          <label class="field"><span>${esc(t('spot.owner'))}</span><input name="owner" value="${esc(s.owner)}" placeholder="Air France"></label>
-          <label class="field"><span>${esc(t('spot.airline_icao'))}</span><input name="airline_icao" value="${esc(s.airline_icao)}" placeholder="AFR" maxlength="4" autocapitalize="characters"></label>
+          <label class="field"><span>${esc(t('spot.owner'))}</span><input name="owner" value="${esc(s.owner)}" placeholder="…"></label>
+          <label class="field"><span>${esc(t('spot.airline_icao'))}</span><input name="airline_icao" value="${esc(s.airline_icao)}" placeholder="ABC" maxlength="4" autocapitalize="characters"></label>
         </div>
         <label class="field optional"><span>${esc(t('spot.country'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
           <select name="country"><option value="">${esc(t('spot.country_auto'))}</option>${s.country ? `<option value="${esc(s.country)}" selected>${flag(s.country)} ${esc(countryName(s.country))}</option>` : ''}</select>

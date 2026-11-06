@@ -77,8 +77,8 @@ export async function render(root, params) {
 
   if (section === 'spotting') {
     body.innerHTML = `<div class="stack"><div class="card stack">
-        <label class="field"><span>${esc(t('settings.default_airport'))}</span><div class="input-wrap"><input data-default value="${esc(S.default_airport)}" placeholder="LFBO"></div></label>
-        <label class="field"><span>${esc(t('settings.home_airports'))}</span><input data-homes value="${esc((S.home_airports || []).join(', '))}" placeholder="LFBO, LFPG"><span class="tiny muted">${esc(t('settings.home_airports_hint'))}</span></label>
+        <label class="field"><span>${esc(t('settings.default_airport'))}</span><div class="input-wrap"><input data-default value="${esc(S.default_airport)}" placeholder="ABCD"></div></label>
+        <label class="field"><span>${esc(t('settings.home_airports'))}</span><input data-homes value="${esc((S.home_airports || []).join(', '))}" placeholder="ABCD, EFGH"><span class="tiny muted">${esc(t('settings.home_airports_hint'))}</span></label>
         <div class="field"><span>${esc(t('settings.patrol_mode'))}</span>
           <div class="seg">${['simple', 'detailed'].map((v) => `<button data-patrol-mode="${v}" class="${(S.patrol_mode || 'simple') === v ? 'on' : ''}">${esc(t(`settings.patrol_${v}`))}</button>`).join('')}</div>
           <span class="tiny muted">${esc(t('settings.patrol_mode_hint'))}</span></div>
@@ -272,7 +272,7 @@ function importWizard(kind) {
           <label class="toggle-row"><span class="t">${esc(t('import.dayfirst'))}</span><span class="switch"><input type="checkbox" data-dayfirst checked><span></span></span></label>
           ${kind === 'spots' ? `<label class="toggle-row"><span class="t">${esc(t('import.skip_dup'))}</span><span class="switch"><input type="checkbox" data-skip checked><span></span></span></label>
           <label class="toggle-row"><span><span class="t">${esc(t('import.enrich'))}</span><br><span class="d">${esc(t('import.enrich_d'))}</span></span><span class="switch"><input type="checkbox" data-enrich><span></span></span></label>
-          <label class="field" style="padding:10px 0"><span>${esc(t('import.default_airport'))}</span><input data-defap placeholder="LFBO"></label>` : ''}
+          <label class="field" style="padding:10px 0"><span>${esc(t('import.default_airport'))}</span><input data-defap placeholder="ABCD"></label>` : ''}
         </div>
         <details class="card fold"><summary>${esc(t('import.preview'))} ${icon('chevron-down', 'chev', 18)}</summary><div class="fold-body scroll-x"><table class="tbl"><thead><tr>${p.headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
           <tbody>${p.sample.map((r) => `<tr>${p.headers.map((h) => `<td class="small">${esc(r[h])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>

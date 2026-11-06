@@ -13,7 +13,7 @@ export function airfieldSheet(a, onSaved) {
   const s = sheet({ title: esc(t(edit ? 'airfield.edit' : 'airfield.add')), wide: true, body: `<form class="stack" autocomplete="off">
     <p class="small muted">${esc(t('airfield.hint'))}</p>
     <div class="field-row">
-      <label class="field"><span>${esc(t('airfield.code'))}</span><input name="code" value="${esc(v.code)}" maxlength="10" required autocapitalize="characters" spellcheck="false" placeholder="LF3624" ${edit ? 'readonly' : ''}></label>
+      <label class="field"><span>${esc(t('airfield.code'))}</span><input name="code" value="${esc(v.code)}" maxlength="10" required autocapitalize="characters" spellcheck="false" placeholder="AB1234" ${edit ? 'readonly' : ''}></label>
       <label class="field"><span>${esc(t('airfield.kind'))}</span><select name="kind">${KINDS.map((k) => `<option value="${k}" ${v.kind === k ? 'selected' : ''}>${esc(t('airfield.kind_' + k))}</option>`).join('')}</select></label>
     </div>
     <label class="field"><span>${esc(t('airfield.name'))}</span><input name="name" value="${esc(v.name)}" maxlength="120" required placeholder="${esc(t('airfield.name_ph'))}"></label>

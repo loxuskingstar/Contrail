@@ -1298,7 +1298,7 @@ def test_heliports_and_small_fields(client):
     a = geo.airport("LF3624")                      # code SIA d'un terrain absent d'airportsdata
     assert a and a["icao"] == "LF3624" and a["kind"] == "airfield" and a["tz"] == "Europe/Paris"
     assert geo.airport("FR-0001")["kind"] == "heliport"
-    assert [x["icao"] for x in client.get("/api/airports/search", params={"q": "LF362"}).json()][:2] == ["LF362", "LF3623"]
+    assert [x["icao"] for x in client.get("/api/airports/search", params={"q": "LF362"}).json()][:1] == ["LF3623"]
     assert client.get("/api/airports/LF3624").json()["name"].startswith("Grange Dieu")
     r = client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZHEL", "date": "2047-05-01", "airport": "LF3624"})})
     assert client.get(f"/api/spots/{r.json()['spot']['id_spotting']}").json()["airport"] == "LF3624"
@@ -1308,15 +1308,6 @@ def test_heliports_and_small_fields(client):
     assert d["airport"] == "LF999" and not d.get("place")
     assert geo.airport("LFBO")["name"] and geo.airport("TLS")["icao"] == "LFBO"
 
-
-def test_purpan_heliport(client):
-    from app.services import geo
-    a = geo.airport("LF362")
-    assert a["icao"] == "LF362" and a["kind"] == "heliport" and abs(a["lat"] - 43.613) < 0.01
-    assert geo.search_airports("hopital purpan")[0]["icao"] == "LF362"
-    r = client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZHE3", "date": "2047-06-01", "airport": "LF362"})})
-    s = client.get(f"/api/spots/{r.json()['spot']['id_spotting']}").json()
-    assert s["airport"] == "LF362" and not s.get("place")
 
 
 def test_custom_airfield(client):

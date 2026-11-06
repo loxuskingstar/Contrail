@@ -27,7 +27,7 @@ export function planSheet(onDone) {
     <label class="field"><span>${esc(t('outing.name'))}</span><input data-name maxlength="120" placeholder="${esc(t('outing.name_ph'))}"></label>
     <div class="field-row"><label class="field"><span>${esc(t('outing.from'))}</span><input type="date" data-day value="${today}"></label>
       <label class="field"><span>${esc(t('outing.to'))}</span><input type="date" data-end value="${today}"></label></div>
-    <div class="field-row"><label class="field"><span>${esc(t('spot.airport'))}</span><div class="input-wrap"><input data-ap maxlength="4" placeholder="LFFQ" autocomplete="off"></div></label>
+    <div class="field-row"><label class="field"><span>${esc(t('spot.airport'))}</span><div class="input-wrap"><input data-ap maxlength="4" placeholder="ABCD" autocomplete="off"></div></label>
       <label class="field"><span>${esc(t('spot.place'))}</span><input data-place maxlength="80"></label></div>
     <button class="btn primary" data-go>${esc(t('outing.plan_go'))}</button></div>` });
   const $ = (k) => sh.body.querySelector(`[data-${k}]`);

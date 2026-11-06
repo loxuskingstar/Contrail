@@ -36,7 +36,7 @@ def _backfill_countries() -> None:
 
 
 def _reclassify_fields() -> None:
-    """Hélistations et terrains saisis avant leur prise en charge (LF362 rangé en « lieu ») : on les repasse en aéroports."""
+    """Hélistations et terrains saisis avant leur prise en charge (code rangé à tort en « lieu ») : on les repasse en aéroports."""
     from .core import execute, q
     from .services import geo
     for table in ("spotting",):    # les sorties se rattachent d'elles-mêmes aux spots déplacés

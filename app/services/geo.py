@@ -18,7 +18,7 @@ def _core() -> dict[str, dict]:
     return airportsdata.load("ICAO")
 
 
-CODE_OVERRIDES = {"FR-0121": "LF362"}      # héliport du CHU Purpan (Toulouse)
+CODE_OVERRIDES: dict[str, str] = {}      # identifiant OurAirports → code SIA, pour les correspondances confirmées à la main
 
 _KIND = {"H": "heliport", "A": "airfield", "S": "seaplane", "B": "balloonport"}
 
