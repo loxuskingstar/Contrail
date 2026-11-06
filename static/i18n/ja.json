@@ -1283,5 +1283,20 @@
 "ach.remaining": "あと{n}",
 "spot.preview_map": "地図で確認",
 "radar.source_fallback": "予備ソース: {src}（OpenSky の上限に達したため）",
-"radar.partial": "一部のみ"
+"radar.partial": "一部のみ",
+"radar.filters": "フィルター",
+"radar.f_search": "コールサイン・登録記号・hex・型式",
+"radar.f_search_ph": "例: AFR, F-HBXA, A320",
+"radar.f_status": "表示",
+"radar.f_air": "飛行中",
+"radar.f_ground": "地上",
+"radar.f_mil": "軍用機のみ",
+"radar.f_watch": "ウォッチリスト／ウィッシュのみ",
+"radar.f_unspotted": "未スポットのみ",
+"radar.f_alt": "高度 (ft)",
+"radar.f_alt_min": "最小",
+"radar.f_alt_max": "最大",
+"radar.f_classes": "機種（未選択＝すべて）",
+"radar.f_reset": "フィルターをリセット",
+"radar.trail_hint": "このセッションでレーダーが捉えてからの航跡を表示しています。"
 }

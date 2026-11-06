@@ -1454,5 +1454,20 @@
 "ach.remaining": "{n} to go",
 "spot.preview_map": "Preview on map",
 "radar.source_fallback": "Fallback source: {src} (OpenSky quota reached)",
-"radar.partial": "partial"
+"radar.partial": "partial",
+"radar.filters": "Filters",
+"radar.f_search": "Callsign, registration, hex or type",
+"radar.f_search_ph": "e.g. AFR, F-HBXA, A320",
+"radar.f_status": "Show",
+"radar.f_air": "Airborne",
+"radar.f_ground": "On the ground",
+"radar.f_mil": "Military only",
+"radar.f_watch": "Watchlist / wishes only",
+"radar.f_unspotted": "Not yet spotted only",
+"radar.f_alt": "Altitude (ft)",
+"radar.f_alt_min": "Min",
+"radar.f_alt_max": "Max",
+"radar.f_classes": "Aircraft types (none checked = all)",
+"radar.f_reset": "Reset filters",
+"radar.trail_hint": "Trail drawn since the radar first saw this aircraft (this session)."
 }

@@ -1,5 +1,5 @@
 /* Contrail — service worker : coquille hors-ligne, cache API/médias, cible de partage */
-const VERSION = 'contrail-v2.3.6';
+const VERSION = 'contrail-v2.4.0';
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 const MEDIA = 'contrail-media';

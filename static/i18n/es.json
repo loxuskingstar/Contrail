@@ -1454,5 +1454,20 @@
 "ach.remaining": "Faltan {n}",
 "spot.preview_map": "Ver en el mapa",
 "radar.source_fallback": "Fuente de respaldo: {src} (cuota de OpenSky alcanzada)",
-"radar.partial": "parcial"
+"radar.partial": "parcial",
+"radar.filters": "Filtros",
+"radar.f_search": "Indicativo, matrícula, hex o tipo",
+"radar.f_search_ph": "p. ej. AFR, F-HBXA, A320",
+"radar.f_status": "Mostrar",
+"radar.f_air": "En vuelo",
+"radar.f_ground": "En tierra",
+"radar.f_mil": "Solo militares",
+"radar.f_watch": "Solo lista de seguimiento / deseos",
+"radar.f_unspotted": "Solo aún no fotografiados",
+"radar.f_alt": "Altitud (ft)",
+"radar.f_alt_min": "Mín.",
+"radar.f_alt_max": "Máx.",
+"radar.f_classes": "Tipos de aeronave (ninguno marcado = todos)",
+"radar.f_reset": "Restablecer filtros",
+"radar.trail_hint": "Trayectoria trazada desde que el radar vio esta aeronave (esta sesión)."
 }
