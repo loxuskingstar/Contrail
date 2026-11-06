@@ -1657,5 +1657,9 @@
 "multi.type_ph": "Type (A320, Rafale…)",
 "multi.owner_ph": "Airline / operator",
 "multi.same": "Same type and airline as the main aircraft (formation)",
-"multi.on_photo": "In the same photo"
+"multi.on_photo": "In the same photo",
+"multi.sync_hint": {
+"one": "Date, place, photo, tags, rating and camera settings are also applied to the other aircraft in this photo.",
+"other": "Date, place, photo, tags, rating and camera settings are also applied to the {n} other aircraft in this photo."
+}
 }

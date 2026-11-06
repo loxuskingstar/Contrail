@@ -1239,3 +1239,22 @@ def test_extra_aircraft_on_same_photo_do_not_inherit_identity(client):
     assert got["F-HMU2"]["aircraft_icao"] == "B738" and got["F-HMU2"]["owner"] == "Ryanair"
     assert got["F-HMU3"]["aircraft_icao"] == "A320"
     assert len({s["thumb"] for s in got.values()}) == 1                 # une seule photo partagée
+
+
+def test_editing_common_info_updates_other_aircraft_of_the_photo(client):
+    import io as _io
+    from PIL import Image
+    buf = _io.BytesIO(); Image.new("RGB", (64, 48), (10, 120, 30)).save(buf, "JPEG")
+    data = {"registration": "F-HSY1", "aircraft_icao": "A320", "airport": "LFBO", "date": "2045-02-02T10:00",
+            "patrol": {"members": [{"registration": "F-HSY2", "inherit_aircraft": False, "aircraft_icao": "B738"}]}}
+    r = client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("a.jpg", buf.getvalue(), "image/jpeg")})
+    assert r.status_code in (200, 201), r.text
+    by = lambda: {s["registration"]: s for s in client.get("/api/spots?year=2045").json()["items"]}
+    first = by()["F-HSY1"]
+    edit = {"date": "2045-02-03T09:30", "airport": "LFPG", "description": "Deux avions", "rating": 4, "tags": []}
+    up = client.put(f"/api/spots/{first['id_spotting']}", data={"data": json.dumps(edit)})
+    assert up.status_code == 200, up.text
+    sec = client.get(f"/api/spots/{by()['F-HSY2']['id_spotting']}").json()
+    assert sec["airport"] == "LFPG" and sec["date"].startswith("2045-02-03T09:30") and sec["description"] == "Deux avions" and sec["rating"] == 4
+    assert sec["aircraft_icao"] == "B738" and sec["registration"] == "F-HSY2"      # l'identité de l'avion ne bouge pas
+    assert sec["outing"]["day"] == "2045-02-03"

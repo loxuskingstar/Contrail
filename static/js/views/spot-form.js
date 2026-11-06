@@ -110,6 +110,7 @@ export async function render(root, params, query) {
         <summary>${icon('plus', '', 18)} ${esc(t('multi.title'))} ${icon('chevron-down', 'chev', 18)}</summary>
         <div class="fold-body stack">
           <p class="tiny muted">${esc(t('multi.hint'))}</p>
+          ${s.patrol && s.patrol.members.length > 1 ? `<p class="tiny muted">${icon('link', '', 12)} ${esc(t('multi.sync_hint', { n: s.patrol.members.length - 1 }))}</p>` : ''}
           <label class="field"><span>${esc(t('multi.group_name'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
             <input name="patrol_name" list="patrol-names" value="${esc(s.patrol?.name)}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off"></label>
           ${s.patrol ? `<div class="stack" style="gap:6px"><span class="tiny muted">${esc(t('patrol.members'))}</span><div class="row wrap" style="gap:6px">${s.patrol.members.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}

@@ -589,7 +589,11 @@ MEMBER_FIELDS = ("registration", "aircraft", "aircraft_icao", "manufacturer", "m
                  "test_registration")
 INHERIT = ("aircraft", "aircraft_icao", "manufacturer", "owner", "airline_icao", "livery", "military", "flight_type",
            "date", "airport", "place", "location_id", "lat", "lng", "description", "camera", "lens", "focal", "aperture",
-           "iso", "shutter")
+           "iso", "shutter", "rating")
+# Ce qui décrit la photo et la prise de vue : modifié sur un avion, appliqué aux autres avions de la même photo
+SHARED = ("date", "date_utc", "sun_elevation", "airport", "place", "location_id", "lat", "lng", "description", "flight_type",
+          "camera", "lens", "focal", "aperture", "iso", "shutter", "rating",
+          "image", "thumb", "image_w", "image_h", "phash", "exif_json")
 IDENTITY = ("aircraft", "aircraft_icao", "manufacturer", "owner", "airline_icao", "livery", "military")
 INHERIT_RAW = ("exif_json", "image", "thumb", "image_w", "image_h", "phash")
 
@@ -662,6 +666,33 @@ def _insert_members(rows: list[dict], patrol_id: int, tags: list, bg: Background
         for k, v in e.items():
             extra[k] = extra.get(k, []) + v
     return extra
+
+
+def _propagate(spot_id: int, patrol_id: int | None, out: dict, payload: dict, bg: BackgroundTasks) -> None:
+    """Applique aux autres avions de la photo les informations communes qui viennent d'être modifiées."""
+    if not patrol_id:
+        return
+    sibs = [r["id_spotting"] for r in q("SELECT id_spotting FROM spotting WHERE patrol_id = ? AND id_spotting <> ? AND is_patrol = 0",
+                                        (patrol_id, spot_id))]
+    if not sibs:
+        return
+    common = {k: out[k] for k in SHARED if k in out}
+    wx = settings_modules_weather()
+    for sid in sibs:
+        if common:
+            execute(f"UPDATE spotting SET {', '.join(f'{k} = ?' for k in common)}, updated_at = ? WHERE id_spotting = ?",
+                    [*common.values(), now_iso(), sid])
+        if "tags" in payload:
+            set_tags(sid, payload["tags"])
+        if common:
+            outings_svc.attach(sid)
+            if wx and ("date_utc" in common or "airport" in common):
+                execute("UPDATE spotting SET weather_status = 'pending' WHERE id_spotting = ?", (sid,))
+                bg.add_task(weather.update_spot_weather, sid)
+
+
+def settings_modules_weather() -> bool:
+    return bool(get_settings()["modules"].get("weather", True))
 
 
 def _patrol_id(spot: dict | None, info: dict) -> int:
@@ -811,6 +842,8 @@ def update_spot(
         out["patrol_id"] = None
         sets = ", ".join(f"{k} = ?" for k in out)
     execute(f"UPDATE spotting SET {sets} WHERE id_spotting = ?", list(out.values()) + [spot_id])
+    if not existing.get("is_patrol"):
+        _propagate(spot_id, out.get("patrol_id", existing.get("patrol_id")), out, payload, bg)
     if drop_old and drop_old[0]:
         if q1("SELECT 1 FROM spotting WHERE image = ? LIMIT 1", (drop_old[0],)):
             pass                           # la photo reste utilisée par un autre avion de la patrouille
