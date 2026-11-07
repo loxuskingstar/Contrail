@@ -143,46 +143,88 @@ export function airportInput(input, { onPick, getLL } = {}) {
   });
 }
 
-/** Sélecteur d'étiquettes : bascule des existantes + création à la volée. */
-export function tagPicker(container, allTags, selected = []) {
-  const chosen = new Map(selected.map((tg) => [tg.id_tag ? String(tg.id_tag) : `new:${tg.name || tg}`, tg]));
+/** Sélecteur d'étiquettes : sélection multiple, création à la volée (saisie) ou filtre (allowNew: false).
+ *  Jusqu'à 12 étiquettes : simples pastilles. Au-delà : étiquettes choisies en haut, recherche et liste défilante. */
+export function tagPicker(container, allTags, selected = [], { allowNew = true, onChange = null } = {}) {
+  const keyOf = (tg) => (tg.id_tag ? String(tg.id_tag) : `new:${tg.name}`);
+  const chosen = new Map(selected.map((tg) => [keyOf(tg.id_tag || tg.name ? tg : { name: tg }), tg.id_tag || tg.name ? tg : { name: tg }]));
   const extra = [];
-  const draw = () => {
+  const compact = allTags.length > 12;
+  let query = '';
+  const dot = (tg) => `<span class="sw" style="background:${esc(tg.color || '#64748b')}"></span>`;
+  const changed = () => onChange?.([...chosen.values()]);
+  const toggle = (tg) => { const k = keyOf(tg); chosen.has(k) ? chosen.delete(k) : chosen.set(k, tg); changed(); };
+  const create = (name) => {
+    name = name.trim();
+    if (!name) return;
+    const known = [...allTags, ...extra].find((x) => x.name.toLowerCase() === name.toLowerCase());
+    const tg = known || { name, color: '#64748b' };
+    if (!known) extra.push(tg);
+    chosen.set(keyOf(tg), tg);
+    changed();
+  };
+
+  const drawSimple = () => {
     const all = [...allTags, ...extra];
-    container.innerHTML = `<div class="chips">${all.map((tg) => {
-      const key = tg.id_tag ? String(tg.id_tag) : `new:${tg.name}`;
-      return `<button type="button" class="chip ${chosen.has(key) ? 'on' : ''}" data-key="${esc(key)}"><span class="sw" style="background:${esc(tg.color || '#64748b')}"></span>${esc(tg.name)}</button>`;
-    }).join('')}<button type="button" class="chip" data-add>${icon('plus', '', 14)} ${esc(t('tags.new'))}</button></div>`;
-    container.querySelectorAll('[data-key]').forEach((b) => (b.onclick = () => {
-      const key = b.dataset.key;
-      const tg = all.find((x) => (x.id_tag ? String(x.id_tag) : `new:${x.name}`) === key);
-      chosen.has(key) ? chosen.delete(key) : chosen.set(key, tg);
-      b.classList.toggle('on');
-    }));
-    container.querySelector('[data-add]').onclick = () => {
-      const btn = container.querySelector('[data-add]');
+    container.innerHTML = `<div class="chips">${all.map((tg) => `<button type="button" class="chip ${chosen.has(keyOf(tg)) ? 'on' : ''}" data-key="${esc(keyOf(tg))}">${dot(tg)}${esc(tg.name)}</button>`).join('')}${allowNew ? `<button type="button" class="chip" data-add>${icon('plus', '', 14)} ${esc(t('tags.new'))}</button>` : ''}</div>`;
+    container.querySelectorAll('[data-key]').forEach((b) => (b.onclick = () => { toggle(all.find((x) => keyOf(x) === b.dataset.key)); b.classList.toggle('on'); }));
+    const add = container.querySelector('[data-add]');
+    if (!add) return;
+    add.onclick = () => {
       const inp = document.createElement('input');
       inp.className = 'input';
       inp.style.cssText = 'height:32px;width:150px;border-radius:999px;font-size:13px';
       inp.placeholder = t('tags.name');
-      btn.replaceWith(inp);
+      add.replaceWith(inp);
       inp.focus();
-      let committed = false;
-      const commit = () => {
-        if (committed) return;
-        committed = true;
-        const name = inp.value.trim();
-        if (name && ![...allTags, ...extra].some((x) => x.name.toLowerCase() === name.toLowerCase())) {
-          const tg = { name, color: '#64748b' };
-          extra.push(tg);
-          chosen.set(`new:${name}`, tg);
-        }
-        draw();
-      };
-      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { committed = true; draw(); } });
+      let done = false;
+      const commit = () => { if (done) return; done = true; create(inp.value); drawSimple(); };
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { done = true; drawSimple(); } });
       inp.addEventListener('blur', commit);
     };
   };
-  draw();
-  return { value: () => [...chosen.values()].map((tg) => (tg.id_tag ? tg.id_tag : tg.name)) };
+
+  const drawCompact = (keepFocus = false) => {
+    const all = [...allTags, ...extra];
+    const q = query.trim().toLowerCase();
+    const rows = all.filter((tg) => !q || tg.name.toLowerCase().includes(q))
+      .sort((x, y) => (y.count || 0) - (x.count || 0) || x.name.localeCompare(y.name));
+    const exact = all.some((x) => x.name.toLowerCase() === q);
+    const sel = [...chosen.values()];
+    container.innerHTML = `<div class="tagsel">
+      <div class="tagsel-head"><div class="chips tagsel-chosen">${sel.length ? sel.map((tg) => `<button type="button" class="chip on" data-rm="${esc(keyOf(tg))}" title="${esc(t('common.remove'))}">${dot(tg)}${esc(tg.name)} ${icon('x', '', 13)}</button>`).join('') : `<span class="small muted">${esc(t('tags.none_selected'))}</span>`}</div>
+        ${sel.length > 1 ? `<button type="button" class="btn ghost sm" data-clear>${esc(t('tags.clear'))}</button>` : ''}</div>
+      <div class="tagsel-search">${icon('search', '', 15)}<input class="input" data-q value="${esc(query)}" placeholder="${esc(t(allowNew ? 'tags.search_new' : 'tags.search'))}" autocomplete="off" enterkeyhint="done"></div>
+      <div class="tagsel-list" role="listbox" aria-multiselectable="true">${rows.map((tg) => `<button type="button" class="tagsel-row ${chosen.has(keyOf(tg)) ? 'on' : ''}" role="option" aria-selected="${chosen.has(keyOf(tg))}" data-key="${esc(keyOf(tg))}">
+          <span class="tagsel-check">${chosen.has(keyOf(tg)) ? icon('check', '', 13) : ''}</span>${dot(tg)}<span class="grow ellipsis">${esc(tg.name)}</span>${tg.count != null ? `<span class="tiny muted">${tg.count}</span>` : ''}</button>`).join('')
+        || `<div class="small muted" style="padding:10px">${esc(t('tags.no_match'))}</div>`}
+        ${allowNew && q && !exact ? `<button type="button" class="tagsel-row create" data-create>${icon('plus', '', 14)} <span class="grow">${esc(t('tags.create', { name: query.trim() }))}</span></button>` : ''}</div></div>`;
+    container.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => { chosen.delete(b.dataset.rm); changed(); drawCompact(); }));
+    container.querySelector('[data-clear]')?.addEventListener('click', () => { chosen.clear(); changed(); drawCompact(); });
+    container.querySelectorAll('.tagsel-row[data-key]').forEach((b) => (b.onclick = () => {
+      const tg = all.find((x) => keyOf(x) === b.dataset.key);
+      toggle(tg);
+      const list = container.querySelector('.tagsel-list'), top = list.scrollTop;
+      drawCompact(true);
+      container.querySelector('.tagsel-list').scrollTop = top;
+    }));
+    container.querySelector('[data-create]')?.addEventListener('click', () => { create(query); query = ''; drawCompact(true); });
+    const inp = container.querySelector('[data-q]');
+    inp.addEventListener('input', () => { query = inp.value; drawCompact(true); });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if (!q) return;
+      const first = rows.find((tg) => tg.name.toLowerCase() === q) || (rows.length === 1 ? rows[0] : null);
+      if (first) { if (!chosen.has(keyOf(first))) toggle(first); } else if (allowNew) create(query);
+      query = ''; drawCompact(true);
+    });
+    if (keepFocus) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  };
+
+  (compact ? drawCompact : drawSimple)();
+  return {
+    value: () => [...chosen.values()].map((tg) => (tg.id_tag ? tg.id_tag : tg.name)),
+    ids: () => [...chosen.values()].filter((tg) => tg.id_tag).map((tg) => tg.id_tag),
+  };
 }

@@ -95,13 +95,15 @@ def _badge_context(_ref_mtime=0) -> dict:
     """Une seule passe, dans l'ordre chronologique : premier spot de chaque type / compagnie / aéroport, rang par immatriculation."""
     from . import operators
 
-    ctx: dict = {"first_type": set(), "first_airline": set(), "first_airport": set(), "rank": {}}
+    ctx: dict = {"first_type": set(), "first_airline": set(), "first_airport": set(), "rank": {}, "patrol_rank": {}}
+    occ_seen: dict[int, dict[str, int]] = {}      # patrouille → {passage (jour|lieu): rang}
     seen_t: set = set()
     seen_a: set = set()
     seen_p: set = set()
     counts: dict[str, int] = {}
     opg_cache: dict[tuple, str | None] = {}
-    for r in q("SELECT id_spotting, registration, mk(aircraft_icao, aircraft, military) t, airline_icao, owner, airport "
+    for r in q("SELECT id_spotting, registration, mk(aircraft_icao, aircraft, military) t, airline_icao, owner, airport, place, "
+               "patrol_id, is_patrol, substr(COALESCE(date, created_at), 1, 10) day "
                "FROM spotting ORDER BY COALESCE(date, created_at), id_spotting"):
         sid = r["id_spotting"]
         if r["t"] and r["t"] not in seen_t:
@@ -116,6 +118,13 @@ def _badge_context(_ref_mtime=0) -> dict:
             seen_p.add(r["airport"]); ctx["first_airport"].add(sid)
         n = counts[r["registration"]] = counts.get(r["registration"], 0) + 1
         ctx["rank"][sid] = n
+        if r["patrol_id"]:
+            # Rencontres d'une patrouille : un passage = un jour et un lieu, qu'il soit saisi en mode simple ou avion par avion
+            seen = occ_seen.setdefault(r["patrol_id"], {})
+            pr = seen.setdefault(f"{r['day']}|{r['airport'] or r['place'] or ''}", len(seen) + 1)
+            ctx["patrol_rank"][sid] = pr
+            if r["is_patrol"]:
+                ctx["rank"][sid] = pr          # le « revu » d'une patrouille compte ses passages, pas seulement ses saisies simples
     ctx["reg_counts"] = counts
     from . import refdb
     ctx["type_counts"] = refdb.type_counts()
@@ -140,6 +149,9 @@ def badges_for(spot: dict, ctx: dict) -> list[dict]:
     rank = ctx["rank"].get(sid, 1)
     if rank > 1:
         b.append({"code": "seen_again", "n": rank})
+    prank = ctx.get("patrol_rank", {}).get(sid, 1)
+    if prank > 1 and not spot.get("is_patrol"):
+        b.append({"code": "patrol_seen", "n": prank})           # avion identifié : sa patrouille est revue
     if reg in ctx["most_spotted"]:
         b.append({"code": "most_spotted", "n": n})
     if is_primer(spot.get("livery")):

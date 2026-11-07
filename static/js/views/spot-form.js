@@ -66,10 +66,10 @@ export async function render(root, params, query) {
       <div data-analysis></div>
 
       <div class="card stack">
-        ${simpleOnly ? `<label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" name="patrol_simple" ${s.is_patrol ? 'checked disabled' : ''}> <b>${esc(t('patrol.simple_toggle'))}</b></label>
+        ${simpleOnly ? `<label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" name="patrol_simple" ${s.is_patrol ? 'checked disabled' : (!editing && query.patrol_simple ? 'checked' : '')}> <b>${esc(t('patrol.simple_toggle'))}</b></label>
         <div class="stack" data-patsimple hidden>
           <div class="field-row">
-            <label class="field" style="flex:2"><span>${esc(t('patrol.name'))}</span><input name="patrol_sname" list="patrol-names" value="${esc(s.patrol_name)}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off"></label>
+            <label class="field" style="flex:2"><span>${esc(t('patrol.name'))}</span><input name="patrol_sname" list="patrol-names" value="${esc(s.patrol_name || (!editing ? query.patrol_simple : '') || '')}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off"></label>
             <label class="field"><span>${esc(t('patrol.size'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span><input name="patrol_size" value="${esc(s.patrol_size)}" inputmode="numeric" placeholder="8"></label>
           </div>
           <label class="field"><span>${esc(t('patrol.country'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
@@ -110,13 +110,14 @@ export async function render(root, params, query) {
         <div class="field"><span>${esc(t('spot.tags'))}</span><div data-tags></div></div>
       </div>
 
-      ${s.is_patrol ? '' : `<details class="card fold" data-patrol ${s.patrol ? 'open' : ''}>
+      ${s.is_patrol ? '' : `<details class="card fold" data-patrol ${s.patrol || query.patrol ? 'open' : ''}>
         <summary>${icon('plus', '', 18)} ${esc(t('multi.title'))} ${icon('chevron-down', 'chev', 18)}</summary>
         <div class="fold-body stack">
           <p class="tiny muted">${esc(t('multi.hint'))}</p>
-          ${s.patrol && s.patrol.members.length > 1 ? `<p class="tiny muted">${icon('link', '', 12)} ${esc(t('multi.sync_hint', { n: s.patrol.members.length - 1 }))}</p>` : ''}
+          ${s.patrol && s.thumb && s.patrol.members.filter((m) => m.thumb === s.thumb).length > 1 ? `<p class="tiny muted">${icon('link', '', 12)} ${esc(t('multi.sync_hint', { n: s.patrol.members.filter((m) => m.thumb === s.thumb).length - 1 }))}</p>` : ''}
           <label class="field"><span>${esc(t('multi.group_name'))} <span class="tiny" style="font-weight:500">· ${esc(t('common.optional'))}</span></span>
-            <input name="patrol_name" list="patrol-names" value="${esc(s.patrol?.name)}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off"></label>
+            <input name="patrol_name" list="patrol-names" value="${esc(s.patrol?.name ?? (editing ? '' : query.patrol || ''))}" placeholder="${esc(t('patrol.name_ph'))}" autocomplete="off">
+            <span class="tiny muted" data-patrol-link></span></label>
           ${s.patrol ? `<div class="stack" style="gap:6px"><span class="tiny muted">${esc(t('patrol.members'))}</span><div class="row wrap" style="gap:6px">${s.patrol.members.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}
           <div class="stack" style="gap:8px" data-pat-rows></div>
           <div><button type="button" class="btn sm" data-pat-add>${icon('plus', '', 16)} ${esc(t('multi.add'))}</button></div>
@@ -415,6 +416,19 @@ export async function render(root, params, query) {
   };
   const addBtn = root.querySelector('[data-pat-add]');
   if (addBtn) addBtn.onclick = () => { root.querySelector('[data-patrol]').open = true; addPatRow(); };
+  // Le nom de groupe rattache l'avion à la patrouille qui porte déjà ce nom (notamment une patrouille saisie en mode simple)
+  const linkHint = root.querySelector('[data-patrol-link]');
+  if (linkHint) {
+    const fold = (x) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    let index = [];
+    const showLink = () => {
+      const nm = fold(form.elements.patrol_name?.value || '');
+      const hit = nm && index.find((p) => fold(p.name) === nm && p.id !== s.patrol?.id);
+      linkHint.textContent = !nm ? '' : hit ? t(hit.simple ? 'patrol.link_simple' : 'patrol.link_existing', { name: hit.name, n: hit.n }) : (s.patrol && fold(s.patrol.name || '') === nm ? '' : t('patrol.link_new'));
+    };
+    api('/api/spots/patrol-index').then((r) => { index = r; showLink(); }).catch(() => {});
+    form.elements.patrol_name?.addEventListener('input', showLink);
+  }
   api('/api/spots/patrol-names').then((names) => { root.querySelector('#patrol-names').innerHTML = names.map((n) => `<option value="${esc(n)}">`).join(''); }).catch(() => {});
   // Nationalité de la patrouille : liste des pays, pré-remplie d'après les passages précédents du même nom
   const cSel = form.elements.patrol_country;

@@ -16,7 +16,7 @@ import asyncio
 
 from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs, set_profile, _profile
 from .db import init_db
-from .routers import airports as airports_router, field, fleets, flights, io, misc, outings as outings_router, share, spots, stats, trash as trash_router, wishes
+from .routers import airports as airports_router, patrols as patrols_router, field, fleets, flights, io, misc, outings as outings_router, share, spots, stats, trash as trash_router, wishes
 from .services import collection, gamification, media, refdb, sandbox, scheduler, trash
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
@@ -33,6 +33,24 @@ def _backfill_countries() -> None:
         c = regs.country_for(r["registration"], r["owner"])
         if c:
             execute("UPDATE spotting SET country=? WHERE id_spotting=?", (c, r["id"]))
+
+
+def _link_patrols() -> None:
+    """Avions identifiés après coup sous le nom d'une patrouille saisie en mode simple : ils la rejoignent
+    (même nom, accents et casse ignorés), pour compter dans ses vues."""
+    from .core import execute, q
+    from .services import registration as regs
+    simple: dict[str, int] = {}
+    for r in q("SELECT DISTINCT p.id_patrol id, p.name FROM patrols p JOIN spotting s ON s.patrol_id = p.id_patrol "
+               "WHERE s.is_patrol = 1 AND p.name IS NOT NULL ORDER BY p.id_patrol"):
+        simple.setdefault(regs._fold(r["name"].strip()), r["id"])  # noqa: SLF001
+    if not simple:
+        return
+    for r in q("SELECT id_patrol id, name FROM patrols WHERE name IS NOT NULL"):
+        target = simple.get(regs._fold(r["name"].strip()))  # noqa: SLF001
+        if target and target != r["id"]:
+            execute("UPDATE spotting SET patrol_id = ? WHERE patrol_id = ?", (target, r["id"]))
+            execute("DELETE FROM patrols WHERE id_patrol = ?", (r["id"],))
 
 
 def _reclassify_fields() -> None:
@@ -60,6 +78,10 @@ async def lifespan(app: FastAPI):
         _backfill_countries()
     except Exception:  # noqa: BLE001
         log.exception("Rattrapage des pays en échec")
+    try:
+        _link_patrols()
+    except Exception:  # noqa: BLE001
+        log.exception("Rattachement des patrouilles en échec")
     try:
         _reclassify_fields()
     except Exception:  # noqa: BLE001
@@ -120,7 +142,7 @@ async def guard(request: Request, call_next):
     return response
 
 
-for r in (auth.router, misc.router, spots.router, flights.router, stats.router, fleets.router, field.router, share.router, io.router, wishes.router, trash_router.router, outings_router.router, airports_router.router):
+for r in (auth.router, misc.router, spots.router, flights.router, stats.router, fleets.router, field.router, share.router, io.router, wishes.router, trash_router.router, outings_router.router, airports_router.router, patrols_router.router):
     app.include_router(r)
 
 
