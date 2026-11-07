@@ -8,12 +8,14 @@
 ---
 
 > 💻 **Sans Docker** : des installeurs prêts à l'emploi (Windows `.exe`, macOS `.dmg`, Linux `.deb` / `.tar.gz`) installent Contrail comme un logiciel ordinaire, avec choix du dossier et raccourci sur le Bureau — voir [`desktop/README.md`](desktop/README.md).
+>
+> 🪟 **Sous Windows, le plus simple est d'utiliser l'installeur `.exe` dédié de la [dernière Release](../../releases/latest)** (`Contrail-<version>-Windows-Setup.exe`) : un double-clic, sans Python ni ligne de commande. Les commandes pour le [fabriquer vous-même](#créer-soi-même-linstalleur) ne sont utiles que pour une version non publiée ou modifiée.
 
 ## Sommaire
 
 1. [Fonctionnalités](#fonctionnalités)
 2. [Installation avec Docker (recommandé)](#installation-avec-docker-recommandé)
-3. [Installation sans Docker](#installation-sans-docker) — dont le [lanceur](#avec-le-lanceur-en-ligne) et l'[installation hors ligne](#installation-hors-ligne-sans-internet-sur-la-machine-cible)
+3. [Installation sans Docker](#installation-sans-docker) — dont l'[installeur](#créer-soi-même-linstalleur) (à télécharger ou à fabriquer), le [lanceur](#avec-le-lanceur-en-ligne) et l'[installation hors ligne](#installation-hors-ligne-sans-internet-sur-la-machine-cible)
 4. [Configuration des API](#configuration-des-api)
 5. [Accès mobile, HTTPS et PWA](#accès-mobile-https-et-pwa)
 6. [Données, migration et sauvegardes](#données-migration-et-sauvegardes) — dont la [session de test](#session-de-test)
@@ -25,12 +27,18 @@
 
 ---
 
-## Nouveautés de la version 4.0
+## Nouveautés des versions 4.x
+
+- **4.2 — Exports PDF** : un vrai PDF mis en page (couverture, chiffres clés, graphique, classements, photos) pour le **bilan annuel**, la **liste de spots** (avec les filtres de la page, regroupement par année, jour ou lieu), la **fiche d'un spot** et le **carnet de vols**. Format, orientation, couleur d'accent, police, couverture, photos, pied de page et auteur se règlent à chaque export ou une fois pour toutes (Réglages > Données > Exports PDF).
+- **4.1 — Carte globale** : regroupement des lieux proches selon le zoom (disques multicolores = répartition des types), nombre de spots dans les ronds, légende des couleurs et tailles, popups retravaillés, lecture animée par année, trimestre, mois ou semaine (cumulatif ou période seule) et **fonds satellite gratuits** (Esri World Imagery, orthophotos IGN pour la France).
+- **4.0.1 — Enregistrement en arrière-plan** : un spot s'enregistre sans bloquer l'écran ; une pastille flottante en bas à droite indique l'avancement, le succès (elle disparaît après deux secondes) ou l'échec (réessayer, garder en brouillon).
+
+### Nouveautés de la version 4.0
 
 - **Enregistrement plus rapide** : encodage WebP allégé (réglage « Encodage des photos »), vignette tirée de la version réduite, barre de progression à l'envoi.
 - **Import en lot** (`#/bulk`) : plusieurs photos d'un coup, date, aéroport et immatriculation (OCR) préremplis, vérification avant enregistrement.
 - **Carte globale** (`#/map`) : tous les lieux, période réglable et lecture animée année par année.
-- **Bilans annuels** (`#/reports`) : chiffres, premières, classements, meilleures photos, impression en PDF ; widget d'accueil « Bilan de l'année ».
+- **Bilans annuels** (`#/reports`) : chiffres, premières, classements, meilleures photos, export PDF ; widget d'accueil « Bilan de l'année ».
 - **Doublons de photos** (`#/duplicates`) : détection accélérée, suppression ou « garder les deux ».
 - **Modification en masse** depuis la sélection de la liste des spots (pays, aéroport, exploitant, type de vol, note, immatriculation…).
 - **Patrouilles** : page dédiée, passages, avions identifiés, fusion, renommage, badge « Patrouille revue ».
@@ -137,6 +145,28 @@ L'image installe Tesseract : l'OCR fonctionne sans configuration.
 Deux voies, sans Docker : l'**installeur** prêt à l'emploi (Windows, macOS, Linux — voir [`desktop/README.md`](desktop/README.md)) ou le **lanceur** `desktop/launcher.py` depuis les sources, décrit ci-dessous. Le lanceur démarre le serveur, ouvre le navigateur, place une icône dans la zone de notification et range les données dans le dossier propre à chaque système.
 
 Prérequis : **Python 3.11 ou plus récent** (testé en 3.11 et 3.13) et, pour l'OCR seulement, Tesseract (`apt install tesseract-ocr`, `brew install tesseract`, installateur Windows). Sans Tesseract, tout fonctionne sauf la lecture automatique de l'immatriculation.
+
+### Créer soi-même l'installeur
+
+> 🪟 Sous Windows, inutile en général : téléchargez simplement le `.exe` de la [dernière Release](../../releases/latest). Ce qui suit sert à fabriquer un installeur depuis vos propres sources (version modifiée, ou pas encore publiée).
+
+Un script construit l'installeur de **votre** système (PyInstaller, puis Inno Setup sous Windows, `.deb` / `.tar.gz` sous Linux, `.dmg` sous macOS). Il installe les dépendances, lit la version dans `app/core.py` et dépose le résultat dans `dist/`. À lancer à la racine du projet, avec **Python 3.11+** :
+
+**Windows (PowerShell)** — prérequis : [Inno Setup 6](https://jrsoftware.org/isinfo.php), par exemple `winget install JRSoftware.InnoSetup`
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-setup.ps1
+# → dist\Contrail-<version>-Windows-Setup.exe
+```
+
+**Windows (Git Bash), Linux, macOS**
+```bash
+bash scripts/build-setup.sh
+# Windows → dist/Contrail-<version>-Windows-Setup.exe ; Linux → .deb et .tar.gz ; macOS → .dmg (dans dist/)
+```
+
+Options (identiques pour les deux scripts) : une version imposée (`-Version 4.2.0` en PowerShell, `bash scripts/build-setup.sh 4.2.0`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
+
+Un installeur ne se construit que sur son propre système. Pour obtenir les quatre d'un coup (Windows, macOS Apple Silicon et Intel, Linux), poussez un tag `vX.Y.Z` : le workflow GitHub `desktop.yml` les construit, les teste et les publie dans une Release. Détails dans [`desktop/README.md`](desktop/README.md).
 
 ### Avec le lanceur (en ligne)
 
@@ -313,6 +343,8 @@ data/
 **Import de vols** : compatible avec l'export CSV de **myFlightradar24** (codes de siège, de classe et de motif convertis, codes OACI extraits de « Air France (AF/AFR) » ou « Toulouse / Blagnac (TLS/LFBO) ») et avec les CSV génériques.
 
 **Export** : spots et vols en CSV (UTF-8 avec BOM, lisible par Excel), export JSON intégral de toutes les tables, photos en JPEG avec métadonnées IPTC/XMP (une à une ou en archive .zip, jusqu'à 2 000 par archive).
+
+**Export PDF** : bilan annuel, liste de spots filtrée, fiche d'un spot et carnet de vols, mis en page par le serveur (bibliothèque reportlab, polices Inter et Fraunces embarquées). Le style est personnalisable à chaque export ou par défaut dans Réglages > Données > Exports PDF.
 
 ## Architecture technique
 
