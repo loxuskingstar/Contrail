@@ -6,6 +6,7 @@ import { icon } from '../lib/icons.js';
 import { airportInput, tagPicker, rememberAirport } from '../lib/fields.js';
 import { esc, toast, errorToast, confirmDialog, stars, bindStars, pageHead, debounce, regText } from '../ui.js';
 import { saveDraft, uuid } from '../offline.js';
+import { enqueueSave } from '../lib/uploads.js';
 
 const FLIGHT_TYPES = ['commercial', 'cargo', 'test', 'delivery', 'ferry', 'military', 'business', 'general', 'helicopter', 'medical', 'training', 'airshow', 'government', 'museum', 'display', 'storage', 'maintenance', 'scrapyard', 'other'];
 const STATIC_TYPES = ['museum', 'display', 'storage', 'maintenance', 'scrapyard'];
@@ -519,38 +520,17 @@ export async function render(root, params, query) {
       navigate('#/drafts');
     };
     if (!editing && !navigator.onLine) { await asDraft(); return; }
-    const send = async (force = false) => {
-      const fd = new FormData();
-      fd.append('data', JSON.stringify({ ...data, force }));
-      if (imageFile) fd.append('image', imageFile, imageFile.name || 'photo.jpg');
-      if (audioFile) fd.append('audio', audioFile, audioFile.name || 'audio.webm');
-      const big = (imageFile?.size || 0) > 400 * 1024;      // la progression n'a de sens que pour un vrai fichier
-      const label = btn.innerHTML;
-      const onProgress = big ? (r, phase) => { btn.textContent = phase === 'upload' ? t('spot.sending', { p: Math.round(r * 100) }) : t('spot.processing'); } : undefined;
-      try {
-        return await api(editing ? `/api/spots/${s.id_spotting}` : '/api/spots', { method: editing ? 'PUT' : 'POST', form: fd, query: { force }, onProgress });
-      } finally { btn.innerHTML = label; }
-    };
-    try {
-      let res;
-      try {
-        res = await send();
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 409 && err.detail?.code === 'duplicate') {
-          const ok = await confirmDialog(esc(t('spot.dup_confirm', { n: err.detail.duplicates.length })), { ok: t('spot.save_anyway') });
-          if (!ok) { btn.disabled = false; return; }
-          res = await send(true);
-        } else throw err;
-      }
-      store.facets = null;
-      if (data.tags.some((x) => typeof x === 'string')) store.refreshTags().catch(() => {});
-      afterSave(res);
-      navigate(`#/spots/${res.spot.id_spotting}`, { replace: editing });
-    } catch (err) {
-      btn.disabled = false;
-      if (err.offline && !editing) { await asDraft(); return; }
-      errorToast(err);
-    }
+    // Enregistrement en tâche de fond : on quitte le formulaire tout de suite, une pastille flottante suit l'envoi
+    const label = (data.patrol?.simple && data.patrol.name) || data.registration || data.aircraft || t('spot.new');
+    enqueueSave({
+      editing, id: editing ? s.id_spotting : undefined, data, imageFile, audioFile, label,
+      onDone: async (res) => {
+        store.facets = null;
+        if (data.tags.some((x) => typeof x === 'string')) store.refreshTags().catch(() => {});
+        await afterSave(res, { quiet: true });
+      },
+    });
+    navigate(editing ? `#/spots/${s.id_spotting}` : '#/spots', { replace: editing });
   };
 
   // Photo reçue via la cible de partage du système (Android : « Partager vers Contrail »)
@@ -568,9 +548,9 @@ export async function render(root, params, query) {
   return () => { document.removeEventListener('paste', onPaste); recorder?.stop(); };
 }
 
-export async function afterSave(res) {
+export async function afterSave(res, { quiet = false } = {}) {
   window.dispatchEvent(new Event('contrail-local-action'));
-  toast(esc(t('common.saved')), { type: 'success', duration: 2000 });
+  if (!quiet) toast(esc(t('common.saved')), { type: 'success', duration: 2000 });
   if (res.crossref?.length) {
     const reg = res.spot?.registration || res.flight?.registration;
     const key = res.spot ? 'crossref.spot' : 'crossref.flight';

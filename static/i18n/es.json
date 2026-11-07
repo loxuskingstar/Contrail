@@ -1915,5 +1915,12 @@
 "report.vs_up": "+{n} respecto a {y}",
 "report.vs_down": "−{n} respecto a {y}",
 "report.vs_same": "Igual que {y}",
-"widget.goals": "Objetivos"
+"widget.goals": "Objetivos",
+"upl.queued": "En espera…",
+"upl.done": "Guardado",
+"upl.draft_saved": "Guardado como borrador",
+"upl.dup": "Posible duplicado",
+"upl.failed": "Error al guardar",
+"upl.retry": "Reintentar",
+"upl.draft": "Guardar como borrador"
 }

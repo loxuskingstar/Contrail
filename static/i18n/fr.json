@@ -1915,5 +1915,12 @@
 "report.vs_up": "+{n} par rapport à {y}",
 "report.vs_down": "−{n} par rapport à {y}",
 "report.vs_same": "Identique à {y}",
-"widget.goals": "Objectifs"
+"widget.goals": "Objectifs",
+"upl.queued": "En attente…",
+"upl.done": "Enregistré",
+"upl.draft_saved": "Enregistré en brouillon",
+"upl.dup": "Doublon probable",
+"upl.failed": "Échec de l'enregistrement",
+"upl.retry": "Réessayer",
+"upl.draft": "Garder en brouillon"
 }

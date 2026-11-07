@@ -941,3 +941,25 @@ body.radar-mode .main { padding: 0; }
 .dash-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 .dash-grid > [data-widget="hero"], .dash-grid > [data-widget="map"], .dash-grid > [data-widget="quick"], .dash-grid > [data-widget="month_chart"], .dash-grid > [data-widget="year_report"] { grid-column: 1 / -1; }
 @media (max-width: 960px) { .dash-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- Enregistrements en tâche de fond : pastilles flottantes (bas droite) ---- */
+.upl-host { position: fixed; right: 16px; bottom: 16px; z-index: 90; display: flex; flex-direction: column; gap: 8px; width: min(340px, calc(100vw - 32px)); pointer-events: none; }
+@media (max-width: 979px) { .upl-host { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); } }
+.upl-item { pointer-events: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .18);
+  animation: upl-in .22s ease-out; transition: opacity .25s, transform .25s; }
+.upl-item.leaving { opacity: 0; transform: translateY(8px); }
+.upl-item.done { border-color: color-mix(in srgb, #16a34a 55%, var(--line)); }
+.upl-item.error, .upl-item.dup { border-color: color-mix(in srgb, #dc2626 55%, var(--line)); }
+.upl-row { display: flex; align-items: center; gap: 10px; }
+.upl-row > svg { flex: none; color: var(--accent); }
+.upl-item.done .upl-row > svg { color: #16a34a; }
+.upl-item.error .upl-row > svg, .upl-item.dup .upl-row > svg { color: #dc2626; }
+.upl-txt { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+.upl-txt .small { color: var(--muted); }
+.upl-bar { height: 4px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin-top: 8px; }
+.upl-bar > i { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .2s; }
+.upl-item.done .upl-bar > i { background: #16a34a; }
+.upl-bar.busy > i { background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / .45), transparent); background-size: 60px 100%; animation: upl-run 1s linear infinite; }
+.upl-actions { display: flex; gap: 8px; margin-top: 8px; }
+@keyframes upl-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes upl-run { from { background-position: -60px 0; } to { background-position: 260px 0; } }

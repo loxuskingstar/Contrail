@@ -1744,5 +1744,12 @@
 "report.vs_up": "{y}年より+{n}",
 "report.vs_down": "{y}年より−{n}",
 "report.vs_same": "{y}年と同じ",
-"widget.goals": "目標"
+"widget.goals": "目標",
+"upl.queued": "待機中…",
+"upl.done": "保存しました",
+"upl.draft_saved": "下書きに保存しました",
+"upl.dup": "重複の可能性",
+"upl.failed": "保存に失敗しました",
+"upl.retry": "再試行",
+"upl.draft": "下書きにする"
 }

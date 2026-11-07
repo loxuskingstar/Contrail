@@ -1915,5 +1915,12 @@
 "report.vs_up": "+{n} vs {y}",
 "report.vs_down": "−{n} vs {y}",
 "report.vs_same": "Same as {y}",
-"widget.goals": "Goals"
+"widget.goals": "Goals",
+"upl.queued": "Waiting…",
+"upl.done": "Saved",
+"upl.draft_saved": "Saved as draft",
+"upl.dup": "Likely duplicate",
+"upl.failed": "Saving failed",
+"upl.retry": "Retry",
+"upl.draft": "Keep as draft"
 }
