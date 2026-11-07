@@ -109,18 +109,36 @@ def custom() -> dict[str, dict]:
     return memo("custom_airfields", _load_custom)
 
 
-def airport(code: str | None) -> dict | None:
-    if not code:
-        return None
-    c = code.strip().upper()
-    a = custom().get(c) or _airports().get(c)
+@lru_cache(maxsize=16384)
+def _static_airport(c: str) -> dict | None:
+    """Fiche d'un terrain des bases embarquées (immuables) : calculée une seule fois par code."""
+    a = _airports().get(c)
     if a is None and len(c) == 3:
         icao = _iata_index().get(c)
         a = _airports().get(icao) if icao else None
     if a is None and len(c) > 3:          # anciens identifiants (FR-0442 → LF3624) ; jamais pour 3 lettres, réservées à l'IATA
         a = _airports().get(_extra()[1].get(c, ""))
-    if a is None:
+    return _shape(a) if a is not None else None
+
+
+def airport(code: str | None) -> dict | None:
+    if not code:
         return None
+    c = code.strip().upper()
+    a = custom().get(c)
+    if a is not None:
+        return _shape(a)
+    r = _static_airport(c)
+    return dict(r) if r else None
+
+
+def warm() -> None:
+    """Charge à l'avance les bases d'aéroports (≈ 0,3 s) pour que la première page n'en paie pas le coût."""
+    _airports()
+    _iata_index()
+
+
+def _shape(a: dict) -> dict:
     return {
         "icao": a["icao"], "iata": a.get("iata") or None, "name": a["name"], "city": a["city"],
         "country": a["country"], "lat": a["lat"], "lng": a["lon"], "tz": a.get("tz") or tz_at(a["lat"], a["lon"]),

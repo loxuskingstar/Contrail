@@ -1887,5 +1887,7 @@
 "pdf.g_none": "なし",
 "pdf.g_year": "年",
 "pdf.g_day": "日",
-"pdf.g_airport": "場所"
+"pdf.g_airport": "場所",
+"spot.reading_reg": "機体番号を読み取り中…",
+"bulk.reading_reg": "機体番号を読取中…"
 }

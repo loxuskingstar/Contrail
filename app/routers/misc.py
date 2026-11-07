@@ -172,7 +172,7 @@ def analyze_photo(image: UploadFile = File(...), ocr: bool = True, airport: str 
     """Pré-analyse d'une photo avant enregistrement : EXIF + OCR de l'immatriculation."""
     raw = image.file.read()
     try:
-        img = media.open_image(raw)
+        img = media.open_image(raw) if ocr else media.open_lazy(raw)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(422, "invalid_image") from e
     exif = media.extract_exif(img)
@@ -182,7 +182,7 @@ def analyze_photo(image: UploadFile = File(...), ocr: bool = True, airport: str 
         if near:
             out["nearest_airport"] = near
     if ocr and get_settings()["modules"].get("ocr", True):
-        out["ocr"] = media.ocr_registration(raw)
+        out["ocr"] = media.ocr_registration(raw, img)
         out["ocr"].pop("text", None)
         out["ocr"]["candidates"] = rank_candidates(out["ocr"]["candidates"],
                                                   airport or (out.get("nearest_airport") or {}).get("icao"))

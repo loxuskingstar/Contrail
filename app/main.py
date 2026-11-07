@@ -17,7 +17,7 @@ import asyncio
 from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs, get_settings, set_profile, set_settings, _profile
 from .db import init_db
 from .routers import airports as airports_router, patrols as patrols_router, field, fleets, flights, io, misc, outings as outings_router, pdf as pdf_router, reports as reports_router, share, spots, stats, trash as trash_router, wishes
-from .services import collection, gamification, media, refdb, sandbox, scheduler, trash
+from .services import collection, gamification, geo, media, refdb, sandbox, scheduler, trash
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -69,7 +69,8 @@ def _run_fixups() -> None:
     démarrage. Les règles de classement évoluent d'une version à l'autre ; un spot enregistré ensuite est déjà traité à l'écriture."""
     if get_settings().get("fixups_version") == APP_VERSION:
         return
-    for fn, label in ((_backfill_countries, "pays"), (_link_patrols, "patrouilles"), (_reclassify_fields, "terrains")):
+    for fn, label in ((collection.recategorize, "livrées"), (_backfill_countries, "pays"), (_link_patrols, "patrouilles"),
+                      (_reclassify_fields, "terrains")):
         try:
             fn()
         except Exception:  # noqa: BLE001
@@ -78,11 +79,20 @@ def _run_fixups() -> None:
     set_settings({"fixups_version": APP_VERSION})
 
 
+def _warm_up() -> None:
+    """Charge en arrière-plan ce qui coûte cher à la première utilisation (n'empêche pas le démarrage)."""
+    try:
+        geo.warm()
+        if get_settings()["modules"].get("ocr", True) and media.ocr_engine() == "rapidocr":
+            media._rapid_engine()  # noqa: SLF001
+    except Exception:  # noqa: BLE001
+        log.debug("Préchauffage partiel", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     ensure_dirs()
     init_db()
-    collection.recategorize()
     gamification.sync_definitions()
     try:
         trash.purge_old()
@@ -90,6 +100,7 @@ async def lifespan(app: FastAPI):
         log.exception("Purge de la corbeille en échec")
     _run_fixups()
     tasks = scheduler.start()
+    threading.Thread(target=_warm_up, daemon=True, name="warm-up").start()   # aéroports + moteur OCR prêts avant la première photo
     threading.Thread(target=refdb.compact_file, daemon=True, name="refdb-compact").start()   # allège une ancienne base de référence
     threading.Thread(target=media.backfill_phash, daemon=True, name="phash-backfill").start()   # empreintes des photos déjà enregistrées
     log.info("%s %s prêt — authentification %s", APP_NAME, APP_VERSION,

@@ -1,4 +1,5 @@
 // Import en lot : glisser plusieurs photos, vérifier les lignes préremplies (EXIF, OCR, base d'appareils), tout enregistrer
+import { analyzeExif, analyzeOcr } from '../lib/analyze.js';
 import { api, ApiError } from '../api.js';
 import { store } from '../app.js';
 import { t } from '../i18n.js';
@@ -76,25 +77,34 @@ export async function render(root) {
     } catch { /* hors ligne : saisie manuelle */ }
   }
 
-  async function analyze(r) {
+  // Deux files : EXIF d'abord (rapide, 4 en parallèle), puis lecture de l'immatriculation (lente, 2 en parallèle)
+  async function analyzeExifRow(r) {
     try {
-      const fd = new FormData(); fd.append('image', r.file, r.file.name);
+      const a = await analyzeExif(r.file);
       const defAirport = $('[data-airport]').value.trim().toUpperCase();
-      const a = await api('/api/media/analyze', { method: 'POST', form: fd, query: { ocr: true, airport: defAirport } });
       if (a.exif?.datetime) F(r, 'date').value = a.exif.datetime.slice(0, 16);
       const ap = defAirport || a.nearest_airport?.icao;
       if (ap) F(r, 'airport').value = ap;
+      if (a.ocr?.available === false) { badge(r, 'ready', t('bulk.ready')); return; }
+      badge(r, 'ready', t('bulk.reading_reg'));
+      ocrQueue.push(r);
+    } catch (e) { badge(r, 'ready', t('bulk.no_analysis')); }
+  }
+  async function analyzeOcrRow(r) {
+    try {
+      const a = await analyzeOcr(r.file, F(r, 'airport').value.trim().toUpperCase());
       const c = a.ocr?.candidates?.[0];
-      if (c && c.registration) { F(r, 'registration').value = c.registration; r.el.querySelector('[data-hint]').textContent = t('bulk.ocr_guess'); await lookup(r, c.registration); }
+      if (c && c.registration && !F(r, 'registration').value) { F(r, 'registration').value = c.registration; r.el.querySelector('[data-hint]').textContent = t('bulk.ocr_guess'); await lookup(r, c.registration); }
       badge(r, 'ready', t('bulk.ready'));
     } catch (e) { badge(r, 'ready', t('bulk.no_analysis')); }
   }
-
-  // Analyse en parallèle limitée (l'OCR est coûteux)
-  const queue = [];
-  let running = 0;
-  const pump = () => { while (running < 2 && queue.length) { const r = queue.shift(); running++; analyze(r).finally(() => { running--; pump(); }); } };
-  const add = (files) => { for (const f of files) { if (!/^image\//.test(f.type) && !/\.(heic|heif)$/i.test(f.name)) continue; queue.push(addRow(f)); } pump(); };
+  const exifQueue = [], ocrQueue = [];
+  let exifRun = 0, ocrRun = 0;
+  const pump = () => {
+    while (exifRun < 4 && exifQueue.length) { const r = exifQueue.shift(); exifRun++; analyzeExifRow(r).finally(() => { exifRun--; pump(); }); }
+    while (ocrRun < 2 && ocrQueue.length) { const r = ocrQueue.shift(); ocrRun++; analyzeOcrRow(r).finally(() => { ocrRun--; pump(); }); }
+  };
+  const add = (files) => { for (const f of files) { if (!/^image\//.test(f.type) && !/\.(heic|heif)$/i.test(f.name)) continue; exifQueue.push(addRow(f)); } pump(); };
   $('[data-file]').addEventListener('change', (e) => { add([...e.target.files]); e.target.value = ''; });
   const drop = $('[data-drop]');
   ['dragover', 'dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.style.borderColor = 'var(--accent)'; }));

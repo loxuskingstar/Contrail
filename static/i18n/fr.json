@@ -2058,5 +2058,7 @@
 "pdf.g_none": "Aucun",
 "pdf.g_year": "Année",
 "pdf.g_day": "Jour",
-"pdf.g_airport": "Lieu"
+"pdf.g_airport": "Lieu",
+"spot.reading_reg": "Lecture de l'immatriculation…",
+"bulk.reading_reg": "Lecture immat…"
 }

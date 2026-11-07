@@ -7,6 +7,7 @@ import { airportInput, tagPicker, rememberAirport } from '../lib/fields.js';
 import { esc, toast, errorToast, confirmDialog, stars, bindStars, pageHead, debounce, regText } from '../ui.js';
 import { saveDraft, uuid } from '../offline.js';
 import { enqueueSave } from '../lib/uploads.js';
+import { analyzeExif, analyzeOcr } from '../lib/analyze.js';
 
 const FLIGHT_TYPES = ['commercial', 'cargo', 'test', 'delivery', 'ferry', 'military', 'business', 'general', 'helicopter', 'medical', 'training', 'airshow', 'government', 'museum', 'display', 'storage', 'maintenance', 'scrapyard', 'other'];
 const STATIC_TYPES = ['museum', 'display', 'storage', 'maintenance', 'scrapyard'];
@@ -273,36 +274,54 @@ export async function render(root, params, query) {
   const onPaste = (e) => { const f = [...(e.clipboardData?.files || [])].find((x) => isImg(x)); if (f) setPreview(f); };
   document.addEventListener('paste', onPaste);
 
+  // Analyse en deux temps : l'EXIF s'affiche et remplit le formulaire tout de suite, l'immatriculation (OCR) arrive ensuite.
   async function analyze(file) {
     const box = root.querySelector('[data-analysis]');
     if (!navigator.onLine) { box.innerHTML = `<div class="ocr-strip small">${icon('wifi-off', '', 16)} ${esc(t('spot.analyze_offline'))}</div>`; return; }
     box.innerHTML = `<div class="ocr-strip small">${icon('scan-text', '', 16)} ${esc(t('spot.analyzing'))}</div>`;
-    const fd = new FormData();
-    fd.append('image', file);
+    const wantOcr = store.mod('ocr');
+    let res;
     try {
-      const res = await api('/api/media/analyze', { method: 'POST', form: fd, query: { ocr: store.mod('ocr'), airport: F('airport').value.trim() } });
-      const ex = res.exif || {};
-      if (ex.datetime && !dateTouched) F('date').value = ex.datetime;
-      for (const k of ['camera', 'lens', 'focal', 'aperture', 'iso', 'shutter']) if (ex[k] != null && !F(k).value) F(k).value = ex[k];
-      if (ex.lat != null) { F('lat').value = ex.lat; F('lng').value = ex.lng; }
-      if (res.nearest_airport && !F('airport').value) F('airport').value = res.nearest_airport.icao;
-      const parts = [];
-      const cands = res.ocr?.candidates || [];
-      if (cands.length) {
-        parts.push(`${icon('scan-text', '', 16)} <span>${esc(t('spot.ocr_found'))}</span>` + cands.slice(0, 4).map((c) => `<button type="button" class="chip" data-reg="${esc(c.registration)}">${flag(c.country)} <span class="mono">${esc(c.registration)}</span></button>`).join(''));
-        if (!F('registration').value) { F('registration').value = cands[0].registration; lookup(); }
-      } else if (store.mod('ocr') && res.ocr?.available) parts.push(`${icon('scan-text', '', 16)} <span class="muted">${esc(t('spot.ocr_none'))}</span>`);
-      const exBits = [ex.camera, ex.lens, ex.focal && `${ex.focal} mm`, ex.aperture && `f/${ex.aperture}`, ex.shutter, ex.iso && `ISO ${ex.iso}`].filter(Boolean);
-      if (exBits.length) parts.push(`<span class="small muted" style="width:100%">${icon('camera', '', 14)} ${esc(exBits.join(' · '))}</span>`);
-      if (ex.datetime) parts.push(`<span class="small muted">${icon('clock', '', 14)} ${esc(fmtDate(ex.datetime))}</span>`);
-      if (res.nearest_airport) parts.push(`<span class="small muted">${icon('map-pin', '', 14)} ${esc(res.nearest_airport.name)}</span>`);
-      box.innerHTML = parts.length ? `<div class="ocr-strip">${parts.join('')}</div>` : '';
-      box.querySelectorAll('[data-reg]').forEach((b) => (b.onclick = () => { F('registration').value = b.dataset.reg; lookup(true); }));
-      checkDup();
+      res = await analyzeExif(file);
     } catch (e) {
-      box.innerHTML = '';
-      if (!e.offline) errorToast(e);
+      if (imageFile === file) { box.innerHTML = ''; if (!e.offline) errorToast(e); }
+      return;
     }
+    if (imageFile !== file) return;
+    const ex = res.exif || {};
+    if (ex.datetime && !dateTouched) F('date').value = ex.datetime;
+    for (const k of ['camera', 'lens', 'focal', 'aperture', 'iso', 'shutter']) if (ex[k] != null && !F(k).value) F(k).value = ex[k];
+    if (ex.lat != null) { F('lat').value = ex.lat; F('lng').value = ex.lng; }
+    if (res.nearest_airport && !F('airport').value) F('airport').value = res.nearest_airport.icao;
+    checkDup();
+    const exifParts = () => {
+      const p = [];
+      const exBits = [ex.camera, ex.lens, ex.focal && `${ex.focal} mm`, ex.aperture && `f/${ex.aperture}`, ex.shutter, ex.iso && `ISO ${ex.iso}`].filter(Boolean);
+      if (exBits.length) p.push(`<span class="small muted" style="width:100%">${icon('camera', '', 14)} ${esc(exBits.join(' · '))}</span>`);
+      if (ex.datetime) p.push(`<span class="small muted">${icon('clock', '', 14)} ${esc(fmtDate(ex.datetime))}</span>`);
+      if (res.nearest_airport) p.push(`<span class="small muted">${icon('map-pin', '', 14)} ${esc(res.nearest_airport.name)}</span>`);
+      return p;
+    };
+    const draw = (parts) => { box.innerHTML = parts.length ? `<div class="ocr-strip">${parts.join('')}</div>` : ''; };
+    if (!wantOcr || res.ocr?.available === false) { draw(exifParts()); return; }
+    draw([`<span class="small muted">${icon('refresh-cw', '', 14)} ${esc(t('spot.reading_reg'))}</span>`, ...exifParts()]);
+    let r2;
+    try {
+      r2 = await analyzeOcr(file, F('airport').value.trim());
+    } catch (e) {
+      if (imageFile === file) { draw(exifParts()); if (!e.offline) errorToast(e); }
+      return;
+    }
+    if (imageFile !== file) return;
+    const parts = [];
+    const cands = r2.ocr?.candidates || [];
+    if (cands.length) {
+      parts.push(`${icon('scan-text', '', 16)} <span>${esc(t('spot.ocr_found'))}</span>` + cands.slice(0, 4).map((c) => `<button type="button" class="chip" data-reg="${esc(c.registration)}">${flag(c.country)} <span class="mono">${esc(c.registration)}</span></button>`).join(''));
+      if (!F('registration').value) { F('registration').value = cands[0].registration; lookup(); }
+    } else if (r2.ocr?.available) parts.push(`${icon('scan-text', '', 16)} <span class="muted">${esc(t('spot.ocr_none'))}</span>`);
+    draw([...parts, ...exifParts()]);
+    box.querySelectorAll('[data-reg]').forEach((b) => (b.onclick = () => { F('registration').value = b.dataset.reg; lookup(true); }));
+    checkDup();
   }
 
   // ------------------------------------------------------------ remplissage automatique

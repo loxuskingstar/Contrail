@@ -2058,5 +2058,7 @@
 "pdf.g_none": "None",
 "pdf.g_year": "Year",
 "pdf.g_day": "Day",
-"pdf.g_airport": "Place"
+"pdf.g_airport": "Place",
+"spot.reading_reg": "Reading the registration…",
+"bulk.reading_reg": "Reading reg…"
 }

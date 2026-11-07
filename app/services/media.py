@@ -123,6 +123,11 @@ def open_image(data: bytes) -> Image.Image:
     return img
 
 
+def open_lazy(data: bytes) -> Image.Image:
+    """Ouverture sans décoder les pixels : suffit pour lire l'EXIF (bien plus rapide sur une photo de 24 Mpx)."""
+    return Image.open(io.BytesIO(data))
+
+
 def preview_jpeg(data: bytes, max_px: int = 1600) -> bytes:
     """JPEG d'aperçu (orientation corrigée) : pour afficher dans le navigateur une photo qu'il ne sait pas lire (HEIC)."""
     img = ImageOps.exif_transpose(open_image(data))
@@ -314,6 +319,11 @@ def _ocr_rapid(img: Image.Image) -> tuple[list[tuple[str, float]], list[str]]:
                 pieces.append((txt, float(conf)))
                 line.append(txt)
         texts.append("\n".join(line))
+        # Arrêt anticipé : une immatriculation nette, lue avec une forte confiance sur l'image entière, suffit
+        # (les autres cadrages ne servent que si rien de sûr n'a été trouvé) : ≈ 0,6 s au lieu de 2,5 s
+        best = (_aggregate(pieces, texts, len(texts)) or [None])[0]
+        if best and best["score"] >= 1.0 and best.get("conf", 0) >= 0.85:
+            break
     return pieces, texts
 
 
@@ -325,6 +335,7 @@ def _aggregate(pieces: list[tuple[str, float]], texts: list[str], passes: int) -
             a = agg.setdefault(c["registration"], {**c, "score": 0.0, "hits": 0})
             a["score"] += c["score"] * (0.5 + conf / 2)
             a["hits"] += 1
+            a["conf"] = max(a.get("conf", 0.0), conf)
     for txt, conf in pieces:
         add(txt, conf)
     # Lectures coupées en deux boîtes (« F- » puis « GKXL ») : on retente sur les lignes complètes
@@ -366,11 +377,11 @@ def _ocr_tesseract(img: Image.Image) -> list[str]:
     return texts
 
 
-def ocr_registration(data: bytes) -> dict:
+def ocr_registration(data: bytes, img: Image.Image | None = None) -> dict:
     eng = ocr_engine()
     if not eng:
         return {"available": False, "engine": None, "candidates": [], "text": ""}
-    img = open_image(data)
+    img = img or open_image(data)
     if eng == "rapidocr":
         pieces, texts = _ocr_rapid(img)
         if _rapid["failed"]:       # modèles absents ou onnxruntime inutilisable : repli

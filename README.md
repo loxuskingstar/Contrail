@@ -29,6 +29,7 @@
 
 ## Nouveautés des versions 4.x
 
+- **4.4 — Enregistrement plus rapide** : la photo est analysée en deux temps (EXIF et aéroport d'abord, quasi instantanés et sans décoder l'image ; immatriculation ensuite, en arrière-plan), la lecture s'arrête dès qu'une immatriculation nette est trouvée, le moteur OCR et les bases d'aéroports sont préchauffés au démarrage, et les rattrapages de données ne s'exécutent plus qu'une fois par version (démarrage ≈ 30× plus rapide sur 30 000 spots, carte globale plus rapide).
 - **4.3 — Lecture des immatriculations et remplissage** : Tesseract est remplacé par **RapidOCR** (modèles PP-OCR embarqués, 100 % local, sans programme externe) : plusieurs cadrages de la photo, confiance de lecture, validation du format par pays. Le **numéro de série (MSN)** et l'année de construction sont repris de la base OpenSky quand elle est importée (réimportez-la une fois : Réglages > Données).
 - **4.2 — Exports PDF** : un vrai PDF mis en page (couverture, chiffres clés, graphique, classements, photos) pour le **bilan annuel**, la **liste de spots** (avec les filtres de la page, regroupement par année, jour ou lieu), la **fiche d'un spot** et le **carnet de vols**. Format, orientation, couleur d'accent, police, couverture, photos, pied de page et auteur se règlent à chaque export ou une fois pour toutes (Réglages > Données > Exports PDF).
 - **4.1 — Carte globale** : regroupement des lieux proches selon le zoom (disques multicolores = répartition des types), nombre de spots dans les ronds, légende des couleurs et tailles, popups retravaillés, lecture animée par année, trimestre, mois ou semaine (cumulatif ou période seule) et **fonds satellite gratuits** (Esri World Imagery, orthophotos IGN pour la France).
@@ -165,7 +166,7 @@ bash scripts/build-setup.sh
 # Windows → dist/Contrail-<version>-Windows-Setup.exe ; Linux → .deb et .tar.gz ; macOS → .dmg (dans dist/)
 ```
 
-Options (identiques pour les deux scripts) : une version imposée (`-Version 4.3.0` en PowerShell, `bash scripts/build-setup.sh 4.3.0`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
+Options (identiques pour les deux scripts) : une version imposée (`-Version 4.4.0` en PowerShell, `bash scripts/build-setup.sh 4.4.0`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
 
 Un installeur ne se construit que sur son propre système. Pour obtenir les quatre d'un coup (Windows, macOS Apple Silicon et Intel, Linux), poussez un tag `vX.Y.Z` : le workflow GitHub `desktop.yml` les construit, les teste et les publie dans une Release. Détails dans [`desktop/README.md`](desktop/README.md).
 

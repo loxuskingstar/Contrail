@@ -228,8 +228,15 @@ def _spots_map(items):
              f"FROM spotting s LEFT JOIN spot_locations l ON l.id_location = s.location_id "
              f"WHERE {where} ORDER BY s.date DESC", params)
     places: dict[tuple, dict] = {}
+    ap_memo: dict[str, dict | None] = {}      # un seul calcul par aéroport (et non un par spot)
     for r in rows:
-        ap = geo.airport(r["airport"]) if r["airport"] else None
+        code = r["airport"]
+        if code:
+            if code not in ap_memo:
+                ap_memo[code] = geo.airport(code)
+            ap = ap_memo[code]
+        else:
+            ap = None
         if r["location_id"] and r["loc_lat"] is not None:
             lat, lng, kind, name = r["loc_lat"], r["loc_lng"], "location", r["loc_name"]
             key = ("L", r["location_id"])
