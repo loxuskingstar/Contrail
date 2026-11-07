@@ -6,7 +6,7 @@ import { icon } from '../lib/icons.js';
 import { achName } from '../lib/ach.js';
 import { esc, regText, sheet, spotTile, hbars, vbars, emptyState, toast } from '../ui.js';
 
-export const WIDGETS = ['hero', 'quick', 'goals', 'recent', 'on_this_day', 'month_chart', 'top_types', 'achievements', 'watchlist', 'flights', 'map', 'sun'];
+export const WIDGETS = ['hero', 'quick', 'goals', 'recent', 'on_this_day', 'month_chart', 'top_types', 'achievements', 'watchlist', 'flights', 'map', 'sun', 'year_report'];
 
 function greeting() {
   const h = new Date().getHours();
@@ -19,7 +19,7 @@ export async function render(root) {
   root.innerHTML = `
     <header class="page-head"><div><h1>${esc(greeting())}</h1><div class="sub">${esc(t('dash.sub', { n: fmtNum(d.totals.spots), m: fmtNum(d.month) }))}</div></div>
     <div class="actions"><button class="btn-icon glassy" data-custom title="${esc(t('dash.customize'))}">${icon('sliders-horizontal')}</button></div></header>
-    <div class="stack" style="gap:16px" data-widgets></div>`;
+    <div class="stack ${store.settings.dashboard_layout === 'grid' ? 'dash-grid' : ''}" style="gap:16px" data-widgets></div>`;
   const box = root.querySelector('[data-widgets]');
   const cleanups = [];
   for (const w of widgets) {
@@ -31,6 +31,7 @@ export async function render(root) {
     box.append(node);
     if (w === 'map') cleanups.push(await mountMap(node));
     if (w === 'sun') mountSun(node);
+    if (w === 'year_report') mountYear(node);
     if (w === 'goals') node.querySelector('[data-goals]')?.addEventListener('click', (e) => { e.preventDefault(); goalSheet(); });
   }
   if (!d.totals.spots) {
@@ -133,6 +134,8 @@ function renderWidget(w, d) {
     case 'map':
       if (!d.totals.spots) return '';
       return `<div class="card flush"><div class="map" style="height:280px;border-radius:0" data-map></div></div>`;
+    case 'year_report':
+      return `<div class="card" data-year hidden></div>`;
     case 'sun':
       if (!store.mod('locations')) return '';
       return `<div class="card" data-sun hidden><div class="card-title">${esc(t('dash.sun_today'))}<a href="#/locations">${esc(t('nav.locations'))}</a></div><div data-sun-body></div></div>`;
@@ -153,6 +156,21 @@ async function mountMap(node) {
   return () => mp.then((m) => m?.remove());
 }
 
+async function mountYear(node) {
+  const y = new Date().getFullYear();
+  try {
+    const r = await api(`/api/reports/year/${y}`);
+    const box = node.querySelector('[data-year]');
+    const prev = r.previous?.spots;
+    box.innerHTML = `<div class="card-title">${icon('file-text', '', 18)} ${esc(t('report.title', { y }))}<a href="#/reports/${y}">${esc(t('report.open'))} →</a></div>
+      <div class="grid kpis"><div class="kpi"><div class="v">${fmtNum(r.totals.spots)}</div><div class="l">${esc(t('stat.spots'))}${prev ? ` · ${esc(t('report.vs_short', { n: prev, y: y - 1 }))}` : ''}</div></div>
+        <div class="kpi"><div class="v">${fmtNum(r.totals.types)}</div><div class="l">${esc(t('report.k_types'))}</div></div>
+        <div class="kpi"><div class="v">${fmtNum(r.totals.airports)}</div><div class="l">${esc(t('report.k_airports'))}</div></div>
+        <div class="kpi"><div class="v">${fmtNum(r.firsts.types.length)}</div><div class="l">${esc(t('report.new_models'))}</div></div></div>`;
+    box.hidden = false;
+  } catch { /* pas encore de spot cette année */ }
+}
+
 async function mountSun(node) {
   const locs = await api('/api/locations').catch(() => []);
   const useful = locs.filter((l) => l.today?.windows?.length);
@@ -169,6 +187,7 @@ function customize(current) {
   const s = sheet({ title: esc(t('dash.customize')), body: '' });
   const draw = () => {
     s.body.innerHTML = `<p class="muted small" style="margin-bottom:10px">${esc(t('dash.customize_hint'))}</p>
+      <div class="field" style="margin-bottom:10px"><span>${esc(t('dash.layout'))}</span><div class="seg" data-layout>${['stack', 'grid'].map((v) => `<button type="button" data-v="${v}" class="${(store.settings.dashboard_layout || 'stack') === v ? 'on' : ''}">${esc(t('dash.layout_' + v))}</button>`).join('')}</div></div>
       <div class="stack" style="gap:6px">${order.map((w, i) => `<div class="widget-row" draggable="true" data-w="${w}">
         <span class="muted" style="cursor:grab">${icon('grip-vertical', '', 18)}</span>
         <span class="grow" style="font-weight:600">${esc(t(`widget.${w}`))}</span>
@@ -191,8 +210,10 @@ function customize(current) {
         draw();
       });
     });
+    let layout = store.settings.dashboard_layout || 'stack';
+    s.body.querySelectorAll('[data-layout] button').forEach((b) => (b.onclick = () => { layout = b.dataset.v; s.body.querySelectorAll('[data-layout] button').forEach((x) => x.classList.toggle('on', x === b)); }));
     s.body.querySelector('[data-save]').onclick = async () => {
-      await store.saveSettings({ dashboard_widgets: order.filter((w) => enabled.has(w)) });
+      await store.saveSettings({ dashboard_widgets: order.filter((w) => enabled.has(w)), dashboard_layout: layout });
       s.close();
       toast(esc(t('common.saved')), { type: 'success' });
       window.dispatchEvent(new HashChangeEvent('hashchange'));

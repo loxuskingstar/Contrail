@@ -14,9 +14,9 @@ from starlette.middleware.gzip import GZipMiddleware
 from . import auth
 import asyncio
 
-from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs, set_profile, _profile
+from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs, get_settings, set_profile, set_settings, _profile
 from .db import init_db
-from .routers import airports as airports_router, patrols as patrols_router, field, fleets, flights, io, misc, outings as outings_router, share, spots, stats, trash as trash_router, wishes
+from .routers import airports as airports_router, patrols as patrols_router, field, fleets, flights, io, misc, outings as outings_router, reports as reports_router, share, spots, stats, trash as trash_router, wishes
 from .services import collection, gamification, media, refdb, sandbox, scheduler, trash
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
@@ -64,6 +64,20 @@ def _reclassify_fields() -> None:
                 execute(f"UPDATE {table} SET airport=?, place=NULL WHERE place=? AND (airport IS NULL OR airport='')", (a["icao"], r["place"]))
 
 
+def _run_fixups() -> None:
+    """Rattrapages de données (pays, patrouilles, terrains) : exécutés une fois par version de l'application, pas à chaque
+    démarrage. Les règles de classement évoluent d'une version à l'autre ; un spot enregistré ensuite est déjà traité à l'écriture."""
+    if get_settings().get("fixups_version") == APP_VERSION:
+        return
+    for fn, label in ((_backfill_countries, "pays"), (_link_patrols, "patrouilles"), (_reclassify_fields, "terrains")):
+        try:
+            fn()
+        except Exception:  # noqa: BLE001
+            log.exception("Rattrapage « %s » en échec", label)
+            return                         # une nouvelle tentative aura lieu au prochain démarrage
+    set_settings({"fixups_version": APP_VERSION})
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     ensure_dirs()
@@ -74,18 +88,7 @@ async def lifespan(app: FastAPI):
         trash.purge_old()
     except Exception:  # noqa: BLE001
         log.exception("Purge de la corbeille en échec")
-    try:
-        _backfill_countries()
-    except Exception:  # noqa: BLE001
-        log.exception("Rattrapage des pays en échec")
-    try:
-        _link_patrols()
-    except Exception:  # noqa: BLE001
-        log.exception("Rattachement des patrouilles en échec")
-    try:
-        _reclassify_fields()
-    except Exception:  # noqa: BLE001
-        log.exception("Reclassement des terrains en échec")
+    _run_fixups()
     tasks = scheduler.start()
     threading.Thread(target=refdb.compact_file, daemon=True, name="refdb-compact").start()   # allège une ancienne base de référence
     threading.Thread(target=media.backfill_phash, daemon=True, name="phash-backfill").start()   # empreintes des photos déjà enregistrées
@@ -142,7 +145,7 @@ async def guard(request: Request, call_next):
     return response
 
 
-for r in (auth.router, misc.router, spots.router, flights.router, stats.router, fleets.router, field.router, share.router, io.router, wishes.router, trash_router.router, outings_router.router, airports_router.router, patrols_router.router):
+for r in (auth.router, misc.router, spots.router, flights.router, stats.router, fleets.router, field.router, share.router, io.router, wishes.router, trash_router.router, outings_router.router, airports_router.router, patrols_router.router, reports_router.router):
     app.include_router(r)
 
 

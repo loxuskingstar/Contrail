@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
-from ..core import db, execute, get_settings, memo, now_iso, q, q1
+from ..core import db, execute, get_settings, memo, now_iso, q, q1, set_settings
 from ..services import outings as outings_svc, trash, airframes, collection, gamification, geo, media, weather, wishes
 from ..services import actypes
 from ..services import registration as regs
@@ -352,20 +352,72 @@ def check_photo(image: UploadFile = File(...), exclude_id: int | None = Form(Non
     return {"matches": sorted(out, key=lambda m: m["distance"])[:5]}
 
 
+def _ignored_pairs() -> set[str]:
+    return set(get_settings().get("dup_ignored") or [])
+
+
+def _pair_key(a: int, b: int) -> str:
+    return f"{min(a, b)}-{max(a, b)}"
+
+
+def photo_pairs(max_dist: int = PHOTO_DUP_MAX) -> list[tuple[int, dict, dict]]:
+    """Paires de spots aux photos quasi identiques. Deux empreintes de 64 bits à moins de 6 bits d'écart partagent forcément
+    un bloc identique parmi 7 : on ne compare que les empreintes d'un même bloc (≈ linéaire au lieu de quadratique)."""
+    rows = q("SELECT id_spotting id, registration, date, airport, thumb, phash, patrol_id FROM spotting WHERE phash IS NOT NULL ORDER BY id_spotting")
+    nblk = max_dist + 1
+    bounds = [(k * 64 // nblk, (k + 1) * 64 // nblk) for k in range(nblk)]
+    buckets: dict[tuple[int, int], list[int]] = {}
+    vals = []
+    for idx, r in enumerate(rows):
+        try:
+            h = int(r["phash"], 16)
+        except (TypeError, ValueError):
+            vals.append(None)
+            continue
+        vals.append(h)
+        for k, (lo, hi) in enumerate(bounds):
+            buckets.setdefault((k, (h >> lo) & ((1 << (hi - lo)) - 1)), []).append(idx)
+    seen: set[tuple[int, int]] = set()
+    out = []
+    ignored = _ignored_pairs()
+    for members in buckets.values():
+        for x in range(len(members)):
+            for y in range(x + 1, len(members)):
+                a, b = members[x], members[y]
+                if (a, b) in seen:
+                    continue
+                seen.add((a, b))
+                d = (vals[a] ^ vals[b]).bit_count()
+                ra, rb = rows[a], rows[b]
+                if d > max_dist or (ra["patrol_id"] and ra["patrol_id"] == rb["patrol_id"]) or _pair_key(ra["id"], rb["id"]) in ignored:
+                    continue                  # une patrouille partage sa photo : ce n'est pas un doublon
+                out.append((d, ra, rb))
+    out.sort(key=lambda t: (t[0], t[1]["id"]))
+    return out
+
+
 @router.get("/duplicates")
 def photo_duplicates(limit: int = 50):
     """Paires de spots dont les photos sont quasi identiques."""
-    rows = q("SELECT id_spotting id, registration, date, airport, thumb, phash, patrol_id FROM spotting WHERE phash IS NOT NULL ORDER BY id_spotting")
-    vals = [(int(r["phash"], 16), r) for r in rows]
-    pairs = []
-    for i, (a, ra) in enumerate(vals):
-        for b, rb in vals[i + 1:]:
-            d = (a ^ b).bit_count()
-            if d <= PHOTO_DUP_MAX and not (ra["patrol_id"] and ra["patrol_id"] == rb["patrol_id"]):   # une patrouille partage sa photo
-                pairs.append({"distance": d, "a": {k: ra[k] for k in ("id", "registration", "date", "airport", "thumb")},
-                              "b": {k: rb[k] for k in ("id", "registration", "date", "airport", "thumb")}})
-    pairs.sort(key=lambda p: p["distance"])
-    return {"count": len(pairs), "pairs": pairs[:limit]}
+    cols = ("id", "registration", "date", "airport", "thumb")
+    pairs = photo_pairs()
+    return {"count": len(pairs), "pairs": [{"distance": d, "a": {k: ra[k] for k in cols}, "b": {k: rb[k] for k in cols}}
+                                           for d, ra, rb in pairs[:limit]]}
+
+
+class DupPair(BaseModel):
+    a: int
+    b: int
+    undo: bool = False
+
+
+@router.post("/duplicates/ignore")
+def ignore_duplicate(body: DupPair):
+    """« Garder les deux » : la paire n'est plus proposée."""
+    cur = _ignored_pairs()
+    (cur.discard if body.undo else cur.add)(_pair_key(body.a, body.b))
+    set_settings({"dup_ignored": sorted(cur)})
+    return {"ignored": len(cur)}
 
 
 @router.get("/patrol-names")
@@ -982,7 +1034,7 @@ class Bulk(BaseModel):
 
 
 @router.post("/bulk")
-def bulk(body: Bulk):
+def bulk(body: Bulk, bg: BackgroundTasks):
     if not body.ids:
         return {"updated": 0}
     marks = ",".join("?" * len(body.ids))
@@ -998,9 +1050,45 @@ def bulk(body: Bulk):
             else:
                 conn.execute("DELETE FROM spotting_tags WHERE id_spotting=? AND id_tag=?", (i, tag_id))
         conn.commit()
+    elif body.action == "set":
+        return _bulk_set(body.ids, body.value, bg)
     elif body.action == "favorite":
         conn.execute(f"UPDATE spotting SET favorite=? WHERE id_spotting IN ({marks})", [1 if body.value else 0] + body.ids)
         conn.commit()
     else:
         raise HTTPException(400, "unknown_action")
     return {"updated": len(body.ids)}
+
+
+# Champs modifiables en masse (liste blanche) ; « prepare » applique les mêmes règles qu'à l'édition d'un spot
+BULK_FIELDS = ("country", "airport", "place", "flight_type", "owner", "airline_icao", "rating", "aircraft", "aircraft_icao",
+               "manufacturer", "military", "livery", "registration")
+
+
+def _bulk_set(ids: list[int], value: Any, bg: BackgroundTasks) -> dict:
+    vals = {k: v for k, v in (value or {}).items() if k in BULK_FIELDS} if isinstance(value, dict) else {}
+    if not vals:
+        raise HTTPException(400, "nothing_to_set")
+    rows = q(f"SELECT * FROM spotting WHERE id_spotting IN ({','.join('?' * len(ids))})", ids)
+    n = 0
+    for r in rows:
+        v = dict(vals)
+        if r.get("is_patrol"):
+            v.pop("registration", None)             # la clé d'une patrouille « mode simple » est son nom
+            v.pop("country", None)
+            if not v:
+                continue
+        try:
+            out = prepare(v, r)
+        except HTTPException:
+            continue
+        if r.get("is_patrol"):
+            out["country"] = r.get("country")
+        out["updated_at"] = now_iso()
+        execute(f"UPDATE spotting SET {', '.join(f'{k} = ?' for k in out)} WHERE id_spotting = ?", list(out.values()) + [r["id_spotting"]])
+        if not r.get("is_patrol"):
+            _propagate(r["id_spotting"], r.get("patrol_id"), out, v, bg, r)
+        _post_save(r["id_spotting"], out.get("registration", r["registration"]), False,
+                   out.get("date_utc") != r.get("date_utc") or out.get("airport", r["airport"]) != r["airport"], bg)
+        n += 1
+    return {"updated": n}

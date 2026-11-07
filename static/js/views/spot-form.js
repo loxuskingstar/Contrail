@@ -524,7 +524,12 @@ export async function render(root, params, query) {
       fd.append('data', JSON.stringify({ ...data, force }));
       if (imageFile) fd.append('image', imageFile, imageFile.name || 'photo.jpg');
       if (audioFile) fd.append('audio', audioFile, audioFile.name || 'audio.webm');
-      return api(editing ? `/api/spots/${s.id_spotting}` : '/api/spots', { method: editing ? 'PUT' : 'POST', form: fd, query: { force } });
+      const big = (imageFile?.size || 0) > 400 * 1024;      // la progression n'a de sens que pour un vrai fichier
+      const label = btn.innerHTML;
+      const onProgress = big ? (r, phase) => { btn.textContent = phase === 'upload' ? t('spot.sending', { p: Math.round(r * 100) }) : t('spot.processing'); } : undefined;
+      try {
+        return await api(editing ? `/api/spots/${s.id_spotting}` : '/api/spots', { method: editing ? 'PUT' : 'POST', form: fd, query: { force }, onProgress });
+      } finally { btn.innerHTML = label; }
     };
     try {
       let res;

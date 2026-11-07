@@ -169,6 +169,14 @@ def backfill_phash(limit: int = 5000) -> int:
     return n
 
 
+def _effort() -> int:
+    """Effort d'encodage WebP (0 = très rapide … 6 = le plus compact). 2 par défaut : ~3× plus rapide que 4, fichiers ~10 % plus gros."""
+    try:
+        return max(0, min(6, int(get_setting("image_effort") if get_setting("image_effort") is not None else 2)))
+    except (TypeError, ValueError):
+        return 2
+
+
 def save_image(data: bytes, original_name: str = "") -> dict:
     img = open_image(data)
     exif = extract_exif(img)
@@ -185,14 +193,17 @@ def save_image(data: bytes, original_name: str = "") -> dict:
     full = DIRS["images"] / rel
     full.parent.mkdir(parents=True, exist_ok=True)
 
-    main = img.copy()
-    main.thumbnail((max_px, max_px), Image.Resampling.LANCZOS)
-    main.save(full, "WEBP", quality=quality, method=5)
+    # Une seule réduction (reducing_gap : décodage/échelle en deux temps, bien plus rapide sur 24 Mpx), la vignette
+    # est tirée de la version réduite plutôt que de l'original.
+    main = img if max(img.size) <= max_px else img.copy()
+    main.thumbnail((max_px, max_px), Image.Resampling.LANCZOS, reducing_gap=2.0)
+    effort = _effort()
+    main.save(full, "WEBP", quality=quality, method=effort)
 
-    th = img.copy()
-    th.thumbnail((THUMB_PX, THUMB_PX), Image.Resampling.LANCZOS)
+    th = main.copy()
+    th.thumbnail((THUMB_PX, THUMB_PX), Image.Resampling.LANCZOS, reducing_gap=2.0)
     th_rel = f"{stem}.webp"
-    th.save(DIRS["thumbs"] / th_rel, "WEBP", quality=78, method=4)
+    th.save(DIRS["thumbs"] / th_rel, "WEBP", quality=78, method=min(effort, 4))
 
     if get_setting("keep_originals"):
         ext = Path(original_name).suffix.lower() or ".jpg"

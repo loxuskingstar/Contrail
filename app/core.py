@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-APP_VERSION = "3.0.0"
+APP_VERSION = "4.0.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -220,6 +220,9 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 10000")
+    conn.execute("PRAGMA synchronous = NORMAL")      # sûr en mode WAL, évite un fsync à chaque validation
+    conn.execute("PRAGMA temp_store = MEMORY")
+    conn.execute("PRAGMA cache_size = -32768")        # 32 Mo de cache de pages par connexion
     from app.services import operators
     operators.register(conn)
     from app.services import registration as _regs
@@ -279,14 +282,24 @@ def execute(sql: str, params: tuple | list | dict = ()) -> sqlite3.Cursor:
 DEFAULT_SETTINGS: dict[str, Any] = {
     "theme": "auto",               # auto | light | dark
     "accent": "#3b82f6",
+    "ui_density": "comfortable",   # compact | comfortable | spacious
+    "ui_radius": "round",          # square | soft | round | pill
+    "ui_font": "inter",            # inter | system | serif | mono
+    "ui_scale": 100,               # taille du texte en % (85 à 130)
+    "reduce_motion": False,
+    "chart_style": "accent",       # accent | rainbow | mono
+    "stats_hidden": [],            # cartes de statistiques masquées (clés i18n du titre)
+    "nav_hidden": [],              # entrées du menu masquées (href)
+    "nav_compact": False,          # menu latéral réduit aux icônes
     "language": "fr",
     "units": "metric",             # metric | imperial (distances vols)
     "home_airports": [],           # ex. ["LFBO"]
     "default_airport": "",
     "patrol_mode": "simple",       # simple : une patrouille = un spot (nommé) | detailed : un spot par avion
+    "dashboard_layout": "stack",   # stack : une colonne | grid : deux colonnes sur grand écran
     "dashboard_widgets": [
         "hero", "quick", "goals", "recent", "on_this_day", "top_types",
-        "achievements", "month_chart", "watchlist",
+        "achievements", "month_chart", "watchlist", "year_report",
     ],
     "modules": {
         "flights": True, "fleets": True, "radar": True, "weather": True,
@@ -299,6 +312,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "keep_originals": False,
     "image_max_px": 2560,
     "image_quality": 85,
+    "image_effort": 2,
+    "fixups_version": "",
+    "dup_ignored": [],
     "backup_interval_hours": 24,   # 0 = désactivé
     "backup_keep": 7,
     "backup_include_media": False,

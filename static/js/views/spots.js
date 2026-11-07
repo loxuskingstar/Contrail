@@ -31,7 +31,7 @@ export async function render(root, _p, query) {
 
   root.innerHTML = `
     <header class="page-head"><div><h1>${esc(t('nav.spots'))}</h1><div class="sub" data-count>&nbsp;</div></div>
-      <div class="actions"><a class="btn primary hide-sm" href="#/spots/new">${icon('plus', '', 18)} ${esc(t('spot.new'))}</a>
+      <div class="actions"><a class="btn hide-sm" href="#/bulk">${icon('upload', '', 18)} ${esc(t('bulk.import_btn'))}</a><a class="btn primary hide-sm" href="#/spots/new">${icon('plus', '', 18)} ${esc(t('spot.new'))}</a>
       <button class="btn-icon glassy" data-more>${icon('ellipsis')}</button></div></header>
     <div class="stack" style="gap:12px;margin-bottom:14px">
       <button type="button" class="btn sm scope-btn" data-scope style="align-self:flex-start"></button>
@@ -194,6 +194,7 @@ export async function render(root, _p, query) {
     if (!bar) { bar = document.createElement('div'); bar.className = 'sel-bar glass'; document.body.append(bar); }
     bar.innerHTML = `<b>${esc(t('spots.selected', { n: selected.size }))}</b>
       <button class="btn-icon" data-a="tag" title="${esc(t('spots.add_tag'))}">${icon('tag')}</button>
+      <button class="btn-icon" data-a="edit" title="${esc(t('bulk.edit'))}">${icon('pencil')}</button>
       <button class="btn-icon" data-a="fav" title="${esc(t('spot.favorite'))}">${icon('star')}</button>
       <button class="btn-icon" data-a="dl" title="${esc(t('export.photos'))}">${icon('download')}</button>
       <button class="btn-icon" data-a="del" title="${esc(t('common.delete'))}" style="color:var(--danger)">${icon('trash-2')}</button>
@@ -201,10 +202,45 @@ export async function render(root, _p, query) {
     bar.querySelector('[data-a=x]').onclick = () => { selecting = false; selected.clear(); selBar(); reload(true); };
     bar.querySelector('[data-a=dl]').onclick = () => { location.href = `/api/export/photos.zip?ids=${[...selected].join(',')}`; };
     bar.querySelector('[data-a=fav]').onclick = () => bulk('favorite', true);
+    bar.querySelector('[data-a=edit]').onclick = bulkEdit;
     bar.querySelector('[data-a=del]').onclick = async () => {
       if (await confirmDialog(esc(t('spots.confirm_bulk_delete', { n: selected.size })), { danger: true, ok: t('common.delete') })) bulk('delete');
     };
     bar.querySelector('[data-a=tag]').onclick = (e) => menu(e.currentTarget, (store.tags || []).map((tg) => ({ icon: 'tag', label: tg.name, onClick: () => bulk('add_tag', tg.id_tag) })));
+  }
+
+  // Modification en masse : seuls les champs cochés sont appliqués aux spots sélectionnés
+  function bulkEdit() {
+    if (!selected.size) return;
+    const FT = ['commercial', 'cargo', 'test', 'delivery', 'ferry', 'military', 'business', 'general', 'helicopter', 'medical', 'training', 'airshow', 'government', 'museum', 'display', 'storage', 'maintenance', 'scrapyard', 'other'];
+    const rows = [
+      ['country', 'spot.country', '<select name="country"><option value="">—</option></select>'],
+      ['airport', 'spot.airport', '<input name="airport" maxlength="10" autocapitalize="characters" spellcheck="false">'],
+      ['place', 'spot.place', '<input name="place" maxlength="80">'],
+      ['owner', 'spot.owner', '<input name="owner" maxlength="80">'],
+      ['aircraft', 'spot.aircraft', '<input name="aircraft" maxlength="80">'],
+      ['flight_type', 'spot.flight_type', `<select name="flight_type">${FT.map((f) => `<option value="${f}">${esc(t('ftype.' + f))}</option>`).join('')}</select>`],
+      ['livery', 'spot.livery', '<input name="livery" maxlength="80">'],
+      ['rating', 'spot.rating', '<select name="rating">' + [1, 2, 3, 4, 5].map((n) => `<option value="${n}">${'★'.repeat(n)}</option>`).join('') + '</select>'],
+      ['military', 'spot.military', `<select name="military"><option value="1">${esc(t('common.yes'))}</option><option value="0">${esc(t('common.no'))}</option></select>`],
+    ];
+    const sh = sheet({ title: esc(t('bulk.edit_title', { n: selected.size })), body: `<form class="stack" autocomplete="off"><p class="small muted">${esc(t('bulk.edit_hint'))}</p>
+      ${rows.map(([k, lbl, ctl]) => `<div class="row" style="gap:10px;align-items:center"><label class="row" style="gap:8px;width:46%;margin:0"><input type="checkbox" data-use="${k}"> <span class="small">${esc(t(lbl))}</span></label><div class="grow" data-ctl="${k}">${ctl}</div></div>`).join('')}
+      <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close>${esc(t('common.cancel'))}</button><button class="btn primary">${esc(t('bulk.apply'))}</button></div></form>` });
+    const form = sh.body.querySelector('form');
+    sh.body.querySelector('[data-close]').onclick = sh.close;
+    api('/api/spots/countries').then((codes) => {
+      form.elements.country.innerHTML = '<option value="">' + esc(t('spot.country_auto')) + '</option>' + codes.map((c) => ({ c, n: countryName(c) })).sort((x, y) => x.n.localeCompare(y.n)).map(({ c, n }) => `<option value="${esc(c)}">${flag(c)} ${esc(n)}</option>`).join('');
+    }).catch(() => {});
+    form.querySelectorAll('[data-ctl] input, [data-ctl] select').forEach((el) => el.addEventListener('input', () => { form.querySelector(`[data-use=${el.name}]`).checked = true; }));
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const value = {};
+      form.querySelectorAll('[data-use]:checked').forEach((c) => { const el = form.elements[c.dataset.use]; value[c.dataset.use] = el.value; });
+      if (!Object.keys(value).length) return;
+      sh.close();
+      await bulk('set', value);
+    };
   }
 
   async function bulk(action, value) {

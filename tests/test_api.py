@@ -1435,3 +1435,66 @@ def test_patrol_page_passages_and_seen_badge(client):
     assert client.post(f"/api/patrols/{pid}/detach/{other['id_spotting']}").status_code == 200
     assert client.get(f"/api/spots/{other['id_spotting']}").json()["patrol_id"] is None
     assert client.get("/api/patrols/999999").status_code == 404
+
+
+def test_bulk_set_and_photo_duplicates(client):
+    def post(d, color=None):
+        files = {"image": ("p.jpg", jpeg_bytes(color), "image/jpeg")} if color else None
+        return client.post("/api/spots", data={"data": json.dumps(d)}, files=files).json()["spot"]
+    a = post({"registration": "F-TBK01", "airport": "LFBO", "date": "2032-01-01T10:00", "aircraft": "Airbus A320"})
+    b = post({"registration": "F-TBK02", "airport": "LFBO", "date": "2032-01-02T10:00", "aircraft": "Airbus A320"})
+    r = client.post("/api/spots/bulk", json={"ids": [a["id_spotting"], b["id_spotting"]], "action": "set",
+                                              "value": {"owner": "Compagnie Test", "flight_type": "test", "country": "be", "evil": "x"}})
+    assert r.status_code == 200 and r.json()["updated"] == 2
+    got = client.get(f"/api/spots/{b['id_spotting']}").json()
+    assert got["owner"] == "Compagnie Test" and got["flight_type"] == "test" and got["country"] == "BE"
+    assert client.post("/api/spots/bulk", json={"ids": [a["id_spotting"]], "action": "set", "value": {"evil": 1}}).status_code == 400
+    # renommer une immatriculation en masse recalcule le pays
+    client.post("/api/spots/bulk", json={"ids": [a["id_spotting"]], "action": "set", "value": {"registration": "d-tbk9", "country": ""}})
+    assert client.get(f"/api/spots/{a['id_spotting']}").json()["registration"] == "D-TBK9"
+    # deux spots avec la même photo : paire de doublons, ignorable
+    c1 = post({"registration": "F-TBK11", "airport": "LFBO", "date": "2032-02-01T10:00"}, (13, 77, 201))
+    c2 = post({"registration": "F-TBK12", "airport": "LFBO", "date": "2032-02-02T10:00"}, (13, 77, 201))
+    ids = {c1["id_spotting"], c2["id_spotting"]}
+    pairs = client.get("/api/spots/duplicates", params={"limit": 100000}).json()["pairs"]
+    assert any({p["a"]["id"], p["b"]["id"]} == ids for p in pairs)
+    assert client.post("/api/spots/duplicates/ignore", json={"a": c2["id_spotting"], "b": c1["id_spotting"]}).status_code == 200
+    pairs = client.get("/api/spots/duplicates", params={"limit": 100000}).json()["pairs"]
+    assert not any({p["a"]["id"], p["b"]["id"]} == ids for p in pairs)
+
+
+def test_year_report(client):
+    def post(d):
+        return client.post("/api/spots", data={"data": json.dumps(d)}).json()["spot"]
+    post({"registration": "F-TRP01", "aircraft": "Zlin Z-142", "aircraft_icao": "Z142", "owner": "Air Rapport", "airport": "LFBO", "date": "2061-03-05T10:00"})
+    post({"registration": "F-TRP02", "aircraft": "ATR 72", "aircraft_icao": "AT76", "airport": "LFPG", "date": "2061-03-05T12:00"})
+    post({"registration": "F-TRP03", "aircraft": "ATR 72", "aircraft_icao": "AT76", "airport": "LFPG", "date": "2061-07-01T12:00"})
+    post({"registration": "F-TRP00", "aircraft": "ATR 72", "aircraft_icao": "AT76", "airport": "LFPG", "date": "2060-12-01T12:00"})
+    assert "2061" in client.get("/api/reports/years").json()["years"]
+    r = client.get("/api/reports/year/2061").json()
+    assert r["totals"]["spots"] == 3 and r["totals"]["regs"] == 3 and r["totals"]["days"] == 2
+    assert r["previous"]["spots"] == 1 and r["months"][2] == 2 and r["months"][6] == 1
+    assert [t["k"] for t in r["firsts"]["types"]] == ["Z142"]            # l'ATR 72 était déjà vu en 2062
+    assert r["best_day"]["day"] == "2061-03-05" and r["best_day"]["n"] == 2
+    assert r["top"]["airports"][0]["k"] == "LFPG" and r["top"]["types"][0]["n"] == 2
+    assert client.get("/api/reports/year/1999").status_code == 404
+
+
+def test_ui_customisation_settings_persist(client):
+    r = client.put("/api/settings", json={"ui_density": "compact", "ui_radius": "pill", "ui_font": "serif", "ui_scale": 110,
+                                          "chart_style": "rainbow", "stats_hidden": ["stats.top_regs"], "nav_hidden": ["#/map"],
+                                          "nav_compact": True, "dashboard_layout": "grid"}).json()
+    assert r["ui_density"] == "compact" and r["ui_scale"] == 110 and r["stats_hidden"] == ["stats.top_regs"] and r["dashboard_layout"] == "grid"
+    got = client.get("/api/settings").json()
+    assert got["nav_hidden"] == ["#/map"] and got["nav_compact"] is True
+    client.put("/api/settings", json={"ui_density": "comfortable", "ui_radius": "round", "ui_font": "inter", "ui_scale": 100,
+                                      "chart_style": "accent", "stats_hidden": [], "nav_hidden": [], "nav_compact": False, "dashboard_layout": "stack"})
+
+
+def test_front_lint_clean():
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    p = subprocess.run([sys.executable, str(root / "scripts" / "lint_front.py")], capture_output=True, text=True)
+    assert p.returncode == 0, p.stdout

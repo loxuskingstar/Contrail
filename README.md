@@ -25,6 +25,18 @@
 
 ---
 
+## Nouveautés de la version 4.0
+
+- **Enregistrement plus rapide** : encodage WebP allégé (réglage « Encodage des photos »), vignette tirée de la version réduite, barre de progression à l'envoi.
+- **Import en lot** (`#/bulk`) : plusieurs photos d'un coup, date, aéroport et immatriculation (OCR) préremplis, vérification avant enregistrement.
+- **Carte globale** (`#/map`) : tous les lieux, période réglable et lecture animée année par année.
+- **Bilans annuels** (`#/reports`) : chiffres, premières, classements, meilleures photos, impression en PDF ; widget d'accueil « Bilan de l'année ».
+- **Doublons de photos** (`#/duplicates`) : détection accélérée, suppression ou « garder les deux ».
+- **Modification en masse** depuis la sélection de la liste des spots (pays, aéroport, exploitant, type de vol, note, immatriculation…).
+- **Patrouilles** : page dédiée, passages, avions identifiés, fusion, renommage, badge « Patrouille revue ».
+- **Personnalisation** (Réglages > Apparence) : densité, arrondis, police, taille du texte, style des graphiques, animations, menu latéral compact et entrées masquables, disposition de l'accueil, cartes de statistiques masquables.
+- **Fiabilité** : rattrapages de données exécutés une fois par version, contrôle statique du front (`scripts/lint_front.py`), test de fumée navigateur (`tests/e2e_smoke.py`), CI GitHub (`.github/workflows/tests.yml`).
+
 ## Fonctionnalités
 
 ### Spotting
