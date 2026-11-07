@@ -1704,5 +1704,14 @@
 "fleet.src_user": "corrigé par toi",
 "fleet.src_curated": "effectif corrigé",
 "fleet.src_db": "base de référence",
-"fleet.none": "Aucun type dans ta collection pour l'instant."
+"fleet.none": "Aucun type dans ta collection pour l'instant.",
+"tags.search": "Rechercher une étiquette…",
+"tags.search_new": "Rechercher ou créer une étiquette…",
+"tags.create": "Créer « {name} »",
+"tags.none_selected": "Aucune étiquette choisie",
+"tags.no_match": "Aucune étiquette ne correspond",
+"tags.clear": "Tout retirer",
+"tags.match_all": "Toutes les étiquettes",
+"tags.match_any": "Au moins une",
+"tags.or": "ou"
 }

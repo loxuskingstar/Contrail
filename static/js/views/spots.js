@@ -3,11 +3,12 @@ import { api, mediaUrl } from '../api.js';
 import { store } from '../app.js';
 import { t, fmtNum, fmtDate, countryName, flag } from '../i18n.js';
 import { icon } from '../lib/icons.js';
+import { tagPicker } from '../lib/fields.js';
 import { esc, sheet, spotRow, spotTile, emptyState, confirmDialog, toast, errorToast, undoToast, enableSwipe, menu, debounce, $ } from '../ui.js';
 
 const PAGE = 60;
 const SCOPE_KEY = 'contrail.spotsScope';
-const FILTER_KEYS = ['search', 'tag', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'daytime', 'weather', 'wind', 'sort'];
+const FILTER_KEYS = ['search', 'tag', 'tag_mode', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'daytime', 'weather', 'wind', 'sort'];
 
 export async function render(root, _p, query) {
   const filters = Object.fromEntries(FILTER_KEYS.filter((k) => query[k] !== undefined && query[k] !== '').map((k) => [k, query[k]]));
@@ -84,9 +85,12 @@ export async function render(root, _p, query) {
     const box = root.querySelector('[data-active]');
     const chips = [];
     for (const [k, v] of Object.entries(filters)) {
-      if (k === 'search' || k === 'sort' || k === 'airport' || k === 'place') continue;   // portés par le sélecteur de lieu
+      if (k === 'search' || k === 'sort' || k === 'airport' || k === 'place' || k === 'tag_mode') continue;   // portés par le sélecteur de lieu / d'étiquettes
       let label = v;
-      if (k === 'tag') label = store.tags?.find((x) => String(x.id_tag) === String(v))?.name || v;
+      if (k === 'tag') {
+        const names = String(v).split(',').map((id) => store.tags?.find((x) => String(x.id_tag) === id.trim())?.name || id);
+        label = names.join(filters.tag_mode === 'any' ? ` ${t('tags.or')} ` : ' + ');
+      }
       if (k === 'country') label = `${flag(v)} ${countryName(v)}`;
       if (['special', 'favorite', 'has_photo', 'has_audio', 'unknown', 'rare'].includes(k)) label = t(`spots.f_${k}`);
       if (['daytime', 'weather', 'wind'].includes(k)) label = t(`f.${k}.${v}`);
@@ -359,7 +363,7 @@ export async function render(root, _p, query) {
 async function shareGallery(filters) {
   const { createShareFlow } = await import('./shares.js');
   let target = 'all';
-  for (const k of ['tag', 'airport', 'year', 'type', 'airline', 'registration']) if (filters[k]) { target = `${k}:${filters[k]}`; break; }
+  for (const k of ['tag', 'airport', 'year', 'type', 'airline', 'registration']) if (filters[k]) { target = `${k}:${filters[k]}${k === 'tag' && filters.tag_mode === 'any' ? ';any' : ''}`; break; }
   if (!filters.tag && filters.special) target = 'special:1';
   if (filters.favorite) target = 'favorite:1';
   createShareFlow({ kind: 'gallery', target });
@@ -372,7 +376,8 @@ async function openFilters(filters, onApply) {
   const opt = (arr, cur, label = (v) => v) => `<option value="">${esc(t('common.all'))}</option>` + arr.map((v) => `<option value="${esc(v)}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(label(v))}</option>`).join('');
   const s = sheet({ title: esc(t('spots.filters')), body: `
     <div class="stack">
-      ${tags.length ? `<div class="field"><span>${esc(t('spot.tags'))}</span><div class="chips">${tags.map((tg) => `<button class="chip ${String(f.tag) === String(tg.id_tag) ? 'on' : ''}" data-tag="${tg.id_tag}"><span class="sw" style="background:${esc(tg.color)}"></span>${esc(tg.name)}</button>`).join('')}</div></div>` : ''}
+      ${tags.length ? `<div class="field"><span>${esc(t('spot.tags'))}</span><div data-tagsel></div>
+        <div class="seg" data-tagmode style="display:none;margin-top:6px"><button type="button" data-m="all">${esc(t('tags.match_all'))}</button><button type="button" data-m="any">${esc(t('tags.match_any'))}</button></div></div>` : ''}
       <div class="field-row">
         <label class="field"><span>${esc(t('spot.airport'))}</span><select data-k="airport">${opt(facets.airports, f.airport)}</select></label>
         ${(facets.places || []).length ? `<label class="field"><span>${esc(t('spot.place'))}</span><select data-k="place">${opt(facets.places, f.place)}</select></label>` : ''}
@@ -402,11 +407,20 @@ async function openFilters(filters, onApply) {
       </div>
       <div class="row" style="justify-content:space-between"><button class="btn ghost" data-reset>${esc(t('spots.clear_filters'))}</button><button class="btn primary" data-apply>${esc(t('common.apply'))}</button></div>
     </div>` });
-  s.body.querySelectorAll('[data-tag]').forEach((b) => (b.onclick = () => {
-    const on = String(f.tag) === b.dataset.tag;
-    s.body.querySelectorAll('[data-tag]').forEach((x) => x.classList.remove('on'));
-    if (on) delete f.tag; else { f.tag = b.dataset.tag; b.classList.add('on'); }
-  }));
+  if (tags.length) {
+    const ids = String(f.tag || '').split(',').filter(Boolean);
+    const modeBox = s.body.querySelector('[data-tagmode]');
+    const syncMode = (n) => {
+      modeBox.style.display = n > 1 ? '' : 'none';
+      modeBox.querySelectorAll('[data-m]').forEach((b) => b.classList.toggle('on', b.dataset.m === (f.tag_mode === 'any' ? 'any' : 'all')));
+    };
+    tagPicker(s.body.querySelector('[data-tagsel]'), tags, tags.filter((tg) => ids.includes(String(tg.id_tag))), {
+      allowNew: false,
+      onChange: (sel) => { if (sel.length) f.tag = sel.map((x) => x.id_tag).join(','); else { delete f.tag; delete f.tag_mode; } syncMode(sel.length); },
+    });
+    modeBox.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => { if (b.dataset.m === 'any') f.tag_mode = 'any'; else delete f.tag_mode; syncMode(2); }));
+    syncMode(ids.length);
+  }
   s.body.querySelector('[data-reset]').onclick = () => { for (const k of Object.keys(filters)) if (k !== 'search') delete filters[k]; s.close(); onApply(); };
   s.body.querySelector('[data-apply]').onclick = () => {
     s.body.querySelectorAll('[data-k]').forEach((sel) => { if (sel.value) f[sel.dataset.k] = sel.value; else delete f[sel.dataset.k]; });

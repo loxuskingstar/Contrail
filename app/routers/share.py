@@ -72,7 +72,10 @@ def _gallery_filter(target: str | None) -> dict:
     f: dict = {}
     if target and ":" in target:
         k, v = target.split(":", 1)
-        if k in ("tag", "airport", "year", "type", "airline", "registration"):
+        if k == "tag":
+            v, _, mode = v.partition(";")      # « 3,5 » (toutes) ou « 3,5;any » (au moins une)
+            f["tag"], f["tag_mode"] = v, "any" if mode == "any" else "all"
+        elif k in ("airport", "year", "type", "airline", "registration"):
             f[k] = v
         elif k == "special":
             f["special"] = True

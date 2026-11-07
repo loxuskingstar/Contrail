@@ -1704,5 +1704,14 @@
 "fleet.src_user": "fijado por ti",
 "fleet.src_curated": "cifra corregida",
 "fleet.src_db": "base de referencia",
-"fleet.none": "Aún no hay ningún tipo en tu colección."
+"fleet.none": "Aún no hay ningún tipo en tu colección.",
+"tags.search": "Buscar una etiqueta…",
+"tags.search_new": "Buscar o crear una etiqueta…",
+"tags.create": "Crear «{name}»",
+"tags.none_selected": "Ninguna etiqueta elegida",
+"tags.no_match": "Ninguna etiqueta coincide",
+"tags.clear": "Quitar todas",
+"tags.match_all": "Todas las etiquetas",
+"tags.match_any": "Al menos una",
+"tags.or": "o"
 }

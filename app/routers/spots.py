@@ -100,9 +100,15 @@ def build_filters(f: dict) -> tuple[str, list]:
     if f.get("airline"):
         where.append("opg(s.airline_icao, s.owner) = ?")
         params.append(f["airline"])
-    if f.get("tag"):
-        where.append("EXISTS (SELECT 1 FROM spotting_tags st WHERE st.id_spotting = s.id_spotting AND st.id_tag = ?)")
-        params.append(int(f["tag"]))
+    tag_ids = sorted({int(x) for x in re.findall(r"\d+", str(f.get("tag") or ""))})
+    if tag_ids:
+        if f.get("tag_mode") == "any":          # au moins une des étiquettes
+            where.append(f"EXISTS (SELECT 1 FROM spotting_tags st WHERE st.id_spotting = s.id_spotting AND st.id_tag IN ({','.join('?' * len(tag_ids))}))")
+            params.extend(tag_ids)
+        else:                                   # toutes les étiquettes (par défaut)
+            for tid in tag_ids:
+                where.append("EXISTS (SELECT 1 FROM spotting_tags st WHERE st.id_spotting = s.id_spotting AND st.id_tag = ?)")
+                params.append(tid)
     if f.get("year"):
         where.append("substr(s.date,1,4) = ?")
         params.append(str(f["year"]))
@@ -186,7 +192,7 @@ LIST_COLS = ("s.id_spotting, s.registration, s.aircraft, s.aircraft_icao, s.owne
 
 @router.get("")
 def list_spots(
-    search: str = "", tag: int | None = None, airport: str = "", place: str = "", type: str = "", airline: str = "",
+    search: str = "", tag: str = "", tag_mode: str = "all", airport: str = "", place: str = "", type: str = "", airline: str = "",
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
@@ -203,7 +209,7 @@ def list_spots(
 
 @router.get("/map")
 def spots_map(
-    search: str = "", tag: int | None = None, airport: str = "", place: str = "", type: str = "", airline: str = "",
+    search: str = "", tag: str = "", tag_mode: str = "all", airport: str = "", place: str = "", type: str = "", airline: str = "",
     registration: str = "", country: str = "", year: str = "", month: str = "", flight_type: str = "",
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",

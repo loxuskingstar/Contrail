@@ -1364,3 +1364,15 @@ def test_special_variants_are_new_models(client):
     assert "first_type" not in badges(c)
     ids = {s["id_spotting"] for s in client.get("/api/spots", params={"type": "MRTT", "year": 2048}).json()["items"]}
     assert ids == {b["id_spotting"]}
+
+
+def test_multi_tag_filter(client):
+    mk = lambda reg, tags: client.post("/api/spots", data={"data": json.dumps({"registration": reg, "date": "2049-02-01", "tags": tags})}).json()["spot"]["id_spotting"]
+    a, b, c = mk("F-ZTG1", ["zt-alpha", "zt-beta"]), mk("F-ZTG2", ["zt-alpha"]), mk("F-ZTG3", ["zt-beta"])
+    ids = {t["name"]: t["id_tag"] for t in client.get("/api/tags").json()}
+    both = f"{ids['zt-alpha']},{ids['zt-beta']}"
+    get = lambda **p: {s["id_spotting"] for s in client.get("/api/spots", params={"year": 2049, **p}).json()["items"]}
+    assert get(tag=str(ids["zt-alpha"])) == {a, b}
+    assert get(tag=both) == {a}                                  # toutes les étiquettes
+    assert get(tag=both, tag_mode="any") == {a, b, c}            # au moins une
+    assert client.get("/api/spots/map", params={"tag": both}).status_code == 200

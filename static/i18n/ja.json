@@ -1533,5 +1533,14 @@
 "fleet.src_user": "手動設定",
 "fleet.src_curated": "補正済み",
 "fleet.src_db": "参照データベース",
-"fleet.none": "コレクションに機種がまだありません。"
+"fleet.none": "コレクションに機種がまだありません。",
+"tags.search": "タグを検索…",
+"tags.search_new": "タグを検索または作成…",
+"tags.create": "「{name}」を作成",
+"tags.none_selected": "タグが選択されていません",
+"tags.no_match": "一致するタグがありません",
+"tags.clear": "すべて解除",
+"tags.match_all": "すべてのタグ",
+"tags.match_any": "いずれか",
+"tags.or": "または"
 }

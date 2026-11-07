@@ -1704,5 +1704,14 @@
 "fleet.src_user": "set by you",
 "fleet.src_curated": "corrected figure",
 "fleet.src_db": "reference database",
-"fleet.none": "No type in your collection yet."
+"fleet.none": "No type in your collection yet.",
+"tags.search": "Search a tag…",
+"tags.search_new": "Search or create a tag…",
+"tags.create": "Create “{name}”",
+"tags.none_selected": "No tag selected",
+"tags.no_match": "No tag matches",
+"tags.clear": "Clear all",
+"tags.match_all": "All tags",
+"tags.match_any": "At least one",
+"tags.or": "or"
 }
