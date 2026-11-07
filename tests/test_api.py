@@ -1376,3 +1376,25 @@ def test_multi_tag_filter(client):
     assert get(tag=both) == {a}                                  # toutes les étiquettes
     assert get(tag=both, tag_mode="any") == {a, b, c}            # au moins une
     assert client.get("/api/spots/map", params={"tag": both}).status_code == 200
+
+
+def test_aircraft_joins_simple_patrol_by_name(client):
+    post = lambda d: client.post("/api/spots", data={"data": json.dumps({"date": "2050-03-01", **d})}).json()["spot"]
+    put = lambda i, d: client.put(f"/api/spots/{i}", data={"data": json.dumps(d)}).json()["spot"]
+    simple = post({"patrol": {"simple": True, "name": "Équipe Zéphyr", "size": 7}})
+    assert simple["is_patrol"] and simple["patrol_id"]
+    # avion identifié après coup, avec le même nom de groupe (casse et accents ignorés)
+    a = post({"registration": "F-ZPA1", "patrol": {"name": "equipe zephyr", "members": []}})
+    assert a["patrol_id"] == simple["patrol_id"]
+    b = post({"registration": "F-ZPB1", "date": "2050-03-09", "patrol": {"name": "Équipe Zéphyr", "members": [{"registration": "F-ZPB2"}]}})
+    assert b["patrol_id"] == simple["patrol_id"]
+    ids = {s["id_spotting"] for s in client.get("/api/spots", params={"patrol": simple["patrol_id"]}).json()["items"]}
+    assert {simple["id_spotting"], a["id_spotting"], b["id_spotting"]} <= ids and len(ids) == 4
+    # une modification sur un avion ne réécrit pas les autres photos de la patrouille
+    put(a["id_spotting"], {"date": "2050-04-01", "description": "autre jour"})
+    assert client.get(f"/api/spots/{b['id_spotting']}").json()["date"].startswith("2050-03-09")
+    # la patrouille simple liste ses avions identifiés ; l'index indique où l'avion sera rattaché
+    detail = client.get(f"/api/spots/{simple['id_spotting']}").json()
+    assert {m["registration"] for m in detail["patrol_members"]} >= {"F-ZPA1", "F-ZPB1", "F-ZPB2"}
+    idx = {p["name"]: p for p in client.get("/api/spots/patrol-index").json()}
+    assert idx["Équipe Zéphyr"]["simple"] == 1 and idx["Équipe Zéphyr"]["n"] == 4

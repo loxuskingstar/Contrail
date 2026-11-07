@@ -1542,5 +1542,9 @@
 "tags.clear": "すべて解除",
 "tags.match_all": "すべてのタグ",
 "tags.match_any": "いずれか",
-"tags.or": "または"
+"tags.or": "または",
+"patrol.link_simple": "シンプルモードで登録済みの編隊「{name}」に追加されます（{n}件）。",
+"patrol.link_existing": "編隊「{name}」に追加されます（{n}件）。",
+"patrol.link_new": "新しい編隊：機体はこの名前でまとめられます。",
+"patrol.identified": "識別済みの機体"
 }

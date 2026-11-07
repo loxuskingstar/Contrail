@@ -35,6 +35,24 @@ def _backfill_countries() -> None:
             execute("UPDATE spotting SET country=? WHERE id_spotting=?", (c, r["id"]))
 
 
+def _link_patrols() -> None:
+    """Avions identifiés après coup sous le nom d'une patrouille saisie en mode simple : ils la rejoignent
+    (même nom, accents et casse ignorés), pour compter dans ses vues."""
+    from .core import execute, q
+    from .services import registration as regs
+    simple: dict[str, int] = {}
+    for r in q("SELECT DISTINCT p.id_patrol id, p.name FROM patrols p JOIN spotting s ON s.patrol_id = p.id_patrol "
+               "WHERE s.is_patrol = 1 AND p.name IS NOT NULL ORDER BY p.id_patrol"):
+        simple.setdefault(regs._fold(r["name"].strip()), r["id"])  # noqa: SLF001
+    if not simple:
+        return
+    for r in q("SELECT id_patrol id, name FROM patrols WHERE name IS NOT NULL"):
+        target = simple.get(regs._fold(r["name"].strip()))  # noqa: SLF001
+        if target and target != r["id"]:
+            execute("UPDATE spotting SET patrol_id = ? WHERE patrol_id = ?", (target, r["id"]))
+            execute("DELETE FROM patrols WHERE id_patrol = ?", (r["id"],))
+
+
 def _reclassify_fields() -> None:
     """Hélistations et terrains saisis avant leur prise en charge (code rangé à tort en « lieu ») : on les repasse en aéroports."""
     from .core import execute, q
@@ -60,6 +78,10 @@ async def lifespan(app: FastAPI):
         _backfill_countries()
     except Exception:  # noqa: BLE001
         log.exception("Rattrapage des pays en échec")
+    try:
+        _link_patrols()
+    except Exception:  # noqa: BLE001
+        log.exception("Rattachement des patrouilles en échec")
     try:
         _reclassify_fields()
     except Exception:  # noqa: BLE001

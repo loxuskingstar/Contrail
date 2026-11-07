@@ -1713,5 +1713,9 @@
 "tags.clear": "Clear all",
 "tags.match_all": "All tags",
 "tags.match_any": "At least one",
-"tags.or": "or"
+"tags.or": "or",
+"patrol.link_simple": "Will join the “{name}” team already logged in simple mode ({n} spots).",
+"patrol.link_existing": "Will join the “{name}” team ({n} spots).",
+"patrol.link_new": "New team: the aircraft will be grouped under this name.",
+"patrol.identified": "Identified aircraft"
 }

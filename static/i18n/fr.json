@@ -1713,5 +1713,9 @@
 "tags.clear": "Tout retirer",
 "tags.match_all": "Toutes les étiquettes",
 "tags.match_any": "Au moins une",
-"tags.or": "ou"
+"tags.or": "ou",
+"patrol.link_simple": "Sera rattaché à la patrouille « {name} » déjà saisie en mode simple ({n} spots).",
+"patrol.link_existing": "Sera rattaché à la patrouille « {name} » ({n} spots).",
+"patrol.link_new": "Nouvelle patrouille : les avions seront groupés sous ce nom.",
+"patrol.identified": "Avions identifiés"
 }

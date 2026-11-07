@@ -1713,5 +1713,9 @@
 "tags.clear": "Quitar todas",
 "tags.match_all": "Todas las etiquetas",
 "tags.match_any": "Al menos una",
-"tags.or": "o"
+"tags.or": "o",
+"patrol.link_simple": "Se unirá a la patrulla «{name}» ya registrada en modo simple ({n} spots).",
+"patrol.link_existing": "Se unirá a la patrulla «{name}» ({n} spots).",
+"patrol.link_new": "Nueva patrulla: los aviones se agruparán con este nombre.",
+"patrol.identified": "Aviones identificados"
 }

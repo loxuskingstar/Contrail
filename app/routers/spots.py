@@ -375,6 +375,21 @@ def patrol_names():
                                  "ORDER BY MAX(id_patrol) DESC LIMIT 50")]
 
 
+@router.get("/patrol-index")
+def patrol_index():
+    """Patrouilles connues avec leur nombre de spots et le mode (simple ou non) : indique à la saisie où l'avion sera rattaché."""
+    rows = q("SELECT p.id_patrol id, p.name, COUNT(s.id_spotting) n, COALESCE(MAX(s.is_patrol), 0) simple FROM patrols p "
+             "LEFT JOIN spotting s ON s.patrol_id = p.id_patrol WHERE p.name IS NOT NULL AND p.name <> '' GROUP BY p.id_patrol")
+    out: dict[str, dict] = {}
+    for r in rows:
+        k = regs._fold(r["name"].strip())  # noqa: SLF001
+        o = out.setdefault(k, {"id": r["id"], "name": r["name"], "n": 0, "simple": 0})
+        o["n"] += r["n"]
+        if r["simple"] and not o["simple"]:
+            o["id"], o["simple"] = r["id"], 1
+    return list(out.values())
+
+
 @router.get("/countries")
 def countries():
     """Codes pays connus (nationalité d'une patrouille)."""
@@ -416,6 +431,9 @@ def get_spot(spot_id: int, sort: str = "date_desc"):
     s["location"] = q1("SELECT * FROM spot_locations WHERE id_location = ?", (s["location_id"],)) if s["location_id"] else None
     s["flights"] = collection.crossref_for_spot(s["registration"])
     s["patrol"] = None if s.get("is_patrol") else patrol_of(s)
+    s["patrol_members"] = q("SELECT id_spotting, registration, aircraft, owner, thumb FROM spotting WHERE patrol_id = ? "
+                            "AND is_patrol = 0 ORDER BY COALESCE(date, created_at) DESC, id_spotting DESC LIMIT 60",
+                            (s["patrol_id"],)) if s.get("is_patrol") and s.get("patrol_id") else []
     s["outing"] = q1("SELECT o.id_outing id, o.day, o.name, (SELECT COUNT(*) FROM spotting x WHERE x.outing_id = o.id_outing) n "
                      "FROM outings o WHERE o.id_outing = ?", (s["outing_id"],)) if s.get("outing_id") else None
     s["patrol_name"] = (q1("SELECT name FROM patrols WHERE id_patrol = ?", (s["patrol_id"],)) or {}).get("name") if s.get("patrol_id") else None
@@ -688,12 +706,20 @@ def _insert_members(rows: list[dict], patrol_id: int, tags: list, bg: Background
     return extra
 
 
-def _propagate(spot_id: int, patrol_id: int | None, out: dict, payload: dict, bg: BackgroundTasks) -> None:
-    """Applique aux autres avions de la photo les informations communes qui viennent d'être modifiées."""
+def _propagate(spot_id: int, patrol_id: int | None, out: dict, payload: dict, bg: BackgroundTasks, before: dict | None = None) -> None:
+    """Applique aux autres avions de la photo les informations communes qui viennent d'être modifiées.
+
+    Une patrouille réunit des avions vus à des moments différents : seuls les avions de la même photo (à défaut, de la
+    même date, quand il n'y a pas de photo) sont concernés, jamais les autres avions rattachés à la patrouille."""
     if not patrol_id:
         return
-    sibs = [r["id_spotting"] for r in q("SELECT id_spotting FROM spotting WHERE patrol_id = ? AND id_spotting <> ? AND is_patrol = 0",
-                                        (patrol_id, spot_id))]
+    before = before or {}
+    if before.get("image"):
+        sibs = [r["id_spotting"] for r in q("SELECT id_spotting FROM spotting WHERE patrol_id = ? AND id_spotting <> ? AND is_patrol = 0 "
+                                            "AND image = ?", (patrol_id, spot_id, before["image"]))]
+    else:
+        sibs = [r["id_spotting"] for r in q("SELECT id_spotting FROM spotting WHERE patrol_id = ? AND id_spotting <> ? AND is_patrol = 0 "
+                                            "AND image IS NULL AND date IS ?", (patrol_id, spot_id, before.get("date")))]
     if not sibs:
         return
     common = {k: out[k] for k in SHARED if k in out}
@@ -715,10 +741,29 @@ def settings_modules_weather() -> bool:
     return bool(get_settings()["modules"].get("weather", True))
 
 
+def find_patrol(name: str | None, exclude: int | None = None) -> int | None:
+    """Patrouille existante portant ce nom (sans tenir compte des majuscules ni des accents), la patrouille « mode
+    simple » en premier : un avion identifié rejoint ainsi celle déjà saisie en mode simple."""
+    key = regs._fold((name or "").strip())  # noqa: SLF001
+    if not key:
+        return None
+    best = None
+    for r in q("SELECT p.id_patrol id, p.name, COALESCE(MAX(s.is_patrol), 0) simple FROM patrols p "
+               "LEFT JOIN spotting s ON s.patrol_id = p.id_patrol WHERE p.name IS NOT NULL GROUP BY p.id_patrol ORDER BY p.id_patrol"):
+        if r["id"] == exclude or regs._fold(r["name"].strip()) != key:  # noqa: SLF001
+            continue
+        if best is None or (r["simple"] and not best[1]):
+            best = (r["id"], r["simple"])
+    return best[0] if best else None
+
+
 def _patrol_id(spot: dict | None, info: dict) -> int:
-    """Patrouille du spot : renomme l'existante ou en crée une."""
+    """Patrouille du spot : rejoint celle qui porte déjà ce nom, sinon renomme l'actuelle ou en crée une."""
     name = (info.get("name") or "").strip()[:80] or None
     pid = (spot or {}).get("patrol_id")
+    same = find_patrol(name, exclude=pid)
+    if same:
+        return same
     if pid:
         if "name" in info:
             execute("UPDATE patrols SET name = ? WHERE id_patrol = ?", (name, pid))
@@ -863,7 +908,7 @@ def update_spot(
         sets = ", ".join(f"{k} = ?" for k in out)
     execute(f"UPDATE spotting SET {sets} WHERE id_spotting = ?", list(out.values()) + [spot_id])
     if not existing.get("is_patrol"):
-        _propagate(spot_id, out.get("patrol_id", existing.get("patrol_id")), out, payload, bg)
+        _propagate(spot_id, out.get("patrol_id", existing.get("patrol_id")), out, payload, bg, existing)
     if drop_old and drop_old[0]:
         if q1("SELECT 1 FROM spotting WHERE image = ? LIMIT 1", (drop_old[0],)):
             pass                           # la photo reste utilisée par un autre avion de la patrouille
