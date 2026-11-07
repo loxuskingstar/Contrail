@@ -245,10 +245,96 @@ def delete_audio(rel: str | None) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# OCR local (Tesseract) : plusieurs passes de prétraitement, extraction par regex
+# OCR local : RapidOCR (modèles PP-OCR sur onnxruntime) en priorité, Tesseract en repli.
+# Le texte lu n'est jamais pris tel quel : seules les chaînes qui ont la forme d'une immatriculation
+# sont retenues, puis classées (confiance de lecture, répétition, appareil déjà connu, pays de l'aéroport).
 # --------------------------------------------------------------------------- #
+_rapid = {"engine": None, "failed": False}
+
+
+def _rapid_engine():
+    if _rapid["failed"]:
+        return None
+    if _rapid["engine"] is None:
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            _rapid["engine"] = RapidOCR()
+        except Exception as e:  # noqa: BLE001
+            log.info("RapidOCR indisponible : %s", e)
+            _rapid["failed"] = True
+            return None
+    return _rapid["engine"]
+
+
+def ocr_engine() -> str | None:
+    """Moteur utilisable : 'rapidocr', 'tesseract' ou None."""
+    try:
+        import importlib.util
+        if not _rapid["failed"] and importlib.util.find_spec("rapidocr_onnxruntime"):
+            return "rapidocr"
+    except Exception:  # noqa: BLE001
+        pass
+    return "tesseract" if shutil.which("tesseract") else None
+
+
 def ocr_available() -> bool:
-    return shutil.which("tesseract") is not None
+    return ocr_engine() is not None
+
+
+def _rapid_views(img: Image.Image):
+    """Plusieurs cadrages : image entière, partie basse (fuselage, dérive), moitiés gauche/droite (texte petit)."""
+    g = ImageOps.exif_transpose(img).convert("RGB")
+    if max(g.size) > 2000:
+        g.thumbnail((2000, 2000))
+    w, h = g.size
+    yield g
+    yield g.crop((0, int(h * 0.3), w, h))
+    if w >= 900:
+        yield g.crop((0, 0, int(w * 0.62), h))
+        yield g.crop((int(w * 0.38), 0, w, h))
+
+
+def _ocr_rapid(img: Image.Image) -> tuple[list[tuple[str, float]], list[str]]:
+    import numpy as np
+    eng = _rapid_engine()
+    pieces: list[tuple[str, float]] = []
+    texts: list[str] = []
+    if eng is None:
+        return pieces, texts
+    for v in _rapid_views(img):
+        try:
+            res, _ = eng(np.asarray(v))
+        except Exception as e:  # noqa: BLE001
+            log.warning("OCR: %s", e)
+            continue
+        line = []
+        for _box, txt, conf in res or []:
+            txt = (txt or "").upper().strip()
+            if txt:
+                pieces.append((txt, float(conf)))
+                line.append(txt)
+        texts.append("\n".join(line))
+    return pieces, texts
+
+
+def _aggregate(pieces: list[tuple[str, float]], texts: list[str], passes: int) -> list[dict]:
+    agg: dict[str, dict] = {}
+
+    def add(txt: str, conf: float):
+        for c in regs.extract_candidates(txt):
+            a = agg.setdefault(c["registration"], {**c, "score": 0.0, "hits": 0})
+            a["score"] += c["score"] * (0.5 + conf / 2)
+            a["hits"] += 1
+    for txt, conf in pieces:
+        add(txt, conf)
+    # Lectures coupées en deux boîtes (« F- » puis « GKXL ») : on retente sur les lignes complètes
+    for t in texts:
+        if t:
+            add(" ".join(t.split("\n")), 0.6)
+    cands = sorted(agg.values(), key=lambda c: (-c["score"], -c["hits"]))[:6]
+    for c in cands:
+        c["score"] = round(min(1.0, c["score"] / max(passes, 1) * 1.5), 2)
+    return cands
 
 
 def _variants(img: Image.Image):
@@ -267,12 +353,9 @@ def _variants(img: Image.Image):
     yield g.crop((0, int(h * 0.3), w, h))
 
 
-def ocr_registration(data: bytes) -> dict:
-    if not ocr_available():
-        return {"available": False, "candidates": [], "text": ""}
+def _ocr_tesseract(img: Image.Image) -> list[str]:
     import pytesseract
 
-    img = open_image(data)
     texts = []
     cfg = "--psm 11 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
     for v in _variants(img):
@@ -280,15 +363,24 @@ def ocr_registration(data: bytes) -> dict:
             texts.append(pytesseract.image_to_string(v, config=cfg, timeout=20))
         except Exception as e:  # noqa: BLE001
             log.warning("OCR: %s", e)
+    return texts
+
+
+def ocr_registration(data: bytes) -> dict:
+    eng = ocr_engine()
+    if not eng:
+        return {"available": False, "engine": None, "candidates": [], "text": ""}
+    img = open_image(data)
+    if eng == "rapidocr":
+        pieces, texts = _ocr_rapid(img)
+        if _rapid["failed"]:       # modèles absents ou onnxruntime inutilisable : repli
+            eng = "tesseract" if shutil.which("tesseract") else None
+        else:
+            return {"available": True, "engine": eng, "candidates": _aggregate(pieces, texts, 2),
+                    "text": "\n".join(texts)[:2000]}
+    if eng != "tesseract":
+        return {"available": False, "engine": None, "candidates": [], "text": ""}
+    texts = _ocr_tesseract(img)
     # Une immatriculation lue dans plusieurs passes indépendantes est plus fiable
-    agg: dict[str, dict] = {}
-    for txt in texts:
-        for c in regs.extract_candidates(txt):
-            a = agg.setdefault(c["registration"], {**c, "score": 0.0, "hits": 0})
-            a["score"] += c["score"]
-            a["hits"] += 1
-    passes = max(len(texts), 1)
-    cands = sorted(agg.values(), key=lambda c: (-c["score"], -c["hits"]))[:6]
-    for c in cands:
-        c["score"] = round(min(1.0, c["score"] / passes * 1.5), 2)
-    return {"available": True, "candidates": cands, "text": "\n".join(texts)[:2000]}
+    cands = _aggregate([], texts, max(len(texts), 1))
+    return {"available": True, "engine": "tesseract", "candidates": cands, "text": "\n".join(texts)[:2000]}

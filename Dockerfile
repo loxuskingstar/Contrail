@@ -7,9 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PUID=1000 \
     PGID=1000
 
-# Tesseract (OCR local des immatriculations), fuseaux horaires, gosu (abandon des droits root)
+# Fuseaux horaires (l'OCR RapidOCR est installé par pip, avec ses modèles), gosu (abandon des droits root)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tzdata curl gosu \
+ && apt-get install -y --no-install-recommends tzdata curl gosu \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
