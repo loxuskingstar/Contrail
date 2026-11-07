@@ -40,21 +40,21 @@ def list_airports():
 
 
 def _detail(icao: str):
-    st = q1(f"SELECT COUNT(*) n, COUNT(DISTINCT registration) regs, COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
+    st = q1(f"SELECT COUNT(*) n, COUNT(DISTINCT registration) regs, COUNT(DISTINCT mk(aircraft_icao, aircraft, military)) types, "
             f"MIN(date) first_at, MAX(date) last_at, SUM(favorite) favs, SUM(military) military, "
             f"SUM(CASE WHEN {SPECIAL} THEN 1 ELSE 0 END) specials FROM spotting WHERE airport = ?", (icao,))
     if not st or not st["n"]:
         return None
     tops = lambda sql: q(sql, (icao,))
-    st["top_types"] = tops("SELECT COALESCE(aircraft_icao, aircraft) k, COUNT(*) n FROM spotting WHERE airport = ? AND "
-                           "COALESCE(aircraft_icao, aircraft) IS NOT NULL GROUP BY k ORDER BY n DESC LIMIT 8")
+    st["top_types"] = tops("SELECT mk(aircraft_icao, aircraft, military) k, COUNT(*) n FROM spotting WHERE airport = ? AND "
+                           "mk(aircraft_icao, aircraft, military) IS NOT NULL GROUP BY k ORDER BY n DESC LIMIT 8")
     st["top_airlines"] = tops("SELECT owner k, COUNT(*) n FROM spotting WHERE airport = ? AND owner IS NOT NULL AND owner <> '' "
                               "GROUP BY owner ORDER BY n DESC LIMIT 8")
     st["by_year"] = tops("SELECT substr(date, 1, 4) k, COUNT(*) n FROM spotting WHERE airport = ? AND date IS NOT NULL "
                          "GROUP BY k ORDER BY k")
     st["by_month"] = [{"m": int(r["m"]), "n": r["n"]} for r in tops(
         "SELECT substr(date, 6, 2) m, COUNT(*) n FROM spotting WHERE airport = ? AND date IS NOT NULL GROUP BY m ORDER BY m")]
-    st["top_regs"] = tops("SELECT registration, COALESCE(aircraft_icao, aircraft) type, COUNT(*) n FROM spotting WHERE airport = ? "
+    st["top_regs"] = tops("SELECT registration, mk(aircraft_icao, aircraft, military) type, COUNT(*) n FROM spotting WHERE airport = ? "
                           "AND registration NOT LIKE 'SANS-IMMAT-%' GROUP BY registration ORDER BY n DESC, registration LIMIT 6")
     best = q1("SELECT o.id_outing id, o.day, o.name, COUNT(*) n FROM outings o JOIN spotting s ON s.outing_id = o.id_outing "
               "WHERE o.airport = ? GROUP BY o.id_outing ORDER BY n DESC, o.day DESC LIMIT 1", (icao,))
@@ -69,7 +69,7 @@ def _detail(icao: str):
             tiers[tier] = tiers.get(tier, 0) + 1
     st["rarity"] = tiers
     st["rare_types"] = sorted(((t_, tc[t_]) for t_ in seen if collection.rarity_tier(tc.get(t_)) in collection.RARE_TIERS), key=lambda x: x[1])[:6]
-    st["first_regs"] = tops("SELECT registration, COALESCE(aircraft_icao, aircraft) type, MIN(date) d FROM spotting WHERE airport = ? "
+    st["first_regs"] = tops("SELECT registration, mk(aircraft_icao, aircraft, military) type, MIN(date) d FROM spotting WHERE airport = ? "
                             "GROUP BY registration ORDER BY d DESC LIMIT 6")
     st["locations"] = q("SELECT l.id_location id, l.name, l.lat, l.lng, l.view_bearing, l.best_time, (SELECT COUNT(*) FROM spotting s "
                         "WHERE s.location_id = l.id_location) n FROM spot_locations l WHERE l.airport = ? ORDER BY n DESC, l.name", (icao,))

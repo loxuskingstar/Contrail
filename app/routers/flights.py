@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..core import execute, get_settings, now_iso, q, q1
-from ..services import collection, gamification, geo
+from ..services import actypes, collection, gamification, geo
 from ..services import registration as regs
 from ..services.notify import notify, texts
 
@@ -131,7 +131,7 @@ def _context(r: dict) -> dict:
     if r.get("airline_icao") or r.get("airline"):
         ctx["airline"] = nth(" AND COALESCE(airline_icao, airline) = ?", (r.get("airline_icao") or r.get("airline"),))
     if r.get("aircraft_icao") or r.get("aircraft"):
-        ctx["type"] = nth(" AND COALESCE(aircraft_icao, aircraft) = ?", (r.get("aircraft_icao") or r.get("aircraft"),))
+        ctx["type"] = nth(" AND mk(aircraft_icao, aircraft) = ?", (actypes.model_key(r.get("aircraft_icao"), r.get("aircraft")),))
     if r.get("registration"):
         ctx["airframe"] = nth(" AND registration = ?", (r["registration"],))
     prev = q1(f"SELECT id_flight, dep_icao, arr_icao, date FROM flights WHERE {order} "

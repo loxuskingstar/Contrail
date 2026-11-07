@@ -224,6 +224,9 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     operators.register(conn)
     from app.services import registration as _regs
     conn.create_function("known", 1, _regs.known, deterministic=True)
+    from app.services import actypes as _act
+    conn.create_function("mk", 2, _act.model_key, deterministic=True)     # modèle compté (vols : sans marque militaire)
+    conn.create_function("mk", 3, _act.model_key, deterministic=True)     # spots : MRTT, avions de ligne militaires… = modèles à part
     return conn
 
 
