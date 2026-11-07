@@ -1,5 +1,6 @@
 // Icônes Lucide (ISC License, https://lucide.dev) — sous-ensemble embarqué pour le fonctionnement hors-ligne
 export const ICONS = {
+"aperture": "<circle cx=\"12\" cy=\"12\" r=\"10\" /> <path d=\"m14.31 8 5.74 9.94\" /> <path d=\"M9.69 8h11.48\" /> <path d=\"m7.38 12 5.74-9.94\" /> <path d=\"M9.69 16 3.95 6.06\" /> <path d=\"M14.31 16H2.83\" /> <path d=\"m16.62 12-5.74 9.94\" />",
 "mountain": "<path d=\"m8 3 4 8 5-5 5 15H2L8 3z\" />",
 "git-merge": "<circle cx=\"18\" cy=\"18\" r=\"3\" /> <circle cx=\"6\" cy=\"6\" r=\"3\" /> <path d=\"M6 21V9a9 9 0 0 0 9 9\" />",
 "split": "<path d=\"M16 3h5v5\" /> <path d=\"M8 3H3v5\" /> <path d=\"M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3\" /> <path d=\"m15 9 6-6\" />",

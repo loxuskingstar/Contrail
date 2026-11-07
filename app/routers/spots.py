@@ -1069,7 +1069,7 @@ def bulk(body: Bulk, bg: BackgroundTasks):
 
 # Champs modifiables en masse (liste blanche) ; « prepare » applique les mêmes règles qu'à l'édition d'un spot
 BULK_FIELDS = ("country", "airport", "place", "flight_type", "owner", "airline_icao", "rating", "aircraft", "aircraft_icao",
-               "manufacturer", "military", "livery", "registration")
+               "manufacturer", "military", "livery", "registration", "camera", "lens")
 
 
 def _bulk_set(ids: list[int], value: Any, bg: BackgroundTasks) -> dict:

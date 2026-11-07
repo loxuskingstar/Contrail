@@ -65,6 +65,7 @@ export const NAV = [
   { href: '#/reports', icon: 'file-text', key: 'nav.reports', match: /^reports/ },
   { group: 'nav.g.field' },
   { href: '#/radar', icon: 'radar', key: 'nav.radar', match: /^radar/, mod: 'radar' },
+  { href: '#/gear', icon: 'aperture', key: 'nav.gear', match: /^gear/ },
   { href: '#/locations', icon: 'binoculars', key: 'nav.locations', match: /^locations/, mod: 'locations' },
   { href: '#/wishlist', icon: 'star', key: 'nav.watchlist', match: /^(wishlist|watchlist)/, mod: 'watchlist' },
   { group: 'nav.g.more' },
@@ -90,6 +91,7 @@ const ROUTES = [
   [/^fleets$/, 'fleets'],
   [/^fleets\/(.+)$/, 'fleet-detail', ['key']],
   [/^liveries$/, 'liveries'],
+  [/^gear$/, 'gear'],
   [/^trash$/, 'trash'],
   [/^outings$/, 'outings'],
   [/^outings\/(\d+)$/, 'outing-detail', ['id']],
@@ -170,7 +172,7 @@ function updateNav(path) {
     a.classList.toggle('active', !!item?.match?.test(path));
   });
   const more = $('.bottomnav [data-more]');
-  if (more) more.classList.toggle('active', /^(more|fleets|liveries|stats|locations|wishlist|watchlist|achievements|story|shares|settings|drafts|trash|outings)/.test(path));
+  if (more) more.classList.toggle('active', /^(more|fleets|liveries|gear|stats|locations|wishlist|watchlist|achievements|story|shares|settings|drafts|trash|outings)/.test(path));
 }
 
 // Le grand titre (One UI) se replie dans la barre supérieure au défilement
@@ -427,6 +429,9 @@ async function boot() {
   }
 
   setUnauthorizedHandler(() => { if (!document.querySelector('.login')) renderLogin(); });
+  // Départ en parallèle : la langue connue se charge pendant que l'on interroge le serveur
+  const early = localStorage.getItem('contrail.lang');
+  const earlyLang = early ? setLang(early).catch(() => {}) : null;
   try {
     const st = await api('/api/auth/status');
     if (st.enabled && !st.authenticated) {
@@ -434,15 +439,15 @@ async function boot() {
       applyAppearance();
       return renderLogin();
     }
-    store.session = await api('/api/session').catch(() => ({ profile: 'main' }));
-    store.settings = await api('/api/settings');
+    [store.session, store.settings] = await Promise.all([api('/api/session').catch(() => ({ profile: 'main' })), api('/api/settings')]);
     localStorage.setItem('contrail.settings', JSON.stringify(store.settings));
   } catch (e) {
     // Hors-ligne au démarrage : on reprend les derniers réglages connus
     store.settings = JSON.parse(localStorage.getItem('contrail.settings') || 'null') || { theme: 'auto', accent: '#3b82f6', language: 'fr', modules: {} };
   }
   localStorage.setItem('contrail.lang', store.settings.language);
-  await setLang(store.settings.language);
+  if (earlyLang) await earlyLang;
+  if (store.settings.language !== early) await setLang(store.settings.language);
   applyAppearance();
   renderShell();
   setOfflineBanner();

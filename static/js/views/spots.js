@@ -221,6 +221,8 @@ export async function render(root, _p, query) {
       ['aircraft', 'spot.aircraft', '<input name="aircraft" maxlength="80">'],
       ['flight_type', 'spot.flight_type', `<select name="flight_type">${FT.map((f) => `<option value="${f}">${esc(t('ftype.' + f))}</option>`).join('')}</select>`],
       ['livery', 'spot.livery', '<input name="livery" maxlength="80">'],
+      ['camera', 'exif.camera', '<input name="camera" maxlength="120" list="bk-cam" autocomplete="off"><datalist id="bk-cam"></datalist>'],
+      ['lens', 'exif.lens', '<input name="lens" maxlength="120" list="bk-lens" autocomplete="off"><datalist id="bk-lens"></datalist>'],
       ['rating', 'spot.rating', '<select name="rating">' + [1, 2, 3, 4, 5].map((n) => `<option value="${n}">${'★'.repeat(n)}</option>`).join('') + '</select>'],
       ['military', 'spot.military', `<select name="military"><option value="1">${esc(t('common.yes'))}</option><option value="0">${esc(t('common.no'))}</option></select>`],
     ];
@@ -229,6 +231,10 @@ export async function render(root, _p, query) {
       <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close>${esc(t('common.cancel'))}</button><button class="btn primary">${esc(t('bulk.apply'))}</button></div></form>` });
     const form = sh.body.querySelector('form');
     sh.body.querySelector('[data-close]').onclick = sh.close;
+    api('/api/gear').then((g) => {
+      const fill = (id, items) => { const el = sh.body.querySelector(id); if (el) el.innerHTML = items.map((i) => `<option value="${esc(i.name)}"></option>`).join(''); };
+      fill('#bk-cam', g.cameras); fill('#bk-lens', g.lenses);
+    }).catch(() => {});
     api('/api/spots/countries').then((codes) => {
       form.elements.country.innerHTML = '<option value="">' + esc(t('spot.country_auto')) + '</option>' + codes.map((c) => ({ c, n: countryName(c) })).sort((x, y) => x.n.localeCompare(y.n)).map(({ c, n }) => `<option value="${esc(c)}">${flag(c)} ${esc(n)}</option>`).join('');
     }).catch(() => {});
@@ -410,6 +416,8 @@ async function openFilters(filters, onApply) {
   const f = { ...filters };
   const facets = store.facets || (await store.refreshFacets().catch(() => ({ airports: [], types: [], airlines: [], years: [], countries: [], flight_types: [] })));
   const tags = store.tags || [];
+  const gear = await api('/api/gear').catch(() => ({ cameras: [], lenses: [] }));
+  const gopt = (arr, cur) => `<option value="">${esc(t('common.all'))}</option>` + arr.map((i) => `<option value="${esc(i.name)}" ${cur === i.name ? 'selected' : ''}>${esc(i.name)}${i.count ? ` (${i.count})` : ''}</option>`).join('');
   const opt = (arr, cur, label = (v) => v) => `<option value="">${esc(t('common.all'))}</option>` + arr.map((v) => `<option value="${esc(v)}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(label(v))}</option>`).join('');
   const s = sheet({ title: esc(t('spots.filters')), body: `
     <div class="stack">
@@ -428,6 +436,10 @@ async function openFilters(filters, onApply) {
         <label class="field"><span>${esc(t('spot.country'))}</span><select data-k="country">${opt(facets.countries, f.country, (c) => `${flag(c)} ${countryName(c)}`)}</select></label>
         <label class="field"><span>${esc(t('spot.flight_type'))}</span><select data-k="flight_type">${opt(facets.flight_types, f.flight_type, (v) => t(`ftype.${v}`))}</select></label>
       </div>
+      ${gear.cameras.length || gear.lenses.length ? `<div class="field-row">
+        <label class="field"><span>${esc(t('exif.camera'))}</span><select data-k="camera">${gopt(gear.cameras, f.camera)}</select></label>
+        <label class="field"><span>${esc(t('exif.lens'))}</span><select data-k="lens">${gopt(gear.lenses, f.lens)}</select></label>
+      </div>` : ''}
       <div class="field-row">
         <label class="field"><span>${esc(t('spots.military_filter'))}</span><select data-k="military"><option value="">${esc(t('common.all'))}</option><option value="0" ${f.military === '0' ? 'selected' : ''}>${esc(t('spots.civil'))}</option><option value="1" ${f.military === '1' ? 'selected' : ''}>${esc(t('spot.military'))}</option></select></label>
         <label class="field"><span>${esc(t('rarity.title'))}</span><select data-k="rarity"><option value="">${esc(t('common.all'))}</option>${['legendary', 'epic', 'rare', 'uncommon', 'common'].map((v) => `<option value="${v}" ${f.rarity === v ? 'selected' : ''}>${esc(t(`rarity.n.${v}`))}</option>`).join('')}</select></label>

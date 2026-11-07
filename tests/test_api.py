@@ -1528,3 +1528,24 @@ def test_pdf_exports(client):
     client.post("/api/flights", json={"date": "2071-04-01", "dep_icao": "LFBO", "arr_icao": "LFPG", "flight_number": "AF1"})
     assert client.get("/api/pdf/flights?year=2071").content.startswith(b"%PDF")
     assert client.get("/api/pdf/flights?year=2098").status_code == 404
+
+
+def test_gear_manual_and_filters(client):
+    r = client.post("/api/gear", json={"kind": "camera", "name": "Zeta Body 9"})
+    assert r.status_code == 200
+    client.post("/api/gear", json={"kind": "lens", "name": "Zeta 100-400"})
+    sid = client.post("/api/gear/setups", json={"camera": "Zeta Body 9", "lens": "Zeta 100-400"}).json()["id"]
+    sp = client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZGEA", "date": "2074-05-01T10:00", "airport": "LFBO",
+                                                              "camera": "Zeta Body 9", "lens": "Zeta 100-400"})})
+    assert sp.status_code in (200, 201), sp.text
+    g = client.get("/api/gear").json()
+    cam = next(c for c in g["cameras"] if c["name"] == "Zeta Body 9")
+    assert cam["manual"] and cam["count"] == 1
+    assert any(s["id"] == sid and s["count"] == 1 for s in g["setups"])
+    # filtres séparés boîtier / objectif
+    assert client.get("/api/spots", params={"camera": "Zeta Body 9", "lens": "Zeta 100-400"}).json()["total"] == 1
+    assert client.get("/api/spots", params={"camera": "Zeta Body 9", "lens": "autre"}).json()["total"] == 0
+    # modification en lot
+    ids = [client.get("/api/spots", params={"camera": "Zeta Body 9"}).json()["items"][0]["id_spotting"]]
+    assert client.post("/api/spots/bulk", json={"ids": ids, "action": "set", "value": {"lens": "Zeta 24-70"}}).status_code == 200
+    assert client.get("/api/spots", params={"lens": "Zeta 24-70"}).json()["total"] == 1

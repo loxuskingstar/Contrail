@@ -7,7 +7,7 @@ import { esc, pageHead } from '../ui.js';
 export async function render(root) {
   const groups = [
     ['nav.g.collection', [['#/outings', 'calendar-days', 'nav.outings'], ['#/airports', 'map-pin', 'nav.airports'], ['#/stats', 'chart-column', 'nav.stats'], ['#/fleets', 'building-2', 'nav.fleets', 'fleets'], ['#/liveries', 'palette', 'nav.liveries'], ['#/flights', 'ticket', 'nav.flights', 'flights']]],
-    ['nav.g.field', [['#/radar', 'radar', 'nav.radar', 'radar'], ['#/locations', 'binoculars', 'nav.locations', 'locations'], ['#/wishlist', 'star', 'nav.watchlist', 'watchlist']]],
+    ['nav.g.field', [['#/radar', 'radar', 'nav.radar', 'radar'], ['#/gear', 'aperture', 'nav.gear'], ['#/locations', 'binoculars', 'nav.locations', 'locations'], ['#/wishlist', 'star', 'nav.watchlist', 'watchlist']]],
     ['nav.g.more', [['#/achievements', 'trophy', 'nav.achievements', 'gamification'], ['#/story', 'wand-sparkles', 'nav.story', 'gamification'], ['#/shares', 'share-2', 'nav.shares'], ['#/drafts', 'cloud-upload', 'nav.drafts'], ['#/trash', 'trash-2', 'nav.trash'], ['#/settings', 'settings', 'nav.settings']]],
   ];
   root.innerHTML = `${pageHead(esc(t('nav.more')))}

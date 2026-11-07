@@ -356,7 +356,26 @@ CREATE TABLE IF NOT EXISTS custom_airfields (
 );
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13]
+SCHEMA_V14 = """
+-- Matériel photo : boîtiers et objectifs ajoutés à la main (ceux détectés par l'EXIF restent lus dans les spots)
+CREATE TABLE IF NOT EXISTS gear (
+    id_gear     INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind        TEXT NOT NULL CHECK (kind IN ('camera', 'lens')),
+    name        TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    UNIQUE (kind, name)
+);
+-- Setups : une combinaison boîtier + objectif que l'on choisit en un geste
+CREATE TABLE IF NOT EXISTS gear_setups (
+    id_setup    INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    camera      TEXT,
+    lens        TEXT,
+    created_at  TEXT NOT NULL
+);
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14]
 
 
 def init_db() -> None:

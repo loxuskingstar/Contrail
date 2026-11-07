@@ -165,10 +165,13 @@ export async function render(root, params, query) {
       <details class="card fold">
         <summary>${icon('camera', '', 18)} ${esc(t('spot.exif'))} ${icon('chevron-down', 'chev', 18)}</summary>
         <div class="fold-body stack">
+          <label class="field" data-setup-box hidden><span>${esc(t('gear.setup'))}</span><select data-setup></select></label>
           <div class="field-row">
-            <label class="field"><span>${esc(t('exif.camera'))}</span><input name="camera" value="${esc(s.camera)}"></label>
-            <label class="field"><span>${esc(t('exif.lens'))}</span><input name="lens" value="${esc(s.lens)}"></label>
+            <label class="field"><span>${esc(t('exif.camera'))}</span><input name="camera" value="${esc(s.camera)}" list="gear-cameras" maxlength="120" autocomplete="off" placeholder="${esc(t('gear.pick_ph'))}"></label>
+            <label class="field"><span>${esc(t('exif.lens'))}</span><input name="lens" value="${esc(s.lens)}" list="gear-lenses" maxlength="120" autocomplete="off" placeholder="${esc(t('gear.pick_ph'))}"></label>
           </div>
+          <datalist id="gear-cameras"></datalist><datalist id="gear-lenses"></datalist>
+          <p class="tiny muted">${esc(t('gear.form_hint'))} <a href="#/gear">${esc(t('nav.gear'))}</a></p>
           <div class="field-row">
             <label class="field"><span>${esc(t('exif.focal'))}</span><input name="focal" value="${esc(s.focal)}" inputmode="decimal"></label>
             <label class="field"><span>${esc(t('exif.aperture'))}</span><input name="aperture" value="${esc(s.aperture)}" inputmode="decimal"></label>
@@ -273,6 +276,22 @@ export async function render(root, params, query) {
   // Coller une image depuis le presse-papiers
   const onPaste = (e) => { const f = [...(e.clipboardData?.files || [])].find((x) => isImg(x)); if (f) setPreview(f); };
   document.addEventListener('paste', onPaste);
+
+  // Matériel : propositions issues de l'onglet Matériel (détecté ou ajouté à la main) et setups en un geste.
+  // Un nom nouveau, saisi ici, rejoint l'onglet Matériel dès l'enregistrement du spot.
+  api('/api/gear').then((g) => {
+    const dl = (id, items) => { const el = root.querySelector(id); if (el) el.innerHTML = items.map((i) => `<option value="${esc(i.name)}"></option>`).join(''); };
+    dl('#gear-cameras', g.cameras); dl('#gear-lenses', g.lenses);
+    if (!g.setups.length) return;
+    const box = root.querySelector('[data-setup-box]'), sel = box.querySelector('select');
+    sel.innerHTML = `<option value="">—</option>` + g.setups.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+    box.hidden = false;
+    sel.onchange = () => {
+      const x = g.setups.find((y) => String(y.id) === sel.value);
+      if (!x) return;
+      F('camera').value = x.camera || ''; F('lens').value = x.lens || '';
+    };
+  }).catch(() => {});
 
   // Analyse en deux temps : l'EXIF s'affiche et remplit le formulaire tout de suite, l'immatriculation (OCR) arrive ensuite.
   async function analyze(file) {

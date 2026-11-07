@@ -1,12 +1,12 @@
 /* Contrail — service worker : coquille hors-ligne, cache API/médias, cible de partage */
-const VERSION = 'contrail-v4.4.0';
+const VERSION = 'contrail-v4.5.0';
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 const MEDIA = 'contrail-media';
 const SHARE = 'contrail-share';
 
 const VIEWS = ['dashboard', 'spots', 'spot-form', 'spot-detail', 'airframe', 'flights', 'flight-form', 'fleets', 'fleet-detail',
-  'liveries', 'stats', 'locations', 'radar', 'wishlist', 'achievements', 'story', 'shares', 'settings', 'drafts', 'more', 'public', 'spot-share', 'flight-detail', 'outings', 'outing-detail', 'airports', 'airport', 'patrols', 'patrol', 'map', 'bulk', 'duplicates', 'reports', 'trash'];
+  'liveries', 'gear', 'stats', 'locations', 'radar', 'wishlist', 'achievements', 'story', 'shares', 'settings', 'drafts', 'more', 'public', 'spot-share', 'flight-detail', 'outings', 'outing-detail', 'airports', 'airport', 'patrols', 'patrol', 'map', 'bulk', 'duplicates', 'reports', 'trash'];
 const PRECACHE = [
   '/', '/manifest.webmanifest', '/static/css/app.css',
   '/static/icons/icon.svg', '/static/icons/icon-192.png',
@@ -53,18 +53,14 @@ async function networkFirstApi(req) {
   }
 }
 
-// Réseau d'abord : un fichier modifié est servi dès le rechargement, le cache ne sert que hors connexion
-async function staleWhileRevalidate(req) {
+// Cache d'abord, rafraîchi en arrière-plan : l'application démarre sans attendre le réseau (≈ 60 fichiers évités à chaque
+// ouverture). Le cache est propre à la version (précache complet à l'installation) : une mise à jour le renouvelle d'un bloc.
+async function staleWhileRevalidate(req, evt) {
   const cache = await caches.open(SHELL);
-  try {
-    const res = await fetch(req);
-    if (res.ok) cache.put(req, res.clone());
-    return res;
-  } catch (err) {
-    const hit = await cache.match(req);
-    if (hit) return hit;
-    throw err;
-  }
+  const hit = await cache.match(req);
+  const refresh = fetch(req).then((res) => { if (res.ok) cache.put(req, res.clone()); return res; });
+  if (hit) { evt?.waitUntil(refresh.catch(() => {})); return hit; }
+  return refresh;
 }
 
 async function cacheFirst(req, cacheName, max) {
@@ -100,7 +96,7 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(req).catch(async () => (await caches.match('/')) || Response.error()));
     return;
   }
-  if (url.pathname.startsWith('/static/')) { e.respondWith(staleWhileRevalidate(req)); return; }
+  if (url.pathname.startsWith('/static/')) { e.respondWith(staleWhileRevalidate(req, e)); return; }
   if (url.pathname.startsWith('/media/thumbs/') || url.pathname.startsWith('/media/images/')) { e.respondWith(cacheFirst(req, MEDIA, 600)); return; }
   if (url.pathname.startsWith('/api/')) {
     const live = ['/api/radar', '/api/notifications', '/api/auth', '/api/public', '/api/backups', '/api/export', '/api/lookup', '/api/watchlist/check'];
