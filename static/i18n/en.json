@@ -1922,5 +1922,43 @@
 "upl.dup": "Likely duplicate",
 "upl.failed": "Saving failed",
 "upl.retry": "Retry",
-"upl.draft": "Keep as draft"
+"upl.draft": "Keep as draft",
+"gmap.show_counts": "Numbers in circles",
+"gmap.show_legend": "Legend",
+"gmap.step": "Step",
+"gmap.u_year": "Year",
+"gmap.u_quarter": "Quarter",
+"gmap.u_month": "Month",
+"gmap.u_week": "Week",
+"gmap.mode": "Display",
+"gmap.m_cumul": "Cumulative",
+"gmap.m_window": "Period only",
+"gmap.speed": "Speed",
+"gmap.timeline": "Timeline",
+"gmap.legend": "Colors",
+"gmap.l_new": "New place",
+"gmap.l_old": "Already visited",
+"gmap.l_airport": "Airport",
+"gmap.l_location": "Viewpoint",
+"gmap.l_gps": "GPS position",
+"gmap.l_size": "Size = number of spots",
+"gmap.quarter": "Q{q} {y}",
+"gmap.week_of": "Week of {d}",
+"gmap.military": "Military",
+"gmap.n_spots": {
+"one": "spot",
+"other": "spots"
+},
+"gmap.n_planes": {
+"one": "plane",
+"other": "planes"
+},
+"gmap.n_types": {
+"one": "type",
+"other": "types"
+},
+"gmap.n_places": {
+"one": "{count} place",
+"other": "{count} places"
+}
 }

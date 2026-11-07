@@ -1922,5 +1922,43 @@
 "upl.dup": "Posible duplicado",
 "upl.failed": "Error al guardar",
 "upl.retry": "Reintentar",
-"upl.draft": "Guardar como borrador"
+"upl.draft": "Guardar como borrador",
+"gmap.show_counts": "Número en los círculos",
+"gmap.show_legend": "Leyenda",
+"gmap.step": "Paso",
+"gmap.u_year": "Año",
+"gmap.u_quarter": "Trimestre",
+"gmap.u_month": "Mes",
+"gmap.u_week": "Semana",
+"gmap.mode": "Visualización",
+"gmap.m_cumul": "Acumulado",
+"gmap.m_window": "Solo el periodo",
+"gmap.speed": "Velocidad",
+"gmap.timeline": "Cronología",
+"gmap.legend": "Colores",
+"gmap.l_new": "Lugar nuevo",
+"gmap.l_old": "Ya visitado",
+"gmap.l_airport": "Aeropuerto",
+"gmap.l_location": "Mirador",
+"gmap.l_gps": "Posición GPS",
+"gmap.l_size": "Tamaño = número de spots",
+"gmap.quarter": "T{q} {y}",
+"gmap.week_of": "Semana del {d}",
+"gmap.military": "Militares",
+"gmap.n_spots": {
+"one": "spot",
+"other": "spots"
+},
+"gmap.n_planes": {
+"one": "avión",
+"other": "aviones"
+},
+"gmap.n_types": {
+"one": "tipo",
+"other": "tipos"
+},
+"gmap.n_places": {
+"one": "{count} lugar",
+"other": "{count} lugares"
+}
 }

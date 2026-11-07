@@ -1751,5 +1751,43 @@
 "upl.dup": "重複の可能性",
 "upl.failed": "保存に失敗しました",
 "upl.retry": "再試行",
-"upl.draft": "下書きにする"
+"upl.draft": "下書きにする",
+"gmap.show_counts": "円内に件数を表示",
+"gmap.show_legend": "凡例",
+"gmap.step": "間隔",
+"gmap.u_year": "年",
+"gmap.u_quarter": "四半期",
+"gmap.u_month": "月",
+"gmap.u_week": "週",
+"gmap.mode": "表示",
+"gmap.m_cumul": "累積",
+"gmap.m_window": "期間のみ",
+"gmap.speed": "速度",
+"gmap.timeline": "タイムライン",
+"gmap.legend": "色",
+"gmap.l_new": "新しい場所",
+"gmap.l_old": "訪問済み",
+"gmap.l_airport": "空港",
+"gmap.l_location": "撮影ポイント",
+"gmap.l_gps": "GPS位置",
+"gmap.l_size": "大きさ＝スポット数",
+"gmap.quarter": "{y}年 Q{q}",
+"gmap.week_of": "{d} の週",
+"gmap.military": "軍用",
+"gmap.n_spots": {
+"one": "件",
+"other": "件"
+},
+"gmap.n_planes": {
+"one": "機",
+"other": "機"
+},
+"gmap.n_types": {
+"one": "機種",
+"other": "機種"
+},
+"gmap.n_places": {
+"one": "{count} か所",
+"other": "{count} か所"
+}
 }

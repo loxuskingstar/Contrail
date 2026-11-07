@@ -1922,5 +1922,43 @@
 "upl.dup": "Doublon probable",
 "upl.failed": "Échec de l'enregistrement",
 "upl.retry": "Réessayer",
-"upl.draft": "Garder en brouillon"
+"upl.draft": "Garder en brouillon",
+"gmap.show_counts": "Nombre dans les ronds",
+"gmap.show_legend": "Légende",
+"gmap.step": "Pas",
+"gmap.u_year": "Année",
+"gmap.u_quarter": "Trimestre",
+"gmap.u_month": "Mois",
+"gmap.u_week": "Semaine",
+"gmap.mode": "Affichage",
+"gmap.m_cumul": "Cumulatif",
+"gmap.m_window": "Période seule",
+"gmap.speed": "Vitesse",
+"gmap.timeline": "Frise chronologique",
+"gmap.legend": "Couleurs",
+"gmap.l_new": "Nouveau lieu",
+"gmap.l_old": "Déjà visité",
+"gmap.l_airport": "Aéroport",
+"gmap.l_location": "Point de vue",
+"gmap.l_gps": "Position GPS",
+"gmap.l_size": "Taille = nombre de spots",
+"gmap.quarter": "T{q} {y}",
+"gmap.week_of": "Semaine du {d}",
+"gmap.military": "Militaires",
+"gmap.n_spots": {
+"one": "spot",
+"other": "spots"
+},
+"gmap.n_planes": {
+"one": "avion",
+"other": "avions"
+},
+"gmap.n_types": {
+"one": "type",
+"other": "types"
+},
+"gmap.n_places": {
+"one": "{count} lieu",
+"other": "{count} lieux"
+}
 }

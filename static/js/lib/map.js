@@ -95,7 +95,7 @@ class ContrailMap {
   }
 
   /** Marqueur HTML : kind = pin (pastille avec libellé) | dot | element */
-  marker(latlng, { kind = 'pin', label = '', color, size, html, popup, title, draggable = false, onClick, onDragEnd, group = 'default', z } = {}) {
+  marker(latlng, { kind = 'pin', label = '', color, size, html, popup, popupClass, popupOffset = 14, title, draggable = false, onClick, onDragEnd, group = 'default', z } = {}) {
     let el;
     if (kind === 'element' && html) {
       el = document.createElement('div');
@@ -115,7 +115,7 @@ class ContrailMap {
     if (title) el.title = title;
     if (z) el.style.zIndex = z;
     const m = new this.ml.Marker({ element: el, draggable, anchor: 'center' }).setLngLat(ll(latlng)).addTo(this.map);
-    if (popup) m.setPopup(new this.ml.Popup({ offset: 14, maxWidth: '300px' }).setHTML(popup));
+    if (popup) m.setPopup(new this.ml.Popup({ offset: popupOffset, maxWidth: '300px', className: popupClass }).setHTML(popup));
     if (onClick) el.addEventListener('click', (e) => { e.stopPropagation(); onClick(e); });
     if (onDragEnd) m.on('dragend', () => { const p = m.getLngLat(); onDragEnd({ lat: p.lat, lng: p.lng }); });
     const api = {
