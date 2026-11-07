@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from ..core import APP_NAME, APP_VERSION, execute, get_config, now_iso, q1
+from . import actypes
 from . import registration as regs
 
 log = logging.getLogger("contrail.aircraft")
@@ -94,7 +95,7 @@ def hexdb_route(callsign: str) -> str | None:
 def by_icao24(icao24: str) -> dict | None:
     """Utilisé par le radar : hex Mode-S -> données appareil."""
     icao24 = icao24.lower().strip()
-    from . import actypes, refdb
+    from . import refdb
     ref = refdb.by_hex([icao24]).get(icao24)
     row = q1("SELECT data FROM aircraft_cache WHERE json_extract(data,'$.icao24') = ?", (icao24,))
     if row:
@@ -108,6 +109,8 @@ def by_icao24(icao24: str) -> dict | None:
         return {"registration": ref.get("registration"), "aircraft_icao": ref.get("typecode"),
                 "aircraft": ref.get("description") or actypes.name(ref.get("typecode")), "owner": ref.get("ownop"),
                 "icao24": icao24, "country": regs.country_of(ref.get("registration"))}
+    if d and d.get("aircraft"):
+        d["aircraft"] = actypes.clean_model(d["aircraft"])
     if d and d.get("registration"):
         d["country"] = regs.country_of(d["registration"])
         _store(regs.normalize(d["registration"]), d, "hexdb")
@@ -215,7 +218,7 @@ def lookup(reg_in: str, refresh: bool = False) -> dict:
         sources.append("cache")
 
     # Base de référence locale (hors-ligne) : Mode-S, type, opérateur
-    from . import actypes, refdb
+    from . import refdb
     ref = refdb.by_reg(reg)
     if ref:
         local = {"icao24": ref.get("icao24"), "aircraft_icao": ref.get("typecode"),
@@ -267,6 +270,9 @@ def lookup(reg_in: str, refresh: bool = False) -> dict:
         result["country"] = regs.country_for(reg, result.get("owner"))
     if "military" not in result:
         result["military"] = 1 if regs.looks_military(result.get("owner"), result.get("aircraft")) else 0
+    result["aircraft"] = actypes.clean_model(result.get("aircraft")) or result.get("aircraft")
+    if result.get("manufacturer"):
+        result["manufacturer"] = actypes.clean_maker(result["manufacturer"])
     result["sources"] = sources
     result["found"] = any(result.get(k) for k in ("aircraft", "aircraft_icao", "owner", "msn"))
     return result

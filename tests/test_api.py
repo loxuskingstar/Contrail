@@ -1581,3 +1581,23 @@ def test_new_filters_and_gear_missing(client):
     assert len(ids) == 2
     assert client.post("/api/spots/bulk", json={"ids": ids, "action": "set", "value": {"camera": "Nova X1"}}).status_code == 200
     assert client.get("/api/spots", params={**q, "camera": "__none__"}).json()["total"] == 0
+
+
+def test_model_names_are_cleaned(client):
+    from app.services.actypes import clean_model
+    assert clean_model("AIRBUS A-330-300") == "Airbus A330-300"
+    assert clean_model("B-737-800") == "B737-800"
+    assert clean_model("B737-800") == "B737-800"                   # forme déjà juste : jamais modifiée
+    assert clean_model("BOEING 737-8AS") == "Boeing 737-8AS"
+    assert clean_model("ATR-72-600") == "ATR 72-600"
+    assert clean_model("Airbus A330-300") == "Airbus A330-300"      # déjà propre : inchangé
+    assert clean_model("Boeing B-52") == "Boeing B-52"             # pas de faux ami
+    assert clean_model("Embraer E190-E2") == "Embraer E190-E2"
+    # l'autocomplétion renvoie la forme propre, même si la base locale a la mauvaise
+    from app.services import refdb
+    import gzip, pathlib, tempfile
+    lines = ["3b7753;F-ZNAM;A333;00;AIRBUS A-330-300;2012;Test Air;"]
+    f = pathlib.Path(tempfile.mkdtemp()) / "a.csv.gz"
+    f.write_bytes(gzip.compress("\n".join(lines).encode()))
+    refdb.import_file(f, "test-clean")
+    assert client.get("/api/lookup/aircraft/F-ZNAM").json()["aircraft"] == "Airbus A330-300"

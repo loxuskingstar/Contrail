@@ -213,3 +213,60 @@ def model_key(code: str | None, text: str | None = None, military: int | bool | 
     if key and military and "/" not in key and family(key, None):       # A330, A310, 737… sous cocarde militaire
         return f"{key}/MIL"
     return key
+
+
+# --------------------------------------------------------------------------- #
+# Nettoyage des désignations renvoyées par les bases externes (« AIRBUS A-330-300 » → « Airbus A330-300 »)
+# --------------------------------------------------------------------------- #
+_MAKERS = {
+    "AIRBUS": "Airbus", "BOEING": "Boeing", "EMBRAER": "Embraer", "BOMBARDIER": "Bombardier", "CESSNA": "Cessna",
+    "PIPER": "Piper", "DASSAULT": "Dassault", "DASSAULT AVIATION": "Dassault", "GULFSTREAM": "Gulfstream",
+    "GULFSTREAM AEROSPACE": "Gulfstream", "BEECHCRAFT": "Beechcraft", "BEECH": "Beechcraft", "CIRRUS": "Cirrus",
+    "DIAMOND": "Diamond", "PILATUS": "Pilatus", "ROBIN": "Robin", "SOCATA": "Socata", "DAHER": "Daher",
+    "LOCKHEED": "Lockheed", "LOCKHEED MARTIN": "Lockheed Martin", "MCDONNELL DOUGLAS": "McDonnell Douglas",
+    "DOUGLAS": "Douglas", "FOKKER": "Fokker", "SAAB": "Saab", "LEARJET": "Learjet", "HAWKER": "Hawker",
+    "ROBINSON": "Robinson", "BELL": "Bell", "SIKORSKY": "Sikorsky", "EUROCOPTER": "Eurocopter", "LEONARDO": "Leonardo",
+    "AGUSTAWESTLAND": "AgustaWestland", "ANTONOV": "Antonov", "ILYUSHIN": "Ilyushin", "TUPOLEV": "Tupolev",
+    "SUKHOI": "Sukhoi", "COMAC": "COMAC", "ATR": "ATR", "AEROSPATIALE": "Aérospatiale", "DE HAVILLAND": "De Havilland",
+    "DE HAVILLAND CANADA": "De Havilland Canada", "MOONEY": "Mooney", "GROB": "Grob", "EXTRA": "Extra",
+}
+_RULES = [
+    (re.compile(r"\bA[-\s]?(3[0-9]{2}|2[0-9]{2}|220)(?=[-\s]?\d|\b)"), r"A\1"),            # A-330-300, A 330 → A330
+    (re.compile(r"\b(A3[0-9]{2}|A220|A2[0-9]{2})\s+(\d{3})\b"), r"\1-\2"),                  # A330 300 → A330-300
+    (re.compile(r"\bB[-\s](7[0-9]7)\b"), r"B\1"),                                           # B-737 → B737 (« B737-800 » est déjà juste)
+    (re.compile(r"\b(7[0-9]7)\s+(\d{3}\w*)\b"), r"\1-\2"),                                  # 737 800 → 737-800
+    (re.compile(r"\bATR[-\s]?(42|72)\b"), r"ATR \1"),                                         # ATR-72 → ATR 72
+    (re.compile(r"\bCRJ[-\s](\d{3,4})\b"), r"CRJ\1"),                                        # CRJ-700 → CRJ700
+    (re.compile(r"\bE[-\s]?(1[79][0-9]|1[79]5)\b(?!-)"), r"E\1"),                            # E-190 → E190
+]
+
+
+def clean_model(text: str | None) -> str | None:
+    """Met en forme une désignation d'appareil venant d'une base externe : fabricant en casse normale, tirets cohérents.
+    Ne change jamais le sens (aucun code n'est inventé) ; une désignation déjà propre est renvoyée telle quelle."""
+    if not text:
+        return text
+    s = re.sub(r"\s+", " ", str(text)).strip()
+    if not s:
+        return None
+    if re.match(r"^A[-\s]?(3[0-9]{2}|220)\b", s):          # « A-330-300 » sans fabricant
+        s = "Airbus " + s
+    for rx, rep in _RULES:
+        s = rx.sub(rep, s)
+    # Fabricant en MAJUSCULES (« AIRBUS ») → casse normale ; le reste (codes modèle) est laissé tel quel
+    up = s.upper()
+    for k in sorted(_MAKERS, key=len, reverse=True):
+        if up.startswith(k + " ") or up == k:
+            head = s[:len(k)]
+            if head.isupper():
+                s = _MAKERS[k] + s[len(k):]
+            break
+    # Désignation entièrement en majuscules sans fabricant connu : « PIPER PA-28R-201 » reste lisible, on ne force rien
+    return s
+
+
+def clean_maker(text: str | None) -> str | None:
+    if not text:
+        return text
+    s = re.sub(r"\s+", " ", str(text)).strip()
+    return _MAKERS.get(s.upper(), s) if s.isupper() else s

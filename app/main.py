@@ -64,12 +64,37 @@ def _reclassify_fields() -> None:
                 execute(f"UPDATE {table} SET airport=?, place=NULL WHERE place=? AND (airport IS NULL OR airport='')", (a["icao"], r["place"]))
 
 
+def _clean_models() -> None:
+    """Met en forme les désignations déjà enregistrées (« A-330-300 » → « A330-300 ») : spots, vols, flottes, cache."""
+    import json as _json
+
+    from .core import execute, q
+    from .services import actypes
+    for table, col in (("spotting", "aircraft"), ("flights", "aircraft"), ("fleets", "aircraft")):
+        try:
+            for r in q(f"SELECT DISTINCT {col} v FROM {table} WHERE {col} IS NOT NULL AND {col} <> ''"):
+                new = actypes.clean_model(r["v"])
+                if new and new != r["v"]:
+                    execute(f"UPDATE {table} SET {col} = ? WHERE {col} = ?", (new, r["v"]))
+        except Exception:  # noqa: BLE001 — table absente d'une très ancienne base
+            log.debug("Nettoyage des désignations : %s ignoré", table, exc_info=True)
+    for r in q("SELECT registration, data FROM aircraft_cache"):
+        try:
+            d = _json.loads(r["data"])
+        except ValueError:
+            continue
+        new = actypes.clean_model(d.get("aircraft"))
+        if new and new != d.get("aircraft"):
+            d["aircraft"] = new
+            execute("UPDATE aircraft_cache SET data = ? WHERE registration = ?", (_json.dumps(d, ensure_ascii=False), r["registration"]))
+
+
 def _run_fixups() -> None:
     """Rattrapages de données (pays, patrouilles, terrains) : exécutés une fois par version de l'application, pas à chaque
     démarrage. Les règles de classement évoluent d'une version à l'autre ; un spot enregistré ensuite est déjà traité à l'écriture."""
     if get_settings().get("fixups_version") == APP_VERSION:
         return
-    for fn, label in ((collection.recategorize, "livrées"), (_backfill_countries, "pays"), (_link_patrols, "patrouilles"),
+    for fn, label in ((collection.recategorize, "livrées"), (_clean_models, "désignations"), (_backfill_countries, "pays"), (_link_patrols, "patrouilles"),
                       (_reclassify_fields, "terrains")):
         try:
             fn()
