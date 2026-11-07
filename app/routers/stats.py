@@ -34,7 +34,7 @@ def _stats(year: str = ""):
     w, p = _period(year)
     totals = q1(
         f"SELECT COUNT(*) spots, COUNT(DISTINCT known(registration)) registrations, "
-        f"COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
+        f"COUNT(DISTINCT mk(aircraft_icao, aircraft, military)) types, "
         f"COUNT(DISTINCT opg(airline_icao, owner)) airlines, COUNT(DISTINCT NULLIF(airport,'')) airports, "
         f"COUNT(DISTINCT country) countries, SUM(CASE WHEN image IS NOT NULL THEN 1 ELSE 0 END) photos, "
         f"SUM(CASE WHEN livery_category IS NOT NULL AND livery_category NOT IN ('primer', 'white') THEN 1 ELSE 0 END) special_liveries, "
@@ -85,7 +85,7 @@ def _stats(year: str = ""):
     days_all = q(f"SELECT DISTINCT substr(date,1,10) d FROM spotting WHERE {w} AND date IS NOT NULL", p)
     return {
         "year": year, "totals": totals, "top_registrations": top_regs, "top_airports": top_airports,
-        "top_types": top("COALESCE(aircraft_icao, aircraft)", ", MAX(aircraft) label"),
+        "top_types": top("mk(aircraft_icao, aircraft, military)", ", MAX(aircraft) label"),
         "top_airlines": top("opg(airline_icao, owner)", ", MAX(owner) label"),
         "top_countries": top("country"), "top_tags": q(
             f"SELECT t.name k, t.color, COUNT(*) n FROM spotting_tags st JOIN tags t USING(id_tag) "
@@ -159,10 +159,10 @@ def _dashboard():
 
     today = date.today()
     totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT known(registration)) regs, "
-                "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, COUNT(DISTINCT opg(airline_icao, owner)) airlines, "
+                "COUNT(DISTINCT mk(aircraft_icao, aircraft, military)) types, COUNT(DISTINCT opg(airline_icao, owner)) airlines, "
                 "COUNT(DISTINCT NULLIF(airport,'')) airports, COUNT(DISTINCT country) countries FROM spotting")
     month = q1("SELECT COUNT(*) n FROM spotting WHERE substr(date,1,7) = ?", (today.strftime("%Y-%m"),))["n"]
-    year_totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
+    year_totals = q1("SELECT COUNT(*) spots, COUNT(DISTINCT mk(aircraft_icao, aircraft, military)) types, "
                      "COUNT(DISTINCT known(registration)) regs, COUNT(DISTINCT substr(date,1,10)) days FROM spotting WHERE substr(date,1,4) = ?",
                      (str(today.year),))
     last_year = q1("SELECT COUNT(*) spots FROM spotting WHERE substr(date,1,4) = ? AND substr(date,6,5) <= ?",
@@ -174,8 +174,8 @@ def _dashboard():
                     f"ORDER BY s.date DESC LIMIT 8", (today.strftime("%m-%d"), str(today.year)))
     hero = q1("SELECT id_spotting, registration, aircraft, owner, image, thumb, airport, date FROM spotting "
               "WHERE image IS NOT NULL ORDER BY favorite DESC, COALESCE(date, created_at) DESC LIMIT 1")
-    top_types = q("SELECT COALESCE(aircraft_icao, aircraft) k, MAX(aircraft) label, COUNT(*) n FROM spotting "
-                  "WHERE COALESCE(aircraft_icao, aircraft) IS NOT NULL GROUP BY k ORDER BY n DESC LIMIT 6")
+    top_types = q("SELECT mk(aircraft_icao, aircraft, military) k, MAX(aircraft) label, COUNT(*) n FROM spotting "
+                  "WHERE mk(aircraft_icao, aircraft, military) IS NOT NULL GROUP BY k ORDER BY n DESC LIMIT 6")
     months = q("SELECT substr(date,1,7) k, COUNT(*) n FROM spotting WHERE date >= date('now','-11 months','start of month') "
                "GROUP BY k ORDER BY k")
     flights = q1("SELECT COUNT(*) n, COALESCE(SUM(distance_km),0) km FROM flights")

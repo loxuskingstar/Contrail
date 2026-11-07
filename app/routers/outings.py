@@ -14,7 +14,7 @@ from .spots import LIST_COLS, decorate
 router = APIRouter(prefix="/api/outings", tags=["outings"])
 
 SPECIAL = "s.livery_category IS NOT NULL AND s.livery_category NOT IN ('primer', 'white')"
-STATS = (f"COUNT(*) n, COUNT(DISTINCT s.registration) regs, COUNT(DISTINCT COALESCE(s.aircraft_icao, s.aircraft)) types, "
+STATS = (f"COUNT(*) n, COUNT(DISTINCT s.registration) regs, COUNT(DISTINCT mk(s.aircraft_icao, s.aircraft, s.military)) types, "
          f"MIN(s.date) first_at, MAX(s.date) last_at, SUM(s.favorite) favs, SUM(s.military) military, "
          f"SUM(CASE WHEN {SPECIAL} THEN 1 ELSE 0 END) specials, SUM(CASE WHEN s.image IS NOT NULL THEN 1 ELSE 0 END) photos, SUM(CASE WHEN s.is_patrol = 1 THEN 1 ELSE 0 END) patrols")
 

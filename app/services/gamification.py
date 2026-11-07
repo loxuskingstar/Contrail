@@ -156,7 +156,7 @@ def _metrics() -> dict[str, float]:
     m: dict[str, float] = {}
     r = q1(
         "SELECT COUNT(*) spots, COUNT(DISTINCT known(registration)) regs, "
-        "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, "
+        "COUNT(DISTINCT mk(aircraft_icao, aircraft, military)) types, "
         "COUNT(DISTINCT CASE WHEN military = 0 THEN opg(airline_icao, owner) END) airlines, "
         "COUNT(DISTINCT NULLIF(airport,'')) airports, COUNT(DISTINCT country) countries, "
         "COUNT(DISTINCT NULLIF(manufacturer,'')) manufacturers, "
@@ -245,7 +245,7 @@ def _metrics() -> dict[str, float]:
     # Vols
     f = q1("SELECT COUNT(*) flights, COALESCE(SUM(distance_km),0) km, COALESCE(SUM(duration_min),0) mins, "
            "COALESCE(MAX(distance_km),0) longest, COUNT(DISTINCT COALESCE(airline_icao, airline)) airlines, "
-           "COUNT(DISTINCT COALESCE(aircraft_icao, aircraft)) types, COUNT(DISTINCT cabin_class) cabins FROM flights") or {}
+           "COUNT(DISTINCT mk(aircraft_icao, aircraft)) types, COUNT(DISTINCT cabin_class) cabins FROM flights") or {}
     m["flights"], m["flight_km"] = f.get("flights") or 0, round(f.get("km") or 0)
     m["flight_hours"] = round((f.get("mins") or 0) / 60)
     m["longest_flight"] = round(f.get("longest") or 0)

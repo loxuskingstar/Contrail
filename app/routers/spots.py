@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from ..core import db, execute, get_settings, memo, now_iso, q, q1
 from ..services import outings as outings_svc, trash, airframes, collection, gamification, geo, media, weather, wishes
+from ..services import actypes
 from ..services import registration as regs
 from ..services.notify import notify, texts
 
@@ -33,7 +34,7 @@ SORTS = {
     "date_asc": "COALESCE(s.date, s.created_at) ASC, s.id_spotting ASC",
     "created": "s.created_at DESC, s.id_spotting DESC",
     "registration": "s.registration ASC, s.date DESC",
-    "type": "COALESCE(s.aircraft_icao, s.aircraft) ASC, s.date DESC",
+    "type": "mk(s.aircraft_icao, s.aircraft, s.military) ASC, s.date DESC",
 }
 
 
@@ -94,8 +95,8 @@ def build_filters(f: dict) -> tuple[str, list]:
             where.append(f"{col} = ?")
             params.append(f[key].upper() if key in ("registration", "airport", "country") else f[key])
     if f.get("type"):
-        where.append("COALESCE(s.aircraft_icao, s.aircraft) = ?")
-        params.append(f["type"])
+        where.append("mk(s.aircraft_icao, s.aircraft, s.military) = ?")
+        params.append(actypes.model_key(f["type"]))
     if f.get("airline"):
         where.append("opg(s.airline_icao, s.owner) = ?")
         params.append(f["airline"])
@@ -286,7 +287,7 @@ def _facets():
     return {
         "airports": col("SELECT airport v, COUNT(*) n FROM spotting GROUP BY airport ORDER BY n DESC"),
         "places": col("SELECT place v, COUNT(*) n FROM spotting WHERE place IS NOT NULL GROUP BY place ORDER BY n DESC"),
-        "types": col("SELECT COALESCE(aircraft_icao, aircraft) v, COUNT(*) n FROM spotting GROUP BY v ORDER BY n DESC"),
+        "types": col("SELECT mk(aircraft_icao, aircraft, military) v, COUNT(*) n FROM spotting GROUP BY v ORDER BY n DESC"),
         "airlines": q("SELECT opg(airline_icao, owner) v, MAX(owner) name, COUNT(*) n FROM spotting "
                       "WHERE opg(airline_icao, owner) IS NOT NULL GROUP BY v ORDER BY n DESC"),
         "years": col("SELECT DISTINCT substr(date,1,4) v FROM spotting WHERE date IS NOT NULL ORDER BY v DESC"),

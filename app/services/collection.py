@@ -101,7 +101,7 @@ def _badge_context(_ref_mtime=0) -> dict:
     seen_p: set = set()
     counts: dict[str, int] = {}
     opg_cache: dict[tuple, str | None] = {}
-    for r in q("SELECT id_spotting, registration, COALESCE(aircraft_icao, aircraft) t, airline_icao, owner, airport "
+    for r in q("SELECT id_spotting, registration, mk(aircraft_icao, aircraft, military) t, airline_icao, owner, airport "
                "FROM spotting ORDER BY COALESCE(date, created_at), id_spotting"):
         sid = r["id_spotting"]
         if r["t"] and r["t"] not in seen_t:

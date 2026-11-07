@@ -119,3 +119,97 @@ def family(code: str | None, text: str | None = None) -> str | None:
         if re.search(pat, s2, re.I):
             return fam
     return None
+
+
+# --------------------------------------------------------------------------- #
+# Modèle « compté » : une variante spéciale d'un avion civil est un modèle à part entière
+# --------------------------------------------------------------------------- #
+# Un MRTT n'est pas « un A330-200 de plus » : même cellule, mais autre avion à observer. Ces variantes de mission
+# portent souvent le code OACI de l'appareil civil (A332) ; on les reconnaît à leur libellé.
+VARIANT_OF = {"A3T3": "MRTT", "K35T": "K35R", "K35E": "K35R", "K46": "KC46"}      # codes qui désignent déjà le même modèle
+_VARIANT_RULES = [
+    (re.compile(r"MRTT|KC-?30|Voyager|Phenix|Phénix", re.I), "MRTT"),
+    (re.compile(r"KC-?10\b", re.I), "KC10"),
+    (re.compile(r"VC-?25|Air Force One", re.I), "VC25"),
+    (re.compile(r"E-?4B|Nightwatch", re.I), "E4B"),
+    (re.compile(r"Dreamlifter|747-?400\s?LCF|\bLCF\b", re.I), "LCF"),
+    (re.compile(r"SOFIA", re.I), "SOFIA"),
+    (re.compile(r"E-?7A?\b|Wedgetail|737 AEW", re.I), "E737"),
+    (re.compile(r"C-?40[ABC]?\b|Clipper", re.I), "C40"),
+    (re.compile(r"Zero-?G", re.I), "ZEROG"),
+]
+# Mots de variante purement commerciale (cargo, VIP…) : même modèle pour le décompte
+_VARIANT_WORDS = re.compile(r"\b(VIP|ACJ|BBJ|freighter|cargo|combi|BCF|P2F|SF|PCF|\(F\)|-F)\b", re.I)
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+@lru_cache(maxsize=1)
+def _by_name() -> tuple[dict[str, str], dict[str, str]]:
+    """(nom complet normalisé → code, nom sans constructeur → code) ; à nom égal, le premier code fait référence."""
+    full: dict[str, str] = {}
+    short: dict[str, str] = {}
+    for code, e in _table().items():
+        code = VARIANT_OF.get(code, code)
+        if code not in _table():
+            continue
+        n = _norm(e[0])
+        full.setdefault(n, code)
+        parts = e[0].split(" ", 1)
+        if len(parts) == 2:
+            short.setdefault(_norm(parts[1]), code)
+    return full, short
+
+
+@lru_cache(maxsize=1)
+def _table_norm_codes() -> dict[str, str]:
+    return {_norm(c): c for c in _table()}
+
+
+def _base_key(c: str, t: str) -> str | None:
+    if c:
+        c = VARIANT_OF.get(c, c)
+        e = _table().get(c)
+        if e:                               # deux codes, même nom → un seul modèle (E75L/E75S, CAP1/CP10…)
+            return _by_name()[0].get(_norm(e[0]), c)
+        return c
+    if not t:
+        return None
+    base = re.sub(r"\s+", " ", _VARIANT_WORDS.sub(" ", t)).strip(" -/,")
+    base = re.sub(r"\b(A3(?:18|19|20|21))-\d+\w*", r"\1", base)          # A320-214 → A320
+    base = re.sub(r"\b(A3[0-9]{2})-(\d)\d\d\b", lambda m: f"{m.group(1)}-{m.group(2)}00", base)   # A330-243 → A330-200
+    full, short = _by_name()
+    n = _norm(base)
+    for key in (n, _norm(re.sub(r"(\d{3})-(\d)\d\d", r"\1-\g<2>00", base))):
+        if key in full:
+            return full[key]
+        if key in short:
+            return short[key]
+    if n in _table_norm_codes():
+        return _table_norm_codes()[n]
+    for key, cc in sorted({**short, **full}.items(), key=lambda kv: -len(kv[0])):
+        if len(key) >= 6 and n.startswith(key) and len(n) - len(key) <= 2:     # « Rafale B », « Rafale M » → Rafale
+            return cc
+    return (base or t).upper()
+
+
+@lru_cache(maxsize=4096)
+def model_key(code: str | None, text: str | None = None, military: int | bool | None = None) -> str | None:
+    """Clé du modèle d'un appareil pour les décomptes (« Premier modèle », succès, statistiques, filtres).
+
+    - Le code OACI fait foi ; deux codes du même modèle sont fusionnés (E75L/E75S).
+    - Une variante spéciale d'un avion civil est un modèle à part : MRTT (même code A332), KC-10, VC-25, Dreamlifter,
+      SOFIA… reconnus à leur libellé.
+    - Un avion de ligne exploité par des armées sans variante connue compte à part de sa version civile (« A332/MIL »).
+    - Sans code, on le retrouve d'après le libellé (« A330-243 » → A332) ; les mots purement commerciaux (cargo, VIP) sont ignorés."""
+    c = (code or "").strip().upper()
+    t = (text or "").strip()
+    for rx, tag in _VARIANT_RULES:
+        if t and rx.search(t) and (tag != "E737" or "737" in t or c in ("", "B737", "B738")):
+            return tag
+    key = _base_key(c, t)
+    if key and military and "/" not in key and family(key, None):       # A330, A310, 737… sous cocarde militaire
+        return f"{key}/MIL"
+    return key

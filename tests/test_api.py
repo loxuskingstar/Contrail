@@ -1344,3 +1344,23 @@ def test_fleet_overrides_correct_rarity(client):
     client.put("/api/settings", json={"fleet_overrides": {}})
     assert refdb.type_counts()["A337"] == 6
     assert "items" in client.get("/api/refdb/fleet").json()
+
+
+def test_special_variants_are_new_models(client):
+    from app.services import actypes
+    mk = actypes.model_key
+    assert mk("A332", "Airbus A330-200 MRTT", 1) == "MRTT" != mk("A332", "Airbus A330-200", 0) == "A332"
+    assert mk("A332", "Airbus A330-200", 1) == "A332/MIL"                    # A330 sous cocarde militaire : autre appareil
+    assert mk("B744", "Boeing 747-400 Dreamlifter", 0) == "LCF"
+    assert mk("RFAL", "Rafale B", 1) == "RFAL" and mk("K35T", None, 1) == mk("K35R", None, 1)
+    assert mk("A3ST") != mk("A337") and mk(None, "Airbus A330-243") == "A332"
+    make = lambda i, **d: client.post("/api/spots", data={"data": json.dumps({"date": "2048-01-0%d" % i, **d})}).json()["spot"]
+    a = make(1, registration="F-ZMA1", aircraft_icao="A332", aircraft="Airbus A330-200", military=False)
+    b = make(2, registration="F-ZMA2", aircraft_icao="A332", aircraft="Airbus A330-200 MRTT", military=True)
+    c = make(3, registration="F-ZMA3", aircraft_icao="A332", aircraft="Airbus A330-200", military=False)
+    badges = lambda s: [x["code"] for x in client.get(f"/api/spots/{s['id_spotting']}").json().get("badges", [])]
+    assert "first_type" in badges(a)
+    assert "first_type" in badges(b)                    # premier MRTT : nouveau modèle malgré l'A330-200 déjà vu
+    assert "first_type" not in badges(c)
+    ids = {s["id_spotting"] for s in client.get("/api/spots", params={"type": "MRTT", "year": 2048}).json()["items"]}
+    assert ids == {b["id_spotting"]}
