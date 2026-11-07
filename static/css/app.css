@@ -1046,3 +1046,5 @@ body.radar-mode .main { padding: 0; }
   .gm-hud-t { font-size: calc(15px * var(--fs, 1)); }
 }
 @media (prefers-reduced-motion: reduce) { .gdot-in { animation: none; } .gdot { transition: none; } }
+/* fond satellite : halo des ronds un peu plus marqué pour rester lisible */
+.gm-wrap.sat .gdot-in { border-color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 35%, transparent), 0 2px 8px rgb(0 0 0 / .55); }

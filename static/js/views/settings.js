@@ -50,7 +50,7 @@ export async function render(root, params) {
         <button type="button" class="btn sm" data-ui-reset style="align-self:flex-start">${icon('rotate-ccw', '', 14)} ${esc(t('ui.reset'))}</button>
       </div>
       <div class="card stack"><div class="card-title" style="margin-bottom:0">${esc(t('settings.map'))}</div>
-        <label class="field"><span>${esc(t('settings.map_tiles'))}</span><select data-tiles>${['auto', 'positron', 'liberty', 'bright', 'dark', 'fiord', 'osm', 'custom'].map((v) => `<option value="${v}" ${(S.map_tiles || 'auto') === v ? 'selected' : ''}>${esc(t(`settings.tiles_${v}`))}</option>`).join('')}</select></label>
+        <label class="field"><span>${esc(t('settings.map_tiles'))}</span><select data-tiles>${['auto', 'positron', 'liberty', 'bright', 'dark', 'fiord', 'osm', 'sat_esri', 'sat_ign', 'custom'].map((v) => `<option value="${v}" ${(S.map_tiles || 'auto') === v ? 'selected' : ''}>${esc(t(`settings.tiles_${v}`))}</option>`).join('')}</select></label>
         <div class="stack" data-custom-tiles ${(S.map_tiles || 'auto') === 'custom' ? '' : 'hidden'}>
           <label class="field"><span>${esc(t('settings.tiles_url'))}</span><input data-tiles-url value="${esc(S.map_tiles_url || '')}" placeholder="https://tiles.openfreemap.org/styles/liberty" spellcheck="false"></label>
         </div>

@@ -53,7 +53,7 @@ export async function render(root) {
   try { facets = await api('/api/spots/facets'); } catch (e) { errorToast(e); return; }
   const years = (facets.years || []).slice().sort();
   if (!years.length) { root.innerHTML = pageHead(esc(t('gmap.title'))) + `<div class="card">${emptyState('map', t('map.empty'), '')}</div>`; return; }
-  const prefs = { counts: false, legend: true, color: 'kind', unit: 'year', cumul: true, speed: 1, ...loadPrefs() };
+  const prefs = { base: 'default', counts: false, legend: true, color: 'kind', unit: 'year', cumul: true, speed: 1, ...loadPrefs() };
   const opts = (sel) => years.map((y) => `<option ${y === sel ? 'selected' : ''}>${y}</option>`).join('');
   const sel = (name, cur, items) => `<select class="input" data-${name}>${items.map(([v, l]) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
 
@@ -63,6 +63,7 @@ export async function render(root) {
         <label class="gm-f">${esc(t('gmap.from'))}<select class="input" data-from>${opts(years[0])}</select></label>
         <label class="gm-f">${esc(t('gmap.to'))}<select class="input" data-to>${opts(years[years.length - 1])}</select></label>
         <label class="gm-f">${esc(t('gmap.color'))}${sel('color', prefs.color, [['kind', t('gmap.c_kind')], ['new', t('gmap.c_new')]])}</label>
+        <label class="gm-f">${esc(t('gmap.base'))}${sel('base', prefs.base, [['default', t('gmap.b_default')], ['sat_esri', t('gmap.b_esri')], ['sat_ign', t('gmap.b_ign')]])}</label>
         <label class="gm-sw"><input type="checkbox" data-counts ${prefs.counts ? 'checked' : ''}><span>${esc(t('gmap.show_counts'))}</span></label>
         <label class="gm-sw"><input type="checkbox" data-legend ${prefs.legend ? 'checked' : ''}><span>${esc(t('gmap.show_legend'))}</span></label>
       </div>
@@ -81,8 +82,8 @@ export async function render(root) {
       <div class="gm-legend" data-leg></div>
     </div>`;
 
-  const { createMap } = await import('../lib/map.js');
-  const map = await createMap(root.querySelector('[data-map]'));
+  const { createMap, styleFor } = await import('../lib/map.js');
+  const map = await createMap(root.querySelector('[data-map]'), { base: prefs.base === 'default' ? undefined : prefs.base });
   const $ = (s) => root.querySelector(s);
 
   const state = { steps: [], cur: null, bounds: null, playing: false, token: 0 };
@@ -90,7 +91,7 @@ export async function render(root) {
   const live = new Map();                         // id du lieu → { api, el, in, num }
 
   const range = () => { let a = $('[data-from]').value, b = $('[data-to]').value; if (a > b) [a, b] = [b, a]; return [a, b]; };
-  const save = () => savePrefs({ counts: prefs.counts, legend: prefs.legend, color: prefs.color, unit: prefs.unit, cumul: prefs.cumul, speed: prefs.speed });
+  const save = () => savePrefs({ base: prefs.base, counts: prefs.counts, legend: prefs.legend, color: prefs.color, unit: prefs.unit, cumul: prefs.cumul, speed: prefs.speed });
 
   /* ------------------------------------------------------------------ légende */
   function drawLegend(max) {
@@ -235,6 +236,8 @@ export async function render(root) {
   $('[data-unit]').addEventListener('change', (e) => { prefs.unit = e.target.value; save(); reset(); });
   $('[data-cumul]').addEventListener('change', (e) => { prefs.cumul = e.target.value === '1'; save(); state.cur === null ? draw() : (stop(), draw()); });
   $('[data-speed]').addEventListener('change', (e) => { prefs.speed = Number(e.target.value); save(); });
+  $('[data-base]').addEventListener('change', (e) => { prefs.base = e.target.value; save(); map.map.setStyle(styleFor(prefs.base === 'default' ? undefined : prefs.base)); root.querySelector('.gm-wrap').classList.toggle('sat', prefs.base !== 'default'); });
+  root.querySelector('.gm-wrap').classList.toggle('sat', prefs.base !== 'default');
   $('[data-counts]').addEventListener('change', (e) => { prefs.counts = e.target.checked; save(); draw(); });
   $('[data-legend]').addEventListener('change', (e) => { prefs.legend = e.target.checked; save(); $('[data-leg]').hidden = !prefs.legend; if (prefs.legend) draw(); });
   $('[data-from]').value = years[0]; $('[data-to]').value = years[years.length - 1];

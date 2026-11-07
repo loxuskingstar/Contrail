@@ -1789,5 +1789,11 @@
 "gmap.n_places": {
 "one": "{count} か所",
 "other": "{count} か所"
-}
+},
+"settings.tiles_sat_esri": "衛星写真 — Esri World Imagery（世界）",
+"settings.tiles_sat_ign": "衛星写真 — IGN オルソ画像（フランス）＋ Esri",
+"gmap.base": "背景",
+"gmap.b_default": "地図（設定どおり）",
+"gmap.b_esri": "衛星写真",
+"gmap.b_ign": "IGN衛星写真（フランス）"
 }

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-APP_VERSION = "4.0.2"
+APP_VERSION = "4.1.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -324,7 +324,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "goal_regs": 0,
     "share_include_notes": False,
     "radar_center": None,          # [lat, lng] ou None -> géolocalisation
-    "map_tiles": "auto",           # auto | positron | liberty | bright | dark | fiord (OpenFreeMap) | osm | custom
+    "map_tiles": "auto",           # auto | positron | liberty | bright | dark | fiord (OpenFreeMap) | osm | sat_esri | sat_ign | custom
     "map_tiles_url": "",
     "map_tiles_attribution": "",
 }

@@ -1960,5 +1960,11 @@
 "gmap.n_places": {
 "one": "{count} place",
 "other": "{count} places"
-}
+},
+"settings.tiles_sat_esri": "Satellite — Esri World Imagery (worldwide)",
+"settings.tiles_sat_ign": "Satellite — IGN orthophotos (France) + Esri",
+"gmap.base": "Background",
+"gmap.b_default": "Map (settings)",
+"gmap.b_esri": "Satellite",
+"gmap.b_ign": "IGN satellite (France)"
 }
