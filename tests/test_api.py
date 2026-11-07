@@ -1498,3 +1498,28 @@ def test_front_lint_clean():
     root = Path(__file__).resolve().parent.parent
     p = subprocess.run([sys.executable, str(root / "scripts" / "lint_front.py")], capture_output=True, text=True)
     assert p.returncode == 0, p.stdout
+
+
+def test_pdf_exports(client):
+    """Les PDF (bilan, liste, fiche, carnet de vols) se génèrent et respectent le thème demandé."""
+    def spot(reg, date, **kw):
+        r = client.post("/api/spots", data={"data": json.dumps({"registration": reg, "aircraft": "ATR 72", "aircraft_icao": "AT76",
+                                                                   "airport": "LFBO", "date": date, **kw})})
+        assert r.status_code < 300, r.text
+        return r.json()["id_spotting"] if "id_spotting" in r.json() else r.json()["spot"]["id_spotting"]
+    sid = spot("F-PDF01", "2071-05-02T10:00", description="Note é à ñ ★ ✈")
+    spot("F-PDF02", "2071-06-02T10:00")
+    for url in ("/api/pdf/year/2071", "/api/pdf/year/2071?cover=0&font=classic&accent=%23e11d48&page=LETTER&orient=landscape&density=compact&sections=kpis,top",
+                "/api/pdf/year/2071?cover_style=minimal", "/api/pdf/spots?year=2071&group=day&cols=reg,date,notes",
+                "/api/pdf/spots?year=2071&photos=0&title=Test", f"/api/pdf/spot/{sid}", f"/api/pdf/spot/{sid}?cover=1"):
+        r = client.get(url)
+        assert r.status_code == 200, (url, r.text[:200])
+        assert r.headers["content-type"] == "application/pdf" and r.content.startswith(b"%PDF"), url
+    assert "attachment" in client.get("/api/pdf/year/2071").headers["content-disposition"]
+    assert "inline" in client.get("/api/pdf/year/2071?inline=1").headers["content-disposition"]
+    assert client.get("/api/pdf/year/2099").status_code == 404
+    assert client.get("/api/pdf/spots?year=2099").status_code == 404
+    assert client.get("/api/pdf/year/1800").status_code == 422
+    client.post("/api/flights", json={"date": "2071-04-01", "dep_icao": "LFBO", "arr_icao": "LFPG", "flight_number": "AF1"})
+    assert client.get("/api/pdf/flights?year=2071").content.startswith(b"%PDF")
+    assert client.get("/api/pdf/flights?year=2098").status_code == 404

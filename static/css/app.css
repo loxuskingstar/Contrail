@@ -1049,13 +1049,12 @@ body.radar-mode .main { padding: 0; }
 /* fond satellite : halo des ronds un peu plus marqué pour rester lisible */
 .gm-wrap.sat .gdot-in { border-color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 35%, transparent), 0 2px 8px rgb(0 0 0 / .55); }
 
-/* regroupements : anneau multicolore = répartition des types, nombre de spots au centre */
+/* regroupements : disque multicolore = répartition des types, nombre de spots au centre */
 .gcl { cursor: pointer; transition: width .3s ease, height .3s ease; }
 .gcl-in { position: relative; width: 100%; height: 100%; border-radius: 50%; box-sizing: border-box; border: 2px solid #fff; display: grid; place-items: center;
   box-shadow: 0 0 0 4px rgb(255 255 255 / .35), 0 2px 8px rgb(0 0 0 / .4); transition: transform .15s ease; animation: gdot-in .3s ease; }
 .gcl:hover .gcl-in { transform: scale(1.08); }
-.gcl-in::before { content: ""; position: absolute; inset: 21%; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .08); }
-.gcl span { position: relative; z-index: 1; font-size: 12px; font-weight: 800; color: var(--text); line-height: 1; font-variant-numeric: tabular-nums; pointer-events: none; }
+.gcl span { position: relative; z-index: 1; font-size: 12.5px; font-weight: 800; color: #fff; line-height: 1; font-variant-numeric: tabular-nums; pointer-events: none; text-shadow: 0 0 3px rgb(0 0 0 / .75), 0 1px 2px rgb(0 0 0 / .6); }
 .gcl.big-n span { font-size: 14.5px; }
 .gm-cdm { background: conic-gradient(#3b82f6 0 40%, #10b981 40% 75%, #f59e0b 75% 100%); }
 .gc-rows { display: grid; gap: 5px; margin-top: 12px; }
@@ -1068,3 +1067,9 @@ body.radar-mode .main { padding: 0; }
 .gc-p:hover { background: var(--surface-2); }
 .gc-p b { color: var(--muted); font-variant-numeric: tabular-nums; }
 .gc-more { padding: 7px 14px 9px; font-size: calc(11.5px * var(--fs, 1)); color: var(--muted); }
+
+/* export PDF */
+.spin { animation: pdf-spin .9s linear infinite; }
+@keyframes pdf-spin { to { transform: rotate(360deg); } }
+.pdf-opts .color-swatches button svg { display: block; margin: auto; color: #fff; }
+.pdf-opts [hidden] { display: none; }

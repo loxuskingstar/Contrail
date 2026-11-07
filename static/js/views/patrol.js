@@ -40,6 +40,7 @@ export async function render(root, { id }) {
 
   root.querySelector('[data-more]').onclick = (e) => menu(e.currentTarget, [
     { icon: 'pencil', label: t('patrol.rename'), onClick: () => renameSheet(p, () => render(root, { id })) },
+    { icon: 'file-text', label: t('pdf.export_menu'), onClick: async () => (await import('../lib/pdf-dialog.js')).openPdfExport({ kind: 'spots', params: { patrol: p.id, title: p.name, sort: 'date_asc' }, title: p.name, filename: `contrail-patrouille-${p.id}` }) },
     { icon: 'git-merge', label: t('patrol.merge'), onClick: () => mergeSheet(p) },
   ]);
   root.querySelectorAll('[data-detach]').forEach((b) => (b.onclick = async () => {

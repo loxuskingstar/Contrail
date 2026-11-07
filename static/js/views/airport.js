@@ -26,13 +26,14 @@ export async function render(root, { id }) {
   const info = a.info || {};
   const title = info.name || a.icao;
   const editBtn = info.custom ? `<button class="btn" data-edit>${icon('pencil', '', 16)} ${esc(t('airfield.edit'))}</button>` : '';
+  const wirePdf = () => root.querySelector('[data-pdf]')?.addEventListener('click', async () => (await import('../lib/pdf-dialog.js')).openPdfExport({ kind: 'spots', params: { airport: a.icao, title, sort: 'date_asc' }, title, filename: `contrail-${a.icao}` }));
   const wireEdit = () => root.querySelector('[data-edit]')?.addEventListener('click', () => airfieldSheet({ ...info, code: info.icao }, (r) => {
     if (r) render(root, { id }); else location.hash = '#/airports';
   }));
   if (!a.n) {
     root.innerHTML = pageHead(esc(title), { sub: esc([a.icao, info.city].filter(Boolean).join(' · ')), actions: editBtn }) +
       `<div class="card muted">${esc(t('airport.none_here'))}</div>`;
-    wireEdit();
+    wireEdit(); wirePdf();
     return;
   }
   const months = MONTHS.map((d, i) => ({ m: i + 1, n: (a.by_month.find((x) => x.m === i + 1) || {}).n || 0, d }));
@@ -43,7 +44,7 @@ export async function render(root, { id }) {
   const chip = (href, label, n) => `<a class="chip" href="${href}">${esc(label)} · ${n}</a>`;
   root.innerHTML = `${pageHead(esc(title), {
       sub: `<span class="mono">${esc(a.icao)}${info.iata ? ` / ${esc(info.iata)}` : ''}</span>${info.city ? ` · ${info.country ? regFlag(info.country) + ' ' : ''}${esc(info.city)}` : ''} · ${esc(t('airport.since', { a: fmtDate(a.first_at, { time: false }) }))}`,
-      actions: `${editBtn}<a class="btn" href="#/spots?airport=${esc(a.icao)}">${icon('list', '', 16)} ${esc(t('outing.open_list'))}</a>` })}
+      actions: `${editBtn}<button class="btn-icon" data-pdf title="${esc(t('pdf.export_menu'))}">${icon('file-text')}</button><a class="btn" href="#/spots?airport=${esc(a.icao)}">${icon('list', '', 16)} ${esc(t('outing.open_list'))}</a>` })}
     <div class="grid kpis" style="margin-bottom:14px">${kpis.map(([ic, v, l]) => `<div class="card kpi">${icon(ic)}<div class="v">${fmtNum(v)}</div><div class="l">${esc(l)}</div></div>`).join('')}</div>
     <div class="card flush" style="margin-bottom:14px"><div class="map" style="height:300px;border-radius:0" data-map></div></div>
     <div class="chips" style="margin-bottom:14px">
@@ -75,5 +76,5 @@ export async function render(root, { id }) {
       m.fit([[info.lat, info.lng], ...(a.locations || []).filter((l) => l.lat != null).map((l) => [l.lat, l.lng])], { maxZoom: 14 });
     }).catch(() => {});
   }
-  wireEdit();
+  wireEdit(); wirePdf();
 }

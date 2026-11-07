@@ -10,12 +10,13 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 VERSION = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', open(os.path.join(ROOT, "app", "core.py"), encoding="utf-8").read()).group(1)
 ICON = {"win32": "icon.ico", "darwin": "icon.icns"}.get(sys.platform, "icon.png")
 
-hidden = (collect_submodules("uvicorn") + collect_submodules("tzdata") + collect_submodules("app") + collect_submodules("pystray") + collect_submodules("pillow_heif")
+hidden = (collect_submodules("uvicorn") + collect_submodules("tzdata") + collect_submodules("app") + collect_submodules("pystray") + collect_submodules("pillow_heif") + collect_submodules("reportlab")
           + ["multipart", "python_multipart", "itsdangerous"])
 datas = ([(os.path.join(ROOT, "static"), "static"),
           (os.path.join(ROOT, "app", "fixtures"), os.path.join("app", "fixtures")),
+          (os.path.join(ROOT, "app", "fonts"), os.path.join("app", "fonts")),
           (os.path.join(SPECPATH, "assets", "icon.png"), os.path.join("desktop", "assets"))]
-         + collect_data_files("airportsdata") + collect_data_files("tzdata"))
+         + collect_data_files("reportlab") + collect_data_files("airportsdata") + collect_data_files("tzdata"))
 
 a = Analysis(
     [os.path.join(SPECPATH, "launcher.py")],

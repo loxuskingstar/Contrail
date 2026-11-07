@@ -6,6 +6,7 @@ import { icon } from '../lib/icons.js';
 import { airportInput } from '../lib/fields.js';
 import { esc, sheet, toast, errorToast, confirmDialog, pageHead, promptDialog, download } from '../ui.js';
 import { WIDGETS } from './dashboard.js';
+import { pdfOptionsHtml, bindPdfOptions, readPdfOptions, pdfDefaults } from '../lib/pdf-dialog.js';
 
 const SECTIONS = ['appearance', 'modules', 'spotting', 'integrations', 'data', 'tags', 'about'];
 const ACCENTS = ['#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316', '#eab308', '#10b981', '#0ea5e9', '#64748b'];
@@ -224,6 +225,8 @@ export async function render(root, params) {
           <a class="btn" href="/api/export/flights.csv">${icon('download', '', 18)} ${esc(t('settings.export_flights'))}</a>
           <a class="btn" href="/api/export/full.json">${icon('database', '', 18)} JSON</a></div>
           <p class="tiny muted">${esc(t('settings.export_d'))}</p></div>
+        <div class="card stack" data-pdfcard><div class="card-title">${icon('file-text', '', 15)} ${esc(t('pdf.settings_title'))}</div>
+          <p class="small muted">${esc(t('pdf.settings_d'))}</p>${pdfOptionsHtml(pdfDefaults())}</div>
         <div class="card"><a class="row" href="#/drafts">${icon('cloud-upload', '', 20)}<span class="grow">${esc(t('nav.drafts'))}</span>${icon('chevron-right')}</a></div>
       </div>`;
       storageCard(body.querySelector('[data-storage]'));
@@ -234,6 +237,12 @@ export async function render(root, params) {
       body.querySelector('[data-int]').onchange = (e) => save({ backup_interval_hours: Number(e.target.value) });
       body.querySelector('[data-keep]').onchange = (e) => save({ backup_keep: Number(e.target.value) });
       body.querySelectorAll('[data-meta]').forEach((i) => (i.onchange = () => save({ [i.dataset.meta]: i.value.trim() })));
+      const pdfCard = body.querySelector('[data-pdfcard]');
+      bindPdfOptions(pdfCard, () => {
+        const o = readPdfOptions(pdfCard);
+        save({ pdf_page: o.page, pdf_orient: o.orient, pdf_accent: o.accent || '', pdf_font: o.font, pdf_cover: !!o.cover, pdf_cover_style: o.cover_style,
+          pdf_photos: o.photos !== false, pdf_density: o.density, pdf_footer: o.footer || '', pdf_author: o.author || '' });
+      });
       body.querySelector('[data-trash]').onchange = (e) => save({ trash_days: Number(e.target.value) });
       body.querySelectorAll('[data-k]').forEach((c) => (c.onchange = () => save({ [c.dataset.k]: c.checked })));
       const mk = async (full, btn) => {

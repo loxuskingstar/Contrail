@@ -387,6 +387,7 @@ export async function render(root, _p, query) {
     { icon: 'palette', label: t('nav.liveries'), onClick: () => (location.hash = '#/liveries') },
     { icon: 'share-2', label: t('share.this_gallery'), onClick: () => shareGallery(filters) },
     '-',
+    { icon: 'file-text', label: t('pdf.export_menu'), onClick: () => exportPdf(filters) },
     { icon: 'download', label: t('settings.export_csv'), onClick: () => (location.href = '/api/export/spots.csv') },
     { icon: 'images', label: t('export.photos_filtered'), onClick: () => exportPhotos(filters) },
   ]);
@@ -466,6 +467,13 @@ async function openFilters(filters, onApply) {
     s.close();
     onApply();
   };
+}
+
+async function exportPdf(filters) {
+  const { openPdfExport } = await import('../lib/pdf-dialog.js');
+  const params = {};
+  Object.entries(filters || {}).forEach(([k, v]) => { if (v !== '' && v != null && v !== false) params[k] = v === true ? '1' : v; });
+  openPdfExport({ kind: 'spots', params, title: t('pdf.spots_title'), filename: 'contrail-spots' });
 }
 
 function exportPhotos(filters) {

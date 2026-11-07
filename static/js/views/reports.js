@@ -3,6 +3,7 @@ import { api, mediaUrl } from '../api.js';
 import { t, fmtNum, fmtDate, flag, countryName } from '../i18n.js';
 import { icon } from '../lib/icons.js';
 import { esc, pageHead, emptyState, errorToast, regText } from '../ui.js';
+import { openPdfExport } from '../lib/pdf-dialog.js';
 
 export async function render(root, { year } = {}) {
   let years;
@@ -53,5 +54,5 @@ export async function render(root, { year } = {}) {
         <div class="small mono" style="margin-top:4px">${esc(regText(p.registration))}${p.favorite ? ' ★' : ''}</div></a>`).join('')}</div></div>` : ''}
     ${r.special.length ? card('paint-bucket', t('report.special'), `<div class="chips">${r.special.map((x) => `<a class="chip" href="#/spots/${x.id}">${esc(regText(x.registration))} · ${esc(x.livery || x.aircraft || '')}</a>`).join('')}</div>`) : ''}`;
   root.querySelector('[data-year]').onchange = (e) => { location.hash = `#/reports/${e.target.value}`; };
-  root.querySelector('[data-print]').onclick = () => window.print();
+  root.querySelector('[data-print]').onclick = () => openPdfExport({ kind: 'year', params: { year: y }, title: t('report.title', { y }), filename: `contrail-bilan-${y}` });
 }

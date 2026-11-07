@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-APP_VERSION = "4.1.1"
+APP_VERSION = "4.2.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -326,6 +326,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "radar_center": None,          # [lat, lng] ou None -> géolocalisation
     "map_tiles": "auto",           # auto | positron | liberty | bright | dark | fiord (OpenFreeMap) | osm | sat_esri | sat_ign | custom
     "map_tiles_url": "",
+    "pdf_page": "A4",              # A4 | LETTER
+    "pdf_orient": "portrait",      # portrait | landscape
+    "pdf_accent": "",              # vide = couleur de l'interface
+    "pdf_font": "modern",          # modern (Inter) | classic (titres Fraunces)
+    "pdf_cover": True,
+    "pdf_cover_style": "band",     # band | photo | minimal
+    "pdf_photos": True,
+    "pdf_density": "comfortable",  # comfortable | compact
+    "pdf_footer": "",
+    "pdf_author": "",              # vide = nom du photographe
     "map_tiles_attribution": "",
 }
 

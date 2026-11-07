@@ -147,6 +147,7 @@ export async function render(root, params) {
   });
   root.querySelector('[data-menu]').onclick = (e) => menu(e.currentTarget, [
     ...(s.image ? [{ icon: 'download', label: t('export.photo'), onClick: () => (location.href = `/api/export/spots/${s.id_spotting}/photo.jpg`) }] : []),
+    { icon: 'file-text', label: t('pdf.export_sheet'), onClick: async () => (await import('../lib/pdf-dialog.js')).openPdfExport({ kind: 'spot', params: { id: s.id_spotting }, title: s.registration, filename: `contrail-${s.registration}` }) },
     { icon: 'history', label: t('nav.airframe'), onClick: () => navigate(`#/airframe/${encodeURIComponent(s.registration)}`) },
     { icon: 'image', label: t('share_img.title'), onClick: () => navigate(`#/spots/${s.id_spotting}/share`) },
     { icon: 'link', label: t('share.this_spot'), onClick: async () => (await import('./shares.js')).createShareFlow({ kind: 'spot', target: String(s.id_spotting) }) },

@@ -8,3 +8,4 @@ pytesseract>=0.3.10
 itsdangerous>=2.2
 tzdata>=2024.1
 pillow-heif>=0.18
+reportlab>=4.0
