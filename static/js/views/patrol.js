@@ -23,7 +23,7 @@ export async function render(root, { id }) {
     ${p.aircraft.length ? `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('plane', '', 18)} ${esc(t('patrol.fleet'))} · ${p.aircraft.length}</div>
       <div class="stack" style="gap:0">${p.aircraft.map((a) => `<div class="list-row" style="padding:8px 0;gap:10px">
         <a class="row grow" style="gap:10px;min-width:0;text-decoration:none;color:inherit" href="#/airframe/${encodeURIComponent(a.registration)}">
-          <div style="width:44px;height:44px;border-radius:9px;overflow:hidden;background:var(--surface-2);flex:none">${a.thumb ? `<img src="${mediaUrl(a.thumb)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : ''}</div>
+          <div style="width:44px;height:44px;border-radius:9px;overflow:hidden;background:var(--surface-2);flex:none">${a.thumb ? `<img src="${mediaUrl('thumbs', a.thumb)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : ''}</div>
           <div class="grow" style="min-width:0"><div class="mono"><b>${esc(regText(a.registration))}</b></div><div class="small muted ellipsis">${esc(a.aircraft || '')}${a.owner ? ' · ' + esc(a.owner) : ''}</div></div></a>
         <span class="badge" title="${esc(t('patrol.of_n', { n: p.n_passages }))}">${esc(t('patrol.in_passes', { n: a.passages, total: p.n_passages }))}</span>
         <button class="btn-icon" data-detach="${a.id}" title="${esc(t('patrol.detach'))}" aria-label="${esc(t('patrol.detach'))}">${icon('x', '', 16)}</button></div>`).join('')}</div></div>` : ''}
@@ -33,7 +33,7 @@ export async function render(root, { id }) {
       ${p.airports.length ? `<div class="card"><div class="card-title">${esc(t('patrol.places'))}</div><div class="chips">${p.airports.map((a) => `<a class="chip" href="#/spots?patrol=${p.id}&airport=${encodeURIComponent(a.k)}" title="${esc(a.name || '')}">${esc(a.k)} · ${a.n}</a>`).join('')}</div></div>` : ''}</div>` : ''}
     <div class="card flush list"><div class="card-title" style="padding:14px 16px 0">${icon('history', '', 18)} ${esc(t('patrol.timeline'))}</div>
       ${p.passages.map((o, i) => `<a class="list-row" href="#/spots/${firstSpot(o)}">
-        <div style="width:52px;height:52px;border-radius:10px;overflow:hidden;background:var(--surface-2);flex:none">${o.thumb ? `<img src="${mediaUrl(o.thumb)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : ''}</div>
+        <div style="width:52px;height:52px;border-radius:10px;overflow:hidden;background:var(--surface-2);flex:none">${o.thumb ? `<img src="${mediaUrl('thumbs', o.thumb)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : ''}</div>
         <div class="grow" style="min-width:0"><div><b>${o.date ? esc(fmtDate(o.date, { time: false })) : '—'}</b> <span class="muted">· ${place(o)}</span></div>
           <div class="small muted ellipsis">${o.aircraft.length ? o.aircraft.map((a) => esc(regText(a.registration))).join(', ') : esc(o.size ? t('patrol.n_aircraft', { n: o.size }) : t('patrol.pass_simple'))}</div></div>
         <span class="badge slate">#${p.passages.length - i}</span>${icon('chevron-right', '', 16)}</a>`).join('')}</div>`;

@@ -19,7 +19,7 @@ export async function render(root) {
   const draw = (q = '') => {
     const rows = items.filter((p) => !q || fold(p.name).includes(fold(q)));
     list.innerHTML = rows.length ? rows.map((p) => `<a class="list-row" href="#/patrols/${p.id}">
-      <div class="thumb" style="width:52px;height:52px;border-radius:10px;overflow:hidden;background:var(--surface-2);flex:none">${p.thumb ? `<img src="${mediaUrl(p.thumb)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : ''}</div>
+      <div class="thumb" style="width:52px;height:52px;border-radius:10px;overflow:hidden;background:var(--surface-2);flex:none">${p.thumb ? `<img src="${mediaUrl('thumbs', p.thumb)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : ''}</div>
       <div class="grow" style="min-width:0"><div class="ellipsis"><b>${esc(p.name || t('patrol.title'))}</b> ${regFlag(p.country)}</div>
         <div class="small muted ellipsis">${esc(t('patrols.passages', { n: p.passages }))}${p.aircraft ? ' · ' + esc(t('patrols.aircraft', { n: p.aircraft })) : ''}${p.last_at ? ' · ' + esc(t('patrols.last', { date: fmtDate(p.last_at, { time: false }) })) : ''}</div></div>
       ${p.simple ? `<span class="badge slate">${esc(t('patrols.simple'))}</span>` : ''}<span class="badge">${fmtNum(p.passages)}×</span>${icon('chevron-right', '', 16)}</a>`).join('')
