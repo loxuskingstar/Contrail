@@ -167,6 +167,18 @@ def by_reg(reg: str) -> dict | None:
     return c.execute("SELECT * FROM aircraft WHERE registration = ? LIMIT 1", (regs.normalize(reg),)).fetchone()
 
 
+def msn_of(icao24: str | None) -> str | None:
+    """Numéro de série d'un appareil (si la base importée en contient : base OpenSky complète)."""
+    c = _conn()
+    if not c or not icao24 or not RE_HEX.match(icao24.lower()):
+        return None
+    try:
+        r = c.execute("SELECT msn FROM msn WHERE icao24 = ?", (int(icao24, 16),)).fetchone()
+    except sqlite3.Error:
+        return None
+    return (r[0] if not isinstance(r, dict) else r["msn"]) if r else None
+
+
 def _has_col(c: sqlite3.Connection, col: str) -> bool:
     return any(r["name"] == col for r in c.execute("PRAGMA table_info(aircraft)"))
 
@@ -384,7 +396,8 @@ def _rows_from_text(lines) -> tuple[str, object]:
                 manu = g("manufacturername")
                 desc = f"{manu} {model}" if manu and model and manu.lower() not in model.lower() else (model or manu)
                 op = g("operator") or g("owner")
-                yield (g("icao24"), g("registration"), g("typecode"), desc, 0, (g("built") or "")[:4] or None, op, g("operatoricao"))
+                yield (g("icao24"), g("registration"), g("typecode"), desc, 0, (g("built") or "")[:4] or None, op, g("operatoricao"),
+                       g("serialnumber") or g("serial") or g("msn"))
         return "opensky", gen()
 
     def gen_tar():
@@ -395,7 +408,7 @@ def _rows_from_text(lines) -> tuple[str, object]:
             flags = p[3] if len(p) > 3 else ""
             mil = 1 if flags[:1] == "1" else 0
             yield (p[0], p[1] if len(p) > 1 else None, p[2] if len(p) > 2 else None, p[4] if len(p) > 4 else None, mil,
-                   p[5] if len(p) > 5 else None, p[6] if len(p) > 6 else None, None)
+                   p[5] if len(p) > 5 else None, p[6] if len(p) > 6 else None, None, None)
     return "tar1090", gen_tar()
 
 
@@ -449,14 +462,17 @@ def _import_stream(stream, source: str, merge: bool) -> int:
                "operator_icao=COALESCE(aircraft.operator_icao, excluded.operator_icao)")
     sql = ("INSERT INTO aircraft(icao24, registration, typecode, description, military, year, ownop, ownop_norm, operator_icao, op_key) "
            f"VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(icao24) DO UPDATE SET {upd}")
-    batch, n = [], 0
+    batch, sbatch, n = [], [], 0
+    # Numéros de série (MSN) : table annexe, indépendante de la compaction de « aircraft »
+    c.execute("CREATE TABLE IF NOT EXISTS msn (icao24 INTEGER PRIMARY KEY, msn TEXT NOT NULL)")
 
     def flush():
-        nonlocal batch
+        nonlocal batch, sbatch
         c.executemany(sql, batch)
-        batch = []
+        c.executemany("INSERT INTO msn VALUES (?, ?) ON CONFLICT(icao24) DO UPDATE SET msn = excluded.msn", sbatch)
+        batch, sbatch = [], []
 
-    for icao, reg, typ, desc, mil, year, op, op_icao in rows:
+    for icao, reg, typ, desc, mil, year, op, op_icao, serial in rows:
         icao = (icao or "").strip().lower()
         if not RE_HEX.match(icao):
             continue
@@ -468,6 +484,9 @@ def _import_stream(stream, source: str, merge: bool) -> int:
         op_icao = (op_icao or "").strip().upper() or None
         if op_icao and not re.fullmatch(r"[A-Z]{3}", op_icao):
             op_icao = None
+        serial = re.sub(r"\s+", " ", (serial or "").strip())[:40]
+        if serial and serial.lower() not in ("unknown", "n/a", "na", "none", "-", "0"):
+            sbatch.append((int(icao, 16), serial))
         batch.append((icao, reg, typ, (desc or "").strip() or None, mil, (year or "").strip() or None, op, _norm(op) or None,
                       op_icao, _opkey(op) or None))
         n += 1

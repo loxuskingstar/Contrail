@@ -29,6 +29,7 @@
 
 ## Nouveautés des versions 4.x
 
+- **4.3 — Lecture des immatriculations et remplissage** : Tesseract est remplacé par **RapidOCR** (modèles PP-OCR embarqués, 100 % local, sans programme externe) : plusieurs cadrages de la photo, confiance de lecture, validation du format par pays. Le **numéro de série (MSN)** et l'année de construction sont repris de la base OpenSky quand elle est importée (réimportez-la une fois : Réglages > Données).
 - **4.2 — Exports PDF** : un vrai PDF mis en page (couverture, chiffres clés, graphique, classements, photos) pour le **bilan annuel**, la **liste de spots** (avec les filtres de la page, regroupement par année, jour ou lieu), la **fiche d'un spot** et le **carnet de vols**. Format, orientation, couleur d'accent, police, couverture, photos, pied de page et auteur se règlent à chaque export ou une fois pour toutes (Réglages > Données > Exports PDF).
 - **4.1 — Carte globale** : regroupement des lieux proches selon le zoom (disques multicolores = répartition des types), nombre de spots dans les ronds, légende des couleurs et tailles, popups retravaillés, lecture animée par année, trimestre, mois ou semaine (cumulatif ou période seule) et **fonds satellite gratuits** (Esri World Imagery, orthophotos IGN pour la France).
 - **4.0.1 — Enregistrement en arrière-plan** : un spot s'enregistre sans bloquer l'écran ; une pastille flottante en bas à droite indique l'avancement, le succès (elle disparaît après deux secondes) ou l'échec (réessayer, garder en brouillon).
@@ -43,7 +44,7 @@
 - **Modification en masse** depuis la sélection de la liste des spots (pays, aéroport, exploitant, type de vol, note, immatriculation…).
 - **Patrouilles** : page dédiée, passages, avions identifiés, fusion, renommage, badge « Patrouille revue ».
 - **Personnalisation** (Réglages > Apparence) : densité, arrondis, police, taille du texte, style des graphiques, animations, menu latéral compact et entrées masquables, disposition de l'accueil, cartes de statistiques masquables.
-- **Fiabilité** : rattrapages de données exécutés une fois par version, contrôle statique du front (`scripts/lint_front.py`), test de fumée navigateur (`tests/e2e_smoke.py`), CI GitHub (`.github/workflows/tests.yml`).
+- **Fiabilité** : rattrapages de données exécutés une fois par version, contrôle statique du front (`scripts/lint_front.py`), test de fumée navigateur (`tests/e2e_smoke.py`).
 
 ## Fonctionnalités
 
@@ -144,7 +145,7 @@ L'image installe Tesseract : l'OCR fonctionne sans configuration.
 
 Deux voies, sans Docker : l'**installeur** prêt à l'emploi (Windows, macOS, Linux — voir [`desktop/README.md`](desktop/README.md)) ou le **lanceur** `desktop/launcher.py` depuis les sources, décrit ci-dessous. Le lanceur démarre le serveur, ouvre le navigateur, place une icône dans la zone de notification et range les données dans le dossier propre à chaque système.
 
-Prérequis : **Python 3.11 ou plus récent** (testé en 3.11 et 3.13) et, pour l'OCR seulement, Tesseract (`apt install tesseract-ocr`, `brew install tesseract`, installateur Windows). Sans Tesseract, tout fonctionne sauf la lecture automatique de l'immatriculation.
+Prérequis : **Python 3.11 ou plus récent** (testé en 3.11 et 3.13) ; la lecture automatique des immatriculations (RapidOCR, installé par `pip install -r requirements.txt` avec ses modèles, aucun programme externe) fonctionne hors-ligne. Tesseract n'est plus qu'un repli facultatif.
 
 ### Créer soi-même l'installeur
 
@@ -164,7 +165,7 @@ bash scripts/build-setup.sh
 # Windows → dist/Contrail-<version>-Windows-Setup.exe ; Linux → .deb et .tar.gz ; macOS → .dmg (dans dist/)
 ```
 
-Options (identiques pour les deux scripts) : une version imposée (`-Version 4.2.0` en PowerShell, `bash scripts/build-setup.sh 4.2.0`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
+Options (identiques pour les deux scripts) : une version imposée (`-Version 4.3.0` en PowerShell, `bash scripts/build-setup.sh 4.3.0`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
 
 Un installeur ne se construit que sur son propre système. Pour obtenir les quatre d'un coup (Windows, macOS Apple Silicon et Intel, Linux), poussez un tag `vX.Y.Z` : le workflow GitHub `desktop.yml` les construit, les teste et les publie dans une Release. Détails dans [`desktop/README.md`](desktop/README.md).
 
@@ -348,7 +349,7 @@ data/
 
 ## Architecture technique
 
-- **Backend** : Python 3.12, FastAPI, SQLite (sans ORM, migrations versionnées par `PRAGMA user_version`), Pillow (EXIF, WebP), pytesseract, httpx, `airportsdata` (≈ 28 000 aéroports hors-ligne avec fuseaux horaires). Planificateur interne asyncio (sauvegardes, watchlist, rattrapage météo).
+- **Backend** : Python 3.12, FastAPI, SQLite (sans ORM, migrations versionnées par `PRAGMA user_version`), Pillow (EXIF, WebP), RapidOCR (onnxruntime), httpx, `airportsdata` (≈ 28 000 aéroports hors-ligne avec fuseaux horaires). Planificateur interne asyncio (sauvegardes, watchlist, rattrapage météo).
 - **Frontend** : PWA en JavaScript natif (modules ES), **sans étape de build** ; MapLibre GL JS et un sous-ensemble d'icônes Lucide embarqués localement. Graphiques et carte du soleil en SVG, story en Canvas.
 - **API** documentée : `/api/docs` (OpenAPI).
 
@@ -401,4 +402,4 @@ Les traductions sont des fichiers JSON plats dans `static/i18n/` ; le français 
 
 Distribué sous licence MIT (voir `LICENSE`). Rappel : **aucune garantie, aucune maintenance ni aucun support ne sont assurés** (voir la clause en tête de document).
 
-Cartes © contributeurs [OpenStreetMap](https://www.openstreetmap.org/copyright) · [OpenFreeMap](https://openfreemap.org) · [OpenMapTiles](https://openmaptiles.org) · [MapLibre GL JS](https://maplibre.org) (BSD-3) · icônes [Lucide](https://lucide.dev) (ISC) · polices Inter, JetBrains Mono, Fraunces et Caveat (SIL Open Font License, licences dans `static/vendor/fonts/`) · base d'appareils Mictronics / [tar1090-db](https://github.com/wiedehopf/tar1090-db) · photos [Planespotters.net](https://www.planespotters.net) · [airportsdata](https://github.com/mborsetti/airportsdata) (MIT) · hélistations et terrains [OurAirports](https://ourairports.com) (domaine public) · [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (Apache-2.0) · données : hexdb.io, AirLabs, Aviationstack, OpenSky Network, aviationweather.gov (NOAA), Iowa Environmental Mesonet — chacune soumise à ses propres conditions d'utilisation.
+Cartes © contributeurs [OpenStreetMap](https://www.openstreetmap.org/copyright) · [OpenFreeMap](https://openfreemap.org) · [OpenMapTiles](https://openmaptiles.org) · [MapLibre GL JS](https://maplibre.org) (BSD-3) · icônes [Lucide](https://lucide.dev) (ISC) · polices Inter, JetBrains Mono, Fraunces et Caveat (SIL Open Font License, licences dans `static/vendor/fonts/`) · base d'appareils Mictronics / [tar1090-db](https://github.com/wiedehopf/tar1090-db) · photos [Planespotters.net](https://www.planespotters.net) · [airportsdata](https://github.com/mborsetti/airportsdata) (MIT) · hélistations et terrains [OurAirports](https://ourairports.com) (domaine public) · [RapidOCR](https://github.com/RapidAI/RapidOCR) / PP-OCR (Apache-2.0) · données : hexdb.io, AirLabs, Aviationstack, OpenSky Network, aviationweather.gov (NOAA), Iowa Environmental Mesonet — chacune soumise à ses propres conditions d'utilisation.

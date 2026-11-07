@@ -219,7 +219,8 @@ def lookup(reg_in: str, refresh: bool = False) -> dict:
     ref = refdb.by_reg(reg)
     if ref:
         local = {"icao24": ref.get("icao24"), "aircraft_icao": ref.get("typecode"),
-                 "aircraft": ref.get("description") or actypes.name(ref.get("typecode")), "owner": ref.get("ownop")}
+                 "aircraft": ref.get("description") or actypes.name(ref.get("typecode")), "owner": ref.get("ownop"),
+                 "msn": refdb.msn_of(ref.get("icao24")), "built": ref.get("year")}
         if ref.get("military"):
             local["military"] = 1
         for k, v in local.items():

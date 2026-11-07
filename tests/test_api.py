@@ -242,11 +242,16 @@ def test_refdb_import_and_radar_enrichment(client, tmp_path):
     assert refdb.by_hex(["3b7752"])["3b7752"]["military"] == 1
     # en-tête OpenSky
     g = tmp_path / "os.csv"
-    g.write_text("'icao24','registration','manufacturername','model','typecode','operator','operatoricao','built'\n"
-                 "'4ca123','EI-ABC','Boeing','737-8AS','B738','Ryanair','RYR','2005-01-01'\n")
+    g.write_text("'icao24','registration','manufacturername','model','typecode','operator','operatoricao','built','serialnumber'\n"
+                 "'4ca123','EI-ABC','Boeing','737-8AS','B738','Ryanair','RYR','2005-01-01','33546'\n")
     from app.services.refdb import _rows_from_text
     fmt, rows = _rows_from_text(open(g, encoding="utf-8"))
-    assert fmt == "opensky" and next(rows)[2] == "B738"
+    row = next(rows)
+    assert fmt == "opensky" and row[2] == "B738" and row[8] == "33546"
+    # import réel : le MSN est lu puis restitué par le remplissage automatique
+    refdb.import_file(g, "test-os")
+    assert refdb.msn_of("4ca123") == "33546"
+    assert client.get("/api/lookup/aircraft/EI-ABC").json().get("msn") == "33546"
     # le radar classe les appareils grâce à la base locale
     opensky._cache.clear()
     orig = opensky._states
