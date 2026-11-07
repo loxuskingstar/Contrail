@@ -2089,5 +2089,26 @@
 "gear.renamed": "{n} spot(s) actualizado(s)",
 "gear.confirm_del": "¿Eliminar «{name}»?",
 "gear.pick_ph": "Elegir o escribir",
-"gear.form_hint": "Elige de tu equipo o escribe un nombre nuevo: se unirá a la pestaña"
+"gear.form_hint": "Elige de tu equipo o escribe un nombre nuevo: se unirá a la pestaña",
+"gear.none_camera": "Sin cuerpo (sin EXIF)",
+"gear.none_lens": "Sin objetivo (sin EXIF)",
+"spots.select_all": "Seleccionar todo (filtro actual)",
+"spots.fs_aircraft": "Avión",
+"spots.fs_where_when": "Lugar y período",
+"spots.fs_shot": "Toma",
+"spots.fs_todo": "Por completar",
+"spots.fs_todo_hint": "Encuentra spots a los que les falta información y complétalos de una vez (selección múltiple > editar).",
+"spots.fs_collection": "Colección y orden",
+"spots.fs_gear_hint": "«Sin cuerpo / objetivo» lista las fotos sin datos EXIF: selecciónalas y edítalas en lote.",
+"spots.fs_show": {
+"one": "Mostrar {n} spot",
+"other": "Mostrar {n} spots"
+},
+"spots.date_from": "Desde",
+"spots.date_to": "Hasta",
+"spots.rating_min": "Nota mínima",
+"spots.f_has_gps": "Con posición GPS",
+"spots.f_has_notes": "Con descripción",
+"spots.f_no_msn": "Sin número de serie",
+"spots.f_no_type": "Sin tipo de avión"
 }

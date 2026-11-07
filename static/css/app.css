@@ -1073,3 +1073,15 @@ body.radar-mode .main { padding: 0; }
 @keyframes pdf-spin { to { transform: rotate(360deg); } }
 .pdf-opts .color-swatches button svg { display: block; margin: auto; color: #fff; }
 .pdf-opts [hidden] { display: none; }
+
+/* Panneau de filtres (4.5) */
+.filters-sheet .fsec { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.filters-sheet .fsec > summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 12px 14px; cursor: pointer; }
+.filters-sheet .fsec > summary::-webkit-details-marker { display: none; }
+.filters-sheet .fsec > summary .chev { margin-left: auto; transition: transform .2s; color: var(--muted); }
+.filters-sheet .fsec[open] > summary .chev { transform: rotate(180deg); }
+.filters-sheet .fsec-body { padding: 2px 14px 14px; }
+.filters-sheet .fcount { background: var(--accent); color: #fff; border-radius: 99px; font-size: 11px; font-weight: 600; min-width: 18px; height: 18px; display: inline-grid; place-items: center; padding: 0 5px; }
+.filters-sheet .fcount[hidden] { display: none; }
+.filters-sheet .chips.wrap { flex-wrap: wrap; }
+.filters-sheet .fchip { gap: 6px; }

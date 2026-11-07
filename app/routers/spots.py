@@ -6,7 +6,7 @@ import random
 import re
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from ..core import db, execute, get_settings, memo, now_iso, q, q1, set_settings
@@ -76,6 +76,9 @@ WIND_SQL = {
 }
 
 
+NO_GEAR = "__none__"
+
+
 def build_filters(f: dict) -> tuple[str, list]:
     where, params = ["1=1"], []
     if f.get("search"):
@@ -91,7 +94,9 @@ def build_filters(f: dict) -> tuple[str, list]:
     for key, col in (("registration", "s.registration"), ("airport", "s.airport"), ("place", "s.place"), ("country", "s.country"),
                      ("flight_type", "s.flight_type"), ("camera", "s.camera"), ("lens", "s.lens"),
                      ("livery_category", "s.livery_category")):
-        if f.get(key):
+        if key in ("camera", "lens") and f.get(key) == NO_GEAR:      # spots dont l'EXIF n'a pas donné de boîtier / d'objectif
+            where.append(f"({col} IS NULL OR {col} = '')")
+        elif f.get(key):
             where.append(f"{col} = ?")
             params.append(f[key].upper() if key in ("registration", "airport", "country") else f[key])
     if f.get("type"):
@@ -136,6 +141,17 @@ def build_filters(f: dict) -> tuple[str, list]:
         rt = collection.rare_types((f["rarity"],) if f.get("rarity") else None)
         where.append(f"s.aircraft_icao IN ({','.join('?' * len(rt)) or 'NULL'})")
         params += rt
+    if f.get("rating_min") not in (None, "", 0, "0"):
+        where.append("s.rating >= ?")
+        params.append(int(f["rating_min"]))
+    if f.get("has_gps") in (True, 1, "1", "true", "True"):
+        where.append("(s.lat IS NOT NULL OR s.location_id IS NOT NULL)")
+    if f.get("no_msn") in (True, 1, "1", "true", "True"):          # à compléter : numéro de série absent
+        where.append("(s.msn IS NULL OR s.msn = '')")
+    if f.get("no_type") in (True, 1, "1", "true", "True"):         # à compléter : type d'avion absent
+        where.append("(s.aircraft_icao IS NULL OR s.aircraft_icao = '')")
+    if f.get("has_notes") in (True, 1, "1", "true", "True"):
+        where.append("(s.description IS NOT NULL AND s.description <> '')")
     if f.get("favorite"):
         where.append("s.favorite = 1")
     if f.get("has_photo"):
@@ -197,6 +213,7 @@ def list_spots(
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
     location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False, outing: int | None = None, rare: bool = False, rarity: str = "", daytime: str = "", weather: str = "", wind: str = "",
+    rating_min: int | None = None, has_gps: bool = False, no_msn: bool = False, no_type: bool = False, has_notes: bool = False,
     sort: str = "date_desc", limit: int = Query(60, le=500), offset: int = 0,
 ):
     f = dict(locals())
@@ -207,6 +224,13 @@ def list_spots(
     return {"items": decorate(rows), "total": total, "offset": offset, "limit": limit}
 
 
+@router.get("/ids")
+def spot_ids(request: Request):
+    """Identifiants de tous les spots correspondant aux filtres (tout sélectionner, modification en lot)."""
+    where, params = build_filters(dict(request.query_params))
+    return {"ids": [r["id_spotting"] for r in q(f"SELECT s.id_spotting FROM spotting s WHERE {where} LIMIT 50000", params)]}
+
+
 @router.get("/map")
 def spots_map(
     search: str = "", tag: str = "", tag_mode: str = "all", airport: str = "", place: str = "", type: str = "", airline: str = "",
@@ -214,6 +238,7 @@ def spots_map(
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
     location_id: int | None = None, date_from: str = "", date_to: str = "",
+    rating_min: int | None = None, has_gps: bool = False, no_msn: bool = False, no_type: bool = False, has_notes: bool = False,
 ):
     """Spots regroupés par lieu (point de vue, coordonnées GPS ou aéroport), puis par appareil."""
     return memo("map", _spots_map, tuple(sorted(dict(locals()).items())))

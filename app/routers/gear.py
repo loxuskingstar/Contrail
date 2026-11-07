@@ -69,7 +69,9 @@ def _setups() -> list[dict]:
 
 @router.get("/api/gear")
 def list_gear():
-    return {"cameras": _listing("camera"), "lenses": _listing("lens"), "setups": _setups()}
+    miss = q1("SELECT SUM(camera IS NULL OR camera = '') cam, SUM(lens IS NULL OR lens = '') lens FROM spotting") or {}
+    return {"cameras": _listing("camera"), "lenses": _listing("lens"), "setups": _setups(),
+            "missing": {"camera": miss.get("cam") or 0, "lens": miss.get("lens") or 0}}
 
 
 @router.post("/api/gear")

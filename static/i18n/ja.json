@@ -1918,5 +1918,26 @@
 "gear.renamed": "{n} 件を更新",
 "gear.confirm_del": "「{name}」を削除しますか？",
 "gear.pick_ph": "選択または入力",
-"gear.form_hint": "手持ち機材から選ぶか、新しい名前を入力すると次に追加されます："
+"gear.form_hint": "手持ち機材から選ぶか、新しい名前を入力すると次に追加されます：",
+"gear.none_camera": "ボディなし（EXIFなし）",
+"gear.none_lens": "レンズなし（EXIFなし）",
+"spots.select_all": "すべて選択（現在のフィルタ）",
+"spots.fs_aircraft": "機体",
+"spots.fs_where_when": "場所と期間",
+"spots.fs_shot": "撮影条件",
+"spots.fs_todo": "要補完",
+"spots.fs_todo_hint": "情報が欠けているスポットを見つけ、まとめて補完できます（複数選択 > 編集）。",
+"spots.fs_collection": "コレクションと並べ替え",
+"spots.fs_gear_hint": "「ボディ／レンズなし」は EXIF のない写真を一覧にします。選択してまとめて編集できます。",
+"spots.fs_show": {
+"one": "{n} 件を表示",
+"other": "{n} 件を表示"
+},
+"spots.date_from": "開始",
+"spots.date_to": "終了",
+"spots.rating_min": "最低評価",
+"spots.f_has_gps": "位置情報あり",
+"spots.f_has_notes": "説明あり",
+"spots.f_no_msn": "製造番号なし",
+"spots.f_no_type": "機種なし"
 }

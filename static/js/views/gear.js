@@ -18,8 +18,10 @@ export async function render(root) {
       ${it.count ? `<a class="badge accent" href="#/spots?${kind}=${encodeURIComponent(it.name)}">${icon('camera', '', 12)} ${esc(fmtNum(it.count))}</a>` : `<span class="badge">0</span>`}
       <button class="btn-icon" data-edit title="${esc(t('common.edit'))}">${icon('pencil', '', 16)}</button>
       <button class="btn-icon" data-del title="${esc(t('common.delete'))}" ${it.count ? 'disabled' : ''}>${icon('trash-2', '', 16)}</button></div>`;
+  const miss = (kind) => (g.missing?.[kind] ? `<a class="row between" style="padding:10px 4px;text-decoration:none;color:inherit" href="#/spots?${kind}=__none__">
+      <span class="small">${icon('circle-help', '', 16)} ${esc(t(`gear.none_${kind}`))}</span><span class="badge gold">${esc(fmtNum(g.missing[kind]))}</span></a>` : '');
   const list = (kind, items, title) => `<div class="section"><h2>${esc(title)}</h2></div>
-    <div class="card" style="padding:4px 14px 4px;margin-bottom:14px">${items.length ? items.map((i) => row(kind, i)).join('') : emptyState('aperture', t('gear.empty'), t('gear.empty_text'))}</div>`;
+    <div class="card" style="padding:4px 14px 4px;margin-bottom:14px">${miss(kind)}${items.length ? items.map((i) => row(kind, i)).join('') : emptyState('aperture', t('gear.empty'), t('gear.empty_text'))}</div>`;
 
   function draw() {
     body.innerHTML = `<div class="section"><h2>${esc(t('gear.setups'))}</h2></div>

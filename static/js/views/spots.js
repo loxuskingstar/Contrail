@@ -8,7 +8,7 @@ import { esc, sheet, spotRow, spotTile, emptyState, confirmDialog, toast, errorT
 
 const PAGE = 60;
 const SCOPE_KEY = 'contrail.spotsScope';
-const FILTER_KEYS = ['search', 'tag', 'tag_mode', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'daytime', 'weather', 'wind', 'sort'];
+const FILTER_KEYS = ['search', 'tag', 'tag_mode', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'daytime', 'weather', 'wind', 'date_from', 'date_to', 'rating_min', 'has_gps', 'no_msn', 'no_type', 'has_notes', 'sort'];
 
 export async function render(root, _p, query) {
   const filters = Object.fromEntries(FILTER_KEYS.filter((k) => query[k] !== undefined && query[k] !== '').map((k) => [k, query[k]]));
@@ -99,6 +99,11 @@ export async function render(root, _p, query) {
       if (k === 'flight_type') label = t(`ftype.${v}`);
       if (k === 'livery_category') label = t(`livery.${v}`);
       if (k === 'patrol') label = t('patrol.title');
+      if (['has_gps', 'has_notes', 'no_msn', 'no_type'].includes(k)) label = t(`spots.f_${k}`);
+      if (k === 'rating_min') label = `${'★'.repeat(Number(v))}${Number(v) < 5 ? ' +' : ''}`;
+      if (k === 'date_from') label = `≥ ${fmtDate(v, { time: false })}`;
+      if (k === 'date_to') label = `≤ ${fmtDate(v, { time: false })}`;
+      if ((k === 'camera' || k === 'lens') && v === '__none__') label = t(`gear.none_${k}`);
       chips.push(`<button class="chip on" data-rm="${k}">${esc(label)} ${icon('x', '', 14)}</button>`);
     }
     box.innerHTML = chips.join('');
@@ -193,6 +198,7 @@ export async function render(root, _p, query) {
     if (!selecting) { bar?.remove(); return; }
     if (!bar) { bar = document.createElement('div'); bar.className = 'sel-bar glass'; document.body.append(bar); }
     bar.innerHTML = `<b>${esc(t('spots.selected', { n: selected.size }))}</b>
+      <button class="btn-icon" data-a="all" title="${esc(t('spots.select_all'))}">${icon('list-checks')}</button>
       <button class="btn-icon" data-a="tag" title="${esc(t('spots.add_tag'))}">${icon('tag')}</button>
       <button class="btn-icon" data-a="edit" title="${esc(t('bulk.edit'))}">${icon('pencil')}</button>
       <button class="btn-icon" data-a="fav" title="${esc(t('spot.favorite'))}">${icon('star')}</button>
@@ -203,6 +209,15 @@ export async function render(root, _p, query) {
     bar.querySelector('[data-a=dl]').onclick = () => { location.href = `/api/export/photos.zip?ids=${[...selected].join(',')}`; };
     bar.querySelector('[data-a=fav]').onclick = () => bulk('favorite', true);
     bar.querySelector('[data-a=edit]').onclick = bulkEdit;
+    // Tout sélectionner : tous les spots du filtre en cours, pas seulement les lignes déjà affichées
+    bar.querySelector('[data-a=all]').onclick = async () => {
+      try {
+        const { ids } = await api('/api/spots/ids', { query: filters });
+        ids.forEach((i) => selected.add(i));
+        results.querySelectorAll('.list-row').forEach((r) => { r.classList.add('selected'); const c = r.querySelector('.check'); if (c) c.innerHTML = icon('check', '', 14); });
+        selBar();
+      } catch (e) { errorToast(e); }
+    };
     bar.querySelector('[data-a=del]').onclick = async () => {
       if (await confirmDialog(esc(t('spots.confirm_bulk_delete', { n: selected.size })), { danger: true, ok: t('common.delete') })) bulk('delete');
     };
@@ -412,50 +427,78 @@ async function shareGallery(filters) {
   createShareFlow({ kind: 'gallery', target });
 }
 
+// Panneau de filtres : sections (Avion, Lieu & période, Prise de vue, Matériel, À compléter, Collection), compteur de résultats en direct.
+const FILTER_BOOLS = [
+  ['favorite', 'star'], ['special', 'sparkles'], ['has_photo', 'image'], ['has_audio', 'audio-lines'], ['has_gps', 'map-pin'], ['has_notes', 'file-text'],
+];
+const FILTER_TODO = [['unknown', 'circle-help'], ['no_type', 'plane'], ['no_msn', 'hash']];
+const FILTER_COUNTED = ['search', 'tag', 'tag_mode', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'daytime', 'weather', 'wind', 'date_from', 'date_to', 'rating_min', 'has_gps', 'no_msn', 'no_type', 'has_notes'];
+
 async function openFilters(filters, onApply) {
   const f = { ...filters };
   const facets = store.facets || (await store.refreshFacets().catch(() => ({ airports: [], types: [], airlines: [], years: [], countries: [], flight_types: [] })));
   const tags = store.tags || [];
   const gear = await api('/api/gear').catch(() => ({ cameras: [], lenses: [] }));
-  const gopt = (arr, cur) => `<option value="">${esc(t('common.all'))}</option>` + arr.map((i) => `<option value="${esc(i.name)}" ${cur === i.name ? 'selected' : ''}>${esc(i.name)}${i.count ? ` (${i.count})` : ''}</option>`).join('');
-  const opt = (arr, cur, label = (v) => v) => `<option value="">${esc(t('common.all'))}</option>` + arr.map((v) => `<option value="${esc(v)}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(label(v))}</option>`).join('');
+  const all = `<option value="">${esc(t('common.all'))}</option>`;
+  const opt = (arr, cur, label = (v) => v) => all + arr.map((v) => `<option value="${esc(v)}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(label(v))}</option>`).join('');
+  const gopt = (arr, cur, none) => `${all}<option value="__none__" ${cur === '__none__' ? 'selected' : ''}>${esc(t(none))}</option>` + arr.map((i) => `<option value="${esc(i.name)}" ${cur === i.name ? 'selected' : ''}>${esc(i.name)}${i.count ? ` (${i.count})` : ''}</option>`).join('');
+  const fixed = (k, vals, cur, label) => all + vals.map((v) => `<option value="${v}" ${String(cur) === v ? 'selected' : ''}>${esc(label(v))}</option>`).join('');
+  const sel = (k, label, html) => `<label class="field"><span>${esc(label)}</span><select data-k="${k}">${html}</select></label>`;
+  const tog = ([k, ic]) => `<button type="button" class="chip fchip ${f[k] ? 'on' : ''}" data-b="${k}">${icon(ic, '', 14)} ${esc(t(`spots.f_${k}`))}</button>`;
+  const sec = (title, ic, inner, open = true) => `<details class="fsec" ${open ? 'open' : ''}><summary>${icon(ic, '', 16)} <b>${esc(title)}</b> <span class="fcount" data-fc></span>${icon('chevron-down', 'chev', 16)}</summary><div class="stack fsec-body">${inner}</div></details>`;
+  const hasGear = gear.cameras.length || gear.lenses.length;
+
   const s = sheet({ title: esc(t('spots.filters')), body: `
-    <div class="stack">
+    <div class="stack filters-sheet" style="gap:10px">
       ${tags.length ? `<div class="field"><span>${esc(t('spot.tags'))}</span><div data-tagsel></div>
         <div class="seg" data-tagmode style="display:none;margin-top:6px"><button type="button" data-m="all">${esc(t('tags.match_all'))}</button><button type="button" data-m="any">${esc(t('tags.match_any'))}</button></div></div>` : ''}
-      <div class="field-row">
-        <label class="field"><span>${esc(t('spot.airport'))}</span><select data-k="airport">${opt(facets.airports, f.airport)}</select></label>
-        ${(facets.places || []).length ? `<label class="field"><span>${esc(t('spot.place'))}</span><select data-k="place">${opt(facets.places, f.place)}</select></label>` : ''}
-        <label class="field"><span>${esc(t('spot.type'))}</span><select data-k="type">${opt(facets.types, f.type)}</select></label>
-      </div>
-      <div class="field-row">
-        <label class="field"><span>${esc(t('spot.owner'))}</span><select data-k="airline"><option value="">${esc(t('common.all'))}</option>${facets.airlines.map((a) => `<option value="${esc(a.v)}" ${f.airline === a.v ? 'selected' : ''}>${esc(a.name || a.v)}${a.name && a.name !== a.v ? ` (${esc(a.v)})` : ''}</option>`).join('')}</select></label>
-        <label class="field"><span>${esc(t('common.year'))}</span><select data-k="year">${opt(facets.years, f.year)}</select></label>
-      </div>
-      <div class="field-row">
-        <label class="field"><span>${esc(t('spot.country'))}</span><select data-k="country">${opt(facets.countries, f.country, (c) => `${flag(c)} ${countryName(c)}`)}</select></label>
-        <label class="field"><span>${esc(t('spot.flight_type'))}</span><select data-k="flight_type">${opt(facets.flight_types, f.flight_type, (v) => t(`ftype.${v}`))}</select></label>
-      </div>
-      ${gear.cameras.length || gear.lenses.length ? `<div class="field-row">
-        <label class="field"><span>${esc(t('exif.camera'))}</span><select data-k="camera">${gopt(gear.cameras, f.camera)}</select></label>
-        <label class="field"><span>${esc(t('exif.lens'))}</span><select data-k="lens">${gopt(gear.lenses, f.lens)}</select></label>
-      </div>` : ''}
-      <div class="field-row">
-        <label class="field"><span>${esc(t('spots.military_filter'))}</span><select data-k="military"><option value="">${esc(t('common.all'))}</option><option value="0" ${f.military === '0' ? 'selected' : ''}>${esc(t('spots.civil'))}</option><option value="1" ${f.military === '1' ? 'selected' : ''}>${esc(t('spot.military'))}</option></select></label>
-        <label class="field"><span>${esc(t('rarity.title'))}</span><select data-k="rarity"><option value="">${esc(t('common.all'))}</option>${['legendary', 'epic', 'rare', 'uncommon', 'common'].map((v) => `<option value="${v}" ${f.rarity === v ? 'selected' : ''}>${esc(t(`rarity.n.${v}`))}</option>`).join('')}</select></label>
-      </div>
-      <div class="field-row">
-        ${[['daytime', ['day', 'golden', 'dawn', 'dusk', 'night']], ['weather', ['clear', 'partly_cloudy', 'cloudy', 'rain', 'snow', 'storm', 'fog', 'none']]].map(([k, vals]) => `<label class="field"><span>${esc(t(`f.${k}`))}</span><select data-k="${k}"><option value="">${esc(t('common.all'))}</option>${vals.map((v) => `<option value="${v}" ${f[k] === v ? 'selected' : ''}>${esc(t(`f.${k}.${v}`))}</option>`).join('')}</select></label>`).join('')}
-      </div>
-      <div class="field-row">
-        <label class="field"><span>${esc(t('f.wind'))}</span><select data-k="wind"><option value="">${esc(t('common.all'))}</option>${['calm', 'moderate', 'strong'].map((v) => `<option value="${v}" ${f.wind === v ? 'selected' : ''}>${esc(t(`f.wind.${v}`))}</option>`).join('')}</select></label>
-        <label class="field"><span>${esc(t('spots.sort'))}</span><select data-k="sort">${['date_desc', 'date_asc', 'created', 'registration', 'type'].map((v) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${esc(t(`sort.${v}`))}</option>`).join('')}</select></label>
-      </div>
-      <div class="card" style="padding:4px 14px">
-        ${['favorite', 'special', 'has_photo', 'has_audio', 'unknown'].map((k) => `<label class="toggle-row"><span class="t">${esc(t(`spots.f_${k}`))}</span><span class="switch"><input type="checkbox" data-b="${k}" ${f[k] ? 'checked' : ''}><span></span></span></label>`).join('')}
-      </div>
-      <div class="row" style="justify-content:space-between"><button class="btn ghost" data-reset>${esc(t('spots.clear_filters'))}</button><button class="btn primary" data-apply>${esc(t('common.apply'))}</button></div>
+      ${sec(t('spots.fs_aircraft'), 'plane', `
+        <div class="field-row">${sel('type', t('spot.type'), opt(facets.types, f.type))}${sel('airline', t('spot.owner'), all + facets.airlines.map((a) => `<option value="${esc(a.v)}" ${f.airline === a.v ? 'selected' : ''}>${esc(a.name || a.v)}${a.name && a.name !== a.v ? ` (${esc(a.v)})` : ''}</option>`).join(''))}</div>
+        <div class="field-row">${sel('country', t('spot.country'), opt(facets.countries, f.country, (c) => `${flag(c)} ${countryName(c)}`))}${sel('flight_type', t('spot.flight_type'), opt(facets.flight_types, f.flight_type, (v) => t(`ftype.${v}`)))}</div>
+        <div class="field-row">${sel('livery_category', t('spot.livery'), fixed('livery_category', ['special', 'retro', 'alliance', 'commemorative', 'logojet', 'cause'], f.livery_category, (v) => t(`livery.${v}`)))}
+          ${sel('rarity', t('rarity.title'), fixed('rarity', ['legendary', 'epic', 'rare', 'uncommon', 'common'], f.rarity, (v) => t(`rarity.n.${v}`)))}
+          <label class="field"><span>${esc(t('spots.military_filter'))}</span><select data-k="military">${all}<option value="0" ${f.military === '0' ? 'selected' : ''}>${esc(t('spots.civil'))}</option><option value="1" ${f.military === '1' ? 'selected' : ''}>${esc(t('spot.military'))}</option></select></label></div>`)}
+      ${sec(t('spots.fs_where_when'), 'map-pin', `
+        <div class="field-row">${sel('airport', t('spot.airport'), opt(facets.airports, f.airport))}${(facets.places || []).length ? sel('place', t('spot.place'), opt(facets.places, f.place)) : ''}</div>
+        <div class="field-row">${sel('year', t('common.year'), opt(facets.years, f.year))}
+          <label class="field"><span>${esc(t('spots.date_from'))}</span><input type="date" data-k="date_from" value="${esc(f.date_from || '')}"></label>
+          <label class="field"><span>${esc(t('spots.date_to'))}</span><input type="date" data-k="date_to" value="${esc(f.date_to || '')}"></label></div>`)}
+      ${sec(t('spots.fs_shot'), 'sun', `
+        <div class="field-row">${sel('daytime', t('f.daytime'), fixed('daytime', ['day', 'golden', 'dawn', 'dusk', 'night'], f.daytime, (v) => t(`f.daytime.${v}`)))}
+          ${sel('weather', t('f.weather'), fixed('weather', ['clear', 'partly_cloudy', 'cloudy', 'rain', 'snow', 'storm', 'fog', 'none'], f.weather, (v) => t(`f.weather.${v}`)))}
+          ${sel('wind', t('f.wind'), fixed('wind', ['calm', 'moderate', 'strong'], f.wind, (v) => t(`f.wind.${v}`)))}</div>
+        ${sel('rating_min', t('spots.rating_min'), all + [1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${String(f.rating_min) === String(n) ? 'selected' : ''}>${'★'.repeat(n)}${n < 5 ? ' +' : ''}</option>`).join(''))}`, false)}
+      ${sec(t('nav.gear'), 'aperture', hasGear ? `<div class="field-row">${sel('camera', t('exif.camera'), gopt(gear.cameras, f.camera, 'gear.none_camera'))}${sel('lens', t('exif.lens'), gopt(gear.lenses, f.lens, 'gear.none_lens'))}</div>
+        <p class="tiny muted">${esc(t('spots.fs_gear_hint'))}</p>` : `<p class="small muted">${esc(t('gear.empty_text'))}</p>`, !!(f.camera || f.lens))}
+      ${sec(t('spots.fs_todo'), 'circle-help', `<div class="chips wrap">${FILTER_TODO.map(tog).join('')}</div><p class="tiny muted">${esc(t('spots.fs_todo_hint'))}</p>`, !!(f.unknown || f.no_type || f.no_msn))}
+      ${sec(t('spots.fs_collection'), 'bookmark', `<div class="chips wrap">${FILTER_BOOLS.map(tog).join('')}</div>
+        <label class="field"><span>${esc(t('spots.sort'))}</span><select data-k="sort">${['date_desc', 'date_asc', 'created', 'registration', 'type'].map((v) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${esc(t(`sort.${v}`))}</option>`).join('')}</select></label>`)}
+      <div class="row" style="justify-content:space-between;position:sticky;bottom:0;background:var(--surface);padding:8px 0 2px;gap:8px"><button class="btn ghost" data-reset>${esc(t('spots.clear_filters'))}</button><button class="btn primary grow" data-apply>${esc(t('common.apply'))}</button></div>
     </div>` });
+
+  // Lecture des champs -> objet de filtres ; compteur de résultats (anti-rebond) et pastilles de sections actives
+  const read = () => {
+    const g = { ...f };
+    s.body.querySelectorAll('[data-k]').forEach((el) => { if (el.value) g[el.dataset.k] = el.value; else delete g[el.dataset.k]; });
+    s.body.querySelectorAll('[data-b]').forEach((c) => { if (c.classList.contains('on')) g[c.dataset.b] = '1'; else delete g[c.dataset.b]; });
+    return g;
+  };
+  const applyBtn = s.body.querySelector('[data-apply]');
+  const refresh = debounce(async () => {
+    const g = read();
+    s.body.querySelectorAll('.fsec').forEach((d) => {
+      const n = [...d.querySelectorAll('[data-k]')].filter((el) => el.value && el.dataset.k !== 'sort').length + d.querySelectorAll('[data-b].on').length;
+      const c = d.querySelector('[data-fc]'); c.textContent = n || ''; c.hidden = !n;
+    });
+    const query = Object.fromEntries(FILTER_COUNTED.filter((k) => g[k]).map((k) => [k, g[k]]));
+    try {
+      const r = await api('/api/spots', { query: { ...query, limit: 1 } });
+      applyBtn.textContent = t('spots.fs_show', { n: r.total });
+    } catch { applyBtn.textContent = t('common.apply'); }
+  }, 250);
+  s.body.addEventListener('input', refresh);
+  s.body.addEventListener('change', refresh);
+  s.body.querySelectorAll('[data-b]').forEach((c) => (c.onclick = () => { c.classList.toggle('on'); refresh(); }));
   if (tags.length) {
     const ids = String(f.tag || '').split(',').filter(Boolean);
     const modeBox = s.body.querySelector('[data-tagmode]');
@@ -465,17 +508,17 @@ async function openFilters(filters, onApply) {
     };
     tagPicker(s.body.querySelector('[data-tagsel]'), tags, tags.filter((tg) => ids.includes(String(tg.id_tag))), {
       allowNew: false,
-      onChange: (sel) => { if (sel.length) f.tag = sel.map((x) => x.id_tag).join(','); else { delete f.tag; delete f.tag_mode; } syncMode(sel.length); },
+      onChange: (sel2) => { if (sel2.length) f.tag = sel2.map((x) => x.id_tag).join(','); else { delete f.tag; delete f.tag_mode; } syncMode(sel2.length); refresh(); },
     });
-    modeBox.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => { if (b.dataset.m === 'any') f.tag_mode = 'any'; else delete f.tag_mode; syncMode(2); }));
+    modeBox.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => { if (b.dataset.m === 'any') f.tag_mode = 'any'; else delete f.tag_mode; syncMode(2); refresh(); }));
     syncMode(ids.length);
   }
+  refresh();
   s.body.querySelector('[data-reset]').onclick = () => { for (const k of Object.keys(filters)) if (k !== 'search') delete filters[k]; s.close(); onApply(); };
-  s.body.querySelector('[data-apply]').onclick = () => {
-    s.body.querySelectorAll('[data-k]').forEach((sel) => { if (sel.value) f[sel.dataset.k] = sel.value; else delete f[sel.dataset.k]; });
-    s.body.querySelectorAll('[data-b]').forEach((c) => { if (c.checked) f[c.dataset.b] = '1'; else delete f[c.dataset.b]; });
+  applyBtn.onclick = () => {
+    const g = read();
     for (const k of Object.keys(filters)) delete filters[k];
-    Object.assign(filters, f);
+    Object.assign(filters, g);
     s.close();
     onApply();
   };

@@ -27,8 +27,8 @@ YEAR_SECTIONS = ("kpis", "months", "firsts", "top", "photos", "special")
 SPOT_COLS = ("photo", "reg", "type", "owner", "livery", "date", "place", "tags", "rating", "notes", "msn")
 DEFAULT_COLS = ("photo", "reg", "type", "owner", "date", "place")
 MAX_ROWS = 3000
-BOOL_FILTERS = ("special", "favorite", "has_photo", "has_audio", "unknown", "rare")
-INT_FILTERS = ("military", "location_id", "patrol", "outing")
+BOOL_FILTERS = ("special", "favorite", "has_photo", "has_audio", "unknown", "rare", "has_gps", "no_msn", "no_type", "has_notes")
+INT_FILTERS = ("military", "location_id", "patrol", "outing", "rating_min")
 
 
 def _slug(s: str) -> str:

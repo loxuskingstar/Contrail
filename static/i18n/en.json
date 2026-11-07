@@ -2089,5 +2089,26 @@
 "gear.renamed": "{n} spot(s) updated",
 "gear.confirm_del": "Delete “{name}”?",
 "gear.pick_ph": "Pick or type",
-"gear.form_hint": "Pick from your gear or type a new name: it will join the"
+"gear.form_hint": "Pick from your gear or type a new name: it will join the",
+"gear.none_camera": "No camera body (no EXIF)",
+"gear.none_lens": "No lens (no EXIF)",
+"spots.select_all": "Select all (current filter)",
+"spots.fs_aircraft": "Aircraft",
+"spots.fs_where_when": "Place and period",
+"spots.fs_shot": "Shot conditions",
+"spots.fs_todo": "To complete",
+"spots.fs_todo_hint": "Find spots missing information, then fill them in one go (multi-select > edit).",
+"spots.fs_collection": "Collection and sort",
+"spots.fs_gear_hint": "“No body / lens” lists photos with no EXIF data: select them, then edit them in bulk.",
+"spots.fs_show": {
+"one": "Show {n} spot",
+"other": "Show {n} spots"
+},
+"spots.date_from": "From",
+"spots.date_to": "To",
+"spots.rating_min": "Minimum rating",
+"spots.f_has_gps": "With GPS position",
+"spots.f_has_notes": "With description",
+"spots.f_no_msn": "No serial number",
+"spots.f_no_type": "No aircraft type"
 }

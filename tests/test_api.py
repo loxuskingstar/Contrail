@@ -1549,3 +1549,35 @@ def test_gear_manual_and_filters(client):
     ids = [client.get("/api/spots", params={"camera": "Zeta Body 9"}).json()["items"][0]["id_spotting"]]
     assert client.post("/api/spots/bulk", json={"ids": ids, "action": "set", "value": {"lens": "Zeta 24-70"}}).status_code == 200
     assert client.get("/api/spots", params={"lens": "Zeta 24-70"}).json()["total"] == 1
+
+
+def test_gear_missing_filter_and_select_all(client):
+    client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZGNO", "date": "2075-05-01T10:00", "airport": "LFBO"})})
+    client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZGNP", "date": "2075-05-02T10:00", "airport": "LFBO", "camera": "Zeta Body 9"})})
+    none = client.get("/api/spots", params={"year": "2075", "camera": "__none__"}).json()
+    assert none["total"] == 1 and none["items"][0]["registration"] == "F-ZGNO"
+    assert client.get("/api/spots", params={"year": "2075", "lens": "__none__"}).json()["total"] == 2
+    ids = client.get("/api/spots/ids", params={"year": "2075", "camera": "__none__"}).json()["ids"]
+    assert len(ids) == 1
+    assert client.post("/api/spots/bulk", json={"ids": ids, "action": "set", "value": {"camera": "Zeta Body 9", "lens": "Zeta 24-70"}}).status_code == 200
+    assert client.get("/api/spots", params={"year": "2075", "camera": "__none__"}).json()["total"] == 0
+
+
+def test_new_filters_and_gear_missing(client):
+    base = {"date": "2076-03-01T10:00", "airport": "LFBO"}
+    for reg, extra in (("F-ZNF1", {"rating": 5, "aircraft_icao": "A320", "msn": "1234", "description": "x"}),
+                       ("F-ZNF2", {"rating": 2})):
+        r = client.post("/api/spots", data={"data": json.dumps({"registration": reg, **base, **extra})})
+        assert r.status_code in (200, 201), r.text
+    q = {"date_from": "2076-01-01", "date_to": "2076-12-31"}
+    assert client.get("/api/spots", params=q).json()["total"] == 2
+    assert client.get("/api/spots", params={**q, "rating_min": 4}).json()["total"] == 1
+    assert client.get("/api/spots", params={**q, "no_msn": True}).json()["total"] == 1
+    assert client.get("/api/spots", params={**q, "no_type": True}).json()["total"] == 1
+    assert client.get("/api/spots", params={**q, "has_notes": True}).json()["total"] == 1
+    assert client.get("/api/spots", params={**q, "camera": "__none__"}).json()["total"] == 2
+    assert client.get("/api/gear").json()["missing"]["camera"] >= 2
+    ids = client.get("/api/spots/ids", params={**q, "camera": "__none__"}).json()["ids"]
+    assert len(ids) == 2
+    assert client.post("/api/spots/bulk", json={"ids": ids, "action": "set", "value": {"camera": "Nova X1"}}).status_code == 200
+    assert client.get("/api/spots", params={**q, "camera": "__none__"}).json()["total"] == 0
