@@ -1795,5 +1795,8 @@
 "gmap.base": "背景",
 "gmap.b_default": "地図（設定どおり）",
 "gmap.b_esri": "衛星写真",
-"gmap.b_ign": "IGN衛星写真（フランス）"
+"gmap.b_ign": "IGN衛星写真（フランス）",
+"gmap.cluster": "近い場所をまとめる",
+"gmap.l_cluster": "グループ：リング＝内訳",
+"gmap.more_places": "ほか {n} か所"
 }

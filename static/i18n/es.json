@@ -1966,5 +1966,8 @@
 "gmap.base": "Fondo",
 "gmap.b_default": "Mapa (ajustes)",
 "gmap.b_esri": "Satélite",
-"gmap.b_ign": "Satélite IGN (Francia)"
+"gmap.b_ign": "Satélite IGN (Francia)",
+"gmap.cluster": "Agrupar lugares cercanos",
+"gmap.l_cluster": "Grupo: anillo = reparto",
+"gmap.more_places": "+ {n} lugares más"
 }

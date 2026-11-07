@@ -1966,5 +1966,8 @@
 "gmap.base": "Fond",
 "gmap.b_default": "Plan (réglages)",
 "gmap.b_esri": "Satellite",
-"gmap.b_ign": "Satellite IGN (France)"
+"gmap.b_ign": "Satellite IGN (France)",
+"gmap.cluster": "Regrouper les lieux proches",
+"gmap.l_cluster": "Groupe : anneau = répartition",
+"gmap.more_places": "+ {n} autres lieux"
 }
