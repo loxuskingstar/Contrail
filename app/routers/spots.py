@@ -412,7 +412,7 @@ def patrol_of(s: dict) -> dict | None:
     p = q1("SELECT id_patrol id, name FROM patrols WHERE id_patrol = ?", (s["patrol_id"],))
     if not p:
         return None
-    p["members"] = q("SELECT id_spotting, registration, test_registration, aircraft, owner, thumb FROM spotting "
+    p["members"] = q("SELECT id_spotting, registration, test_registration, aircraft, owner, thumb, is_patrol, date, airport, place FROM spotting "
                      "WHERE patrol_id = ? ORDER BY id_spotting", (p["id"],))
     return p
 

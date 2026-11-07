@@ -1398,3 +1398,40 @@ def test_aircraft_joins_simple_patrol_by_name(client):
     assert {m["registration"] for m in detail["patrol_members"]} >= {"F-ZPA1", "F-ZPB1", "F-ZPB2"}
     idx = {p["name"]: p for p in client.get("/api/spots/patrol-index").json()}
     assert idx["Équipe Zéphyr"]["simple"] == 1 and idx["Équipe Zéphyr"]["n"] == 4
+
+
+def test_patrol_page_passages_and_seen_badge(client):
+    def post(d):
+        return client.post("/api/spots", data={"data": json.dumps(d)})
+    name = "Equipe Test Voltige"
+    simple = post({"airport": "LFBO", "date": "2031-05-01T10:00", "patrol": {"simple": True, "name": name, "size": 4}}).json()["spot"]
+    # avion identifié, même jour et même lieu : même passage, il rejoint la patrouille « mode simple »
+    a1 = post({"registration": "F-TPAT1", "airport": "LFBO", "date": "2031-05-01T11:00", "patrol": {"name": name.upper()}}).json()["spot"]
+    assert a1["patrol_id"] == simple["patrol_id"] and not a1["is_patrol"]
+    # un autre jour : deuxième passage
+    a2 = post({"registration": "F-TPAT2", "airport": "LFBO", "date": "2031-06-01T10:00", "patrol": {"name": name}}).json()["spot"]
+    a1b = post({"registration": "F-TPAT1", "airport": "LFBO", "date": "2031-07-01T10:00", "patrol": {"name": name}}).json()["spot"]
+    pid = simple["patrol_id"]
+    lst = client.get("/api/patrols").json()["items"]
+    row = next(i for i in lst if i["id"] == pid)
+    assert row["passages"] == 3 and row["aircraft"] == 2 and row["simple"]
+    d = client.get(f"/api/patrols/{pid}").json()
+    assert d["n_passages"] == 3 and len(d["aircraft"]) == 2 and d["name"] == name
+    first = next(p for p in d["passages"] if p["day"].startswith("2031-05-01"))
+    assert first["simple_id"] == simple["id_spotting"] and [a["registration"] for a in first["aircraft"]] == ["F-TPAT1"]
+    t1 = next(a for a in d["aircraft"] if a["registration"] == "F-TPAT1")
+    assert t1["passages"] == 2
+    # « Revu » : l'avion identifié du 2e passage porte le badge, le 1er passage non
+    codes = lambda sid: {b["code"]: b for b in client.get(f"/api/spots/{sid}").json().get("badges", [])}
+    assert "patrol_seen" not in codes(a1["id_spotting"]) and codes(a2["id_spotting"])["patrol_seen"]["n"] == 2
+    assert codes(a1b["id_spotting"])["patrol_seen"]["n"] == 3
+    # renommer : un nom déjà pris fusionne
+    other = post({"registration": "F-TPAT9", "airport": "LFBO", "date": "2031-08-01T10:00", "patrol": {"name": "Equipe Test Autre"}}).json()["spot"]
+    assert client.put(f"/api/patrols/{other['patrol_id']}", json={"name": "Equipe Test Autre 2"}).status_code == 200
+    r = client.put(f"/api/patrols/{other['patrol_id']}", json={"name": name}).json()
+    assert r["id"] == pid
+    assert client.get(f"/api/patrols/{pid}").json()["n_passages"] == 4
+    # retirer un avion de la patrouille conserve le spot
+    assert client.post(f"/api/patrols/{pid}/detach/{other['id_spotting']}").status_code == 200
+    assert client.get(f"/api/spots/{other['id_spotting']}").json()["patrol_id"] is None
+    assert client.get("/api/patrols/999999").status_code == 404

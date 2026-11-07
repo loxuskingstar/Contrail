@@ -238,7 +238,7 @@ export function regFlag(country) {
 
 const BADGE_STYLE = {
   first_type: ['accent', 'sparkles'], first_airline: ['violet', 'building-2'], first_airport: ['green', 'map-pin'],
-  seen_again: ['slate', 'history'], most_spotted: ['gold', 'trophy'], special_livery: ['rose', 'palette'], primer: ['green', 'paint-bucket'], white: ['slate', 'paint-bucket'],
+  seen_again: ['slate', 'history'], patrol_seen: ['slate', 'users'], most_spotted: ['gold', 'trophy'], special_livery: ['rose', 'palette'], primer: ['green', 'paint-bucket'], white: ['slate', 'paint-bucket'],
   flown: ['violet', 'ticket'], military: ['slate', 'shield'], night: ['night', 'moon'], golden_hour: ['gold', 'sunset'], twilight: ['violet', 'sunset'], rarity: ['rose', 'gem'],
 };
 

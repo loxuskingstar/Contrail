@@ -16,7 +16,7 @@ import asyncio
 
 from .core import APP_NAME, APP_VERSION, STATIC_DIR, ensure_dirs, set_profile, _profile
 from .db import init_db
-from .routers import airports as airports_router, field, fleets, flights, io, misc, outings as outings_router, share, spots, stats, trash as trash_router, wishes
+from .routers import airports as airports_router, patrols as patrols_router, field, fleets, flights, io, misc, outings as outings_router, share, spots, stats, trash as trash_router, wishes
 from .services import collection, gamification, media, refdb, sandbox, scheduler, trash
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
@@ -142,7 +142,7 @@ async def guard(request: Request, call_next):
     return response
 
 
-for r in (auth.router, misc.router, spots.router, flights.router, stats.router, fleets.router, field.router, share.router, io.router, wishes.router, trash_router.router, outings_router.router, airports_router.router):
+for r in (auth.router, misc.router, spots.router, flights.router, stats.router, fleets.router, field.router, share.router, io.router, wishes.router, trash_router.router, outings_router.router, airports_router.router, patrols_router.router):
     app.include_router(r)
 
 

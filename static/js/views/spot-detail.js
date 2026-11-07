@@ -53,10 +53,17 @@ export async function render(root, params) {
     ${s.outing ? `<a class="card row" style="margin-bottom:14px" href="#/outings/${s.outing.id}">${icon('calendar-days', '', 22)}
       <div class="grow"><b>${esc(s.outing.name || t('outing.this'))}</b><div class="small muted">${esc(t('outing.of_n', { n: s.outing.n }))}</div></div>${icon('chevron-right')}</a>` : ''}
     ${s.is_patrol && s.patrol_size ? `<div class="card row" style="margin-bottom:14px">${icon('users', '', 22)}<b>${esc(t('patrol.n_aircraft', { n: s.patrol_size }))}</b></div>` : ''}
-    ${s.is_patrol && s.patrol_members?.length ? `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('users', '', 18)} ${esc(t('patrol.identified'))}<a href="#/spots?patrol=${s.patrol_id}">${esc(t('patrol.view_all', { n: s.patrol_members.length + 1 }))} →</a></div>
-      <div class="row wrap" style="gap:8px">${s.patrol_members.map((m) => `<a class="chip" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}
-    ${s.patrol ? `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('users', '', 18)} ${esc(s.patrol.name || t('multi.on_photo'))}<a href="#/spots?patrol=${s.patrol.id}">${esc(t('patrol.view_all', { n: s.patrol.members.length }))} →</a></div>
-      <div class="row wrap" style="gap:8px">${s.patrol.members.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div></div>` : ''}
+    ${s.is_patrol && s.patrol_id ? `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('users', '', 18)} ${esc(s.patrol_name || t('patrol.title'))}<a href="#/patrols/${s.patrol_id}">${esc(t('patrol.open'))} →</a></div>
+      ${s.patrol_members?.length ? `<span class="tiny muted">${esc(t('patrol.identified'))}</span><div class="row wrap" style="gap:8px;margin-top:6px">${s.patrol_members.map((m) => `<a class="chip" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div>` : `<p class="small muted">${esc(t('patrol.none_identified'))}</p>`}
+      <div style="margin-top:10px"><a class="btn sm" href="#/spots/new?patrol=${encodeURIComponent(s.patrol_name || '')}&date=${esc((s.date || '').slice(0, 10))}&airport=${esc(s.airport || '')}">${icon('plus', '', 14)} ${esc(t('patrol.add_aircraft'))}</a></div></div>` : ''}
+    ${s.patrol ? (() => {
+      const ms = s.patrol.members, planes = ms.filter((m) => !m.is_patrol), passes = ms.filter((m) => m.is_patrol);
+      const when = (m) => `${m.date ? fmtDate(m.date, { time: false }) : ''}${m.airport || m.place ? ' · ' + esc(m.airport || m.place) : ''}`;
+      return `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('users', '', 18)} ${esc(s.patrol.name || t('multi.on_photo'))}<a href="#/patrols/${s.patrol.id}">${esc(t('patrol.open'))} →</a></div>
+        <span class="tiny muted">${esc(t('patrol.identified'))} · ${planes.length}</span>
+        <div class="row wrap" style="gap:8px;margin:6px 0 ${passes.length ? 10 : 0}px">${planes.map((m) => `<a class="chip ${m.id_spotting === s.id_spotting ? 'on' : ''}" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div>
+        ${passes.length ? `<span class="tiny muted">${esc(t('patrol.passes'))} · ${passes.length}</span><div class="row wrap" style="gap:8px;margin-top:6px">${passes.map((m) => `<a class="chip" href="#/spots/${m.id_spotting}">${when(m)}</a>`).join('')}</div>` : ''}</div>`;
+    })() : ''}
     ${s.flights.length ? `<a class="card row" style="margin-bottom:14px;background:rgb(139 92 246 / .1)" href="#/airframe/${encodeURIComponent(s.registration)}">${icon('ticket', '', 26)}
       <div class="grow"><b>${esc(t('crossref.spot', { reg: s.registration, n: s.flights.length }))}</b>
       <div class="small muted">${s.flights.map((f) => `${esc(f.dep_icao)} → ${esc(f.arr_icao)} (${fmtDate(f.date, { time: false })})`).join(' · ')}</div></div>${icon('chevron-right')}</a>` : ''}

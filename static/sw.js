@@ -6,7 +6,7 @@ const MEDIA = 'contrail-media';
 const SHARE = 'contrail-share';
 
 const VIEWS = ['dashboard', 'spots', 'spot-form', 'spot-detail', 'airframe', 'flights', 'flight-form', 'fleets', 'fleet-detail',
-  'liveries', 'stats', 'locations', 'radar', 'wishlist', 'achievements', 'story', 'shares', 'settings', 'drafts', 'more', 'public', 'spot-share', 'flight-detail', 'outings', 'outing-detail', 'airports', 'airport', 'trash'];
+  'liveries', 'stats', 'locations', 'radar', 'wishlist', 'achievements', 'story', 'shares', 'settings', 'drafts', 'more', 'public', 'spot-share', 'flight-detail', 'outings', 'outing-detail', 'airports', 'airport', 'patrols', 'patrol', 'trash'];
 const PRECACHE = [
   '/', '/manifest.webmanifest', '/static/css/app.css',
   '/static/icons/icon.svg', '/static/icons/icon-192.png',
