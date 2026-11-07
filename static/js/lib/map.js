@@ -26,15 +26,33 @@ export function ensureMapLibre() {
 }
 
 const OFM = 'https://tiles.openfreemap.org/styles/';
-export const MAP_STYLES = ['auto', 'positron', 'liberty', 'bright', 'dark', 'fiord', 'osm', 'custom'];
+export const MAP_STYLES = ['auto', 'positron', 'liberty', 'bright', 'dark', 'fiord', 'osm', 'sat_esri', 'sat_ign', 'custom'];
+
+const ESRI = 'https://services.arcgisonline.com/ArcGIS/rest/services';
+const IGN_WMTS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg';
+
+/** Vue satellite gratuite : Esri World Imagery (monde) + noms de lieux, ou orthophotos IGN (France, très détaillées) posées sur Esri. */
+function satelliteStyle(kind) {
+  const sources = { esri: { type: 'raster', tiles: [`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19,
+    attribution: 'Imagery © <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics' } };
+  const layers = [{ id: 'esri', type: 'raster', source: 'esri' }];
+  if (kind === 'sat_ign') {
+    sources.ign = { type: 'raster', tiles: [IGN_WMTS], tileSize: 256, maxzoom: 19, attribution: '© <a href="https://geoservices.ign.fr">IGN</a>' };
+    layers.push({ id: 'ign', type: 'raster', source: 'ign' });
+  }
+  sources.labels = { type: 'raster', tiles: [`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19 };
+  layers.push({ id: 'labels', type: 'raster', source: 'labels', paint: { 'raster-opacity': 0.95 } });
+  return { version: 8, sources, layers };
+}
 
 /** Style de carte selon les réglages : OpenFreeMap (clair / sombre suivant le thème), OSM raster ou URL perso. */
-export function styleFor() {
+export function styleFor(override) {
   const s = window.__store?.settings || {};
   const dark = document.documentElement.dataset.theme === 'dark';
-  let mode = s.map_tiles || 'auto';
+  let mode = override || s.map_tiles || 'auto';
   if (!MAP_STYLES.includes(mode)) mode = 'auto';   // anciennes valeurs (carto_*) → auto
   if (mode === 'custom' && s.map_tiles_url) return s.map_tiles_url;
+  if (mode === 'sat_esri' || mode === 'sat_ign') return satelliteStyle(mode);
   if (mode === 'osm') {
     return {
       version: 8,
@@ -58,10 +76,10 @@ const ll = ([lat, lng]) => [lng, lat];
  * Crée une carte et attend que le style soit prêt.
  * @returns {Promise<ContrailMap>}
  */
-export async function createMap(el, { center = [46.6, 2.4], zoom = 4.5, scrollZoom = true, controls = 'top-left', interactive = true } = {}) {
+export async function createMap(el, { center = [46.6, 2.4], zoom = 4.5, scrollZoom = true, controls = 'top-left', interactive = true, base } = {}) {
   const maplibregl = await ensureMapLibre();
   const map = new maplibregl.Map({
-    container: el, style: styleFor(), center: ll(center), zoom, attributionControl: false,
+    container: el, style: styleFor(base), center: ll(center), zoom, attributionControl: false,
     cooperativeGestures: false, scrollZoom, interactive, dragRotate: false, pitchWithRotate: false, maxPitch: 0,
   });
   map.touchZoomRotate.disableRotation();
@@ -95,7 +113,7 @@ class ContrailMap {
   }
 
   /** Marqueur HTML : kind = pin (pastille avec libellé) | dot | element */
-  marker(latlng, { kind = 'pin', label = '', color, size, html, popup, title, draggable = false, onClick, onDragEnd, group = 'default', z } = {}) {
+  marker(latlng, { kind = 'pin', label = '', color, size, html, popup, popupClass, popupOffset = 14, title, draggable = false, onClick, onDragEnd, group = 'default', z } = {}) {
     let el;
     if (kind === 'element' && html) {
       el = document.createElement('div');
@@ -115,7 +133,7 @@ class ContrailMap {
     if (title) el.title = title;
     if (z) el.style.zIndex = z;
     const m = new this.ml.Marker({ element: el, draggable, anchor: 'center' }).setLngLat(ll(latlng)).addTo(this.map);
-    if (popup) m.setPopup(new this.ml.Popup({ offset: 14, maxWidth: '300px' }).setHTML(popup));
+    if (popup) m.setPopup(new this.ml.Popup({ offset: popupOffset, maxWidth: '300px', className: popupClass }).setHTML(popup));
     if (onClick) el.addEventListener('click', (e) => { e.stopPropagation(); onClick(e); });
     if (onDragEnd) m.on('dragend', () => { const p = m.getLngLat(); onDragEnd({ lat: p.lat, lng: p.lng }); });
     const api = {

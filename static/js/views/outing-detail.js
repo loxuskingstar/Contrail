@@ -53,7 +53,7 @@ export async function render(root, { id }) {
   const addDay = (dayFilter || o.days.find((d) => d.day >= new Date().toISOString().slice(0, 10))?.day || o.day);
   root.innerHTML = `${pageHead(esc(outingTitle(o)), {
       sub: `${air ? `<span class="badge gold">${icon('plane', '', 11)} ${esc(t('outing.airshow'))}</span> ` : ''}${esc(outingDates(o))}${o.name ? ` · ${esc(outingSite(o))}` : ''}${dur ? ` · ${icon('clock', '', 14)} ${esc(hhmm(o.first_at))}–${esc(hhmm(o.last_at))} (${esc(dur)})` : ''}`,
-      actions: `${o.prev_id ? `<a class="btn-icon" href="#/outings/${o.prev_id}" title="${esc(t('outing.prev'))}">${icon('chevron-left')}</a>` : ''}${o.next_id ? `<a class="btn-icon" href="#/outings/${o.next_id}" title="${esc(t('outing.next'))}">${icon('chevron-right')}</a>` : ''}<button class="btn" data-edit>${icon('pencil', '', 16)} ${esc(t('common.edit'))}</button>` })}
+      actions: `${o.prev_id ? `<a class="btn-icon" href="#/outings/${o.prev_id}" title="${esc(t('outing.prev'))}">${icon('chevron-left')}</a>` : ''}${o.next_id ? `<a class="btn-icon" href="#/outings/${o.next_id}" title="${esc(t('outing.next'))}">${icon('chevron-right')}</a>` : ''}<button class="btn-icon" data-pdf title="${esc(t('pdf.export_menu'))}">${icon('file-text')}</button><button class="btn" data-edit>${icon('pencil', '', 16)} ${esc(t('common.edit'))}</button>` })}
     ${o.mergeable.length ? `<div class="card row" style="margin-bottom:14px;justify-content:space-between;gap:12px">${icon('git-merge', '', 22)}<div class="grow"><b>${esc(t('outing.merge_hint_t'))}</b><div class="small muted">${esc(t('outing.merge_hint', { n: o.mergeable.length }))}</div></div><button class="btn" data-merge>${esc(t('outing.merge'))}</button></div>` : ''}
     ${o.n ? `<div class="grid kpis" style="margin-bottom:14px">${kpis.map(([ic, v, l]) => `<div class="card kpi">${icon(ic)}<div class="v">${v}</div><div class="l">${esc(l)}</div></div>`).join('')}</div>` : `<div class="card muted" style="margin-bottom:14px">${esc(t('outing.planned_empty'))}</div>`}
     <div class="chips" style="margin-bottom:14px">
@@ -116,6 +116,7 @@ export async function render(root, { id }) {
   };
   root.querySelector('[data-merge]')?.addEventListener('click', mergeSheet);
 
+  root.querySelector('[data-pdf]').onclick = async () => (await import('../lib/pdf-dialog.js')).openPdfExport({ kind: 'spots', params: { outing: o.id, title: outingTitle(o), sort: 'date_asc' }, title: outingTitle(o), filename: `contrail-sortie-${o.id}` });
   root.querySelector('[data-edit]').onclick = () => {
     const sh = sheet({ title: esc(t('outing.edit')), body: `<div class="stack">
       <label class="field"><span>${esc(t('outing.name'))}</span><input data-name maxlength="120" value="${esc(o.name || '')}" placeholder="${esc(t('outing.name_ph'))}"></label>

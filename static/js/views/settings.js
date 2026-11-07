@@ -1,11 +1,12 @@
 // Réglages : apparence, modules, spotting, intégrations, données (sauvegardes, import/export), étiquettes, à propos
 import { api, mediaUrl } from '../api.js';
-import { store, rerenderShell, applyAppearance, switchSession, resetTestSession } from '../app.js';
+import { store, rerenderShell, applyAppearance, switchSession, resetTestSession, NAV } from '../app.js';
 import { t, LANGS, setLang, fmtDate, fmtNum } from '../i18n.js';
 import { icon } from '../lib/icons.js';
 import { airportInput } from '../lib/fields.js';
 import { esc, sheet, toast, errorToast, confirmDialog, pageHead, promptDialog, download } from '../ui.js';
 import { WIDGETS } from './dashboard.js';
+import { pdfOptionsHtml, bindPdfOptions, readPdfOptions, pdfDefaults } from '../lib/pdf-dialog.js';
 
 const SECTIONS = ['appearance', 'modules', 'spotting', 'integrations', 'data', 'tags', 'about'];
 const ACCENTS = ['#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316', '#eab308', '#10b981', '#0ea5e9', '#64748b'];
@@ -36,8 +37,21 @@ export async function render(root, params) {
         <label class="field"><span>${esc(t('settings.language'))}</span><select data-lang>${Object.entries(LANGS).map(([k, v]) => `<option value="${k}" ${S.language === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         <label class="field"><span>${esc(t('settings.units'))}</span><select data-units><option value="metric" ${S.units === 'metric' ? 'selected' : ''}>${esc(t('settings.metric'))}</option><option value="imperial" ${S.units === 'imperial' ? 'selected' : ''}>${esc(t('settings.imperial'))}</option></select></label>
       </div>
+      <div class="card stack"><div class="card-title" style="margin-bottom:0">${icon('palette', '', 18)} ${esc(t('ui.title'))}</div>
+        ${[['ui_density', 'ui.density', [['compact', 'ui.d_compact'], ['comfortable', 'ui.d_comfortable'], ['spacious', 'ui.d_spacious']], 'comfortable'],
+           ['ui_radius', 'ui.radius', [['square', 'ui.r_square'], ['soft', 'ui.r_soft'], ['round', 'ui.r_round'], ['pill', 'ui.r_pill']], 'round'],
+           ['ui_font', 'ui.font', [['inter', 'ui.f_inter'], ['system', 'ui.f_system'], ['serif', 'ui.f_serif'], ['mono', 'ui.f_mono']], 'inter'],
+           ['chart_style', 'ui.chart', [['accent', 'ui.c_accent'], ['rainbow', 'ui.c_rainbow'], ['mono', 'ui.c_mono']], 'accent']]
+          .map(([key, label, opts, def]) => `<div class="field"><span>${esc(t(label))}</span><div class="seg" data-seg="${key}">${opts.map(([v, l]) => `<button data-v="${v}" class="${(S[key] || def) === v ? 'on' : ''}">${esc(t(l))}</button>`).join('')}</div></div>`).join('')}
+        <label class="field"><span>${esc(t('ui.scale'))} <b data-scale-out>${S.ui_scale || 100} %</b></span><input type="range" min="85" max="130" step="5" value="${S.ui_scale || 100}" data-scale></label>
+        ${toggle('reduce_motion', t('ui.motion'), t('ui.motion_hint'), !!S.reduce_motion)}
+        ${toggle('nav_compact', t('ui.nav_compact'), t('ui.nav_compact_hint'), !!S.nav_compact)}
+        <div class="field"><span>${esc(t('ui.menu'))}</span><div class="chips" data-nav-chips>${NAV.filter((n) => n.href && n.href !== '#/' && n.href !== '#/settings').map((n) => `<button type="button" class="chip ${(S.nav_hidden || []).includes(n.href) ? '' : 'on'}" data-nav="${esc(n.href)}">${icon(n.icon, '', 14)} ${esc(t(n.key))}</button>`).join('')}</div>
+          <span class="tiny muted">${esc(t('ui.menu_hint'))}</span></div>
+        <button type="button" class="btn sm" data-ui-reset style="align-self:flex-start">${icon('rotate-ccw', '', 14)} ${esc(t('ui.reset'))}</button>
+      </div>
       <div class="card stack"><div class="card-title" style="margin-bottom:0">${esc(t('settings.map'))}</div>
-        <label class="field"><span>${esc(t('settings.map_tiles'))}</span><select data-tiles>${['auto', 'positron', 'liberty', 'bright', 'dark', 'fiord', 'osm', 'custom'].map((v) => `<option value="${v}" ${(S.map_tiles || 'auto') === v ? 'selected' : ''}>${esc(t(`settings.tiles_${v}`))}</option>`).join('')}</select></label>
+        <label class="field"><span>${esc(t('settings.map_tiles'))}</span><select data-tiles>${['auto', 'positron', 'liberty', 'bright', 'dark', 'fiord', 'osm', 'sat_esri', 'sat_ign', 'custom'].map((v) => `<option value="${v}" ${(S.map_tiles || 'auto') === v ? 'selected' : ''}>${esc(t(`settings.tiles_${v}`))}</option>`).join('')}</select></label>
         <div class="stack" data-custom-tiles ${(S.map_tiles || 'auto') === 'custom' ? '' : 'hidden'}>
           <label class="field"><span>${esc(t('settings.tiles_url'))}</span><input data-tiles-url value="${esc(S.map_tiles_url || '')}" placeholder="https://tiles.openfreemap.org/styles/liberty" spellcheck="false"></label>
         </div>
@@ -61,6 +75,24 @@ export async function render(root, params) {
       rerenderShell();
     };
     body.querySelector('[data-units]').onchange = (e) => save({ units: e.target.value });
+    body.querySelectorAll('[data-seg]').forEach((g) => g.querySelectorAll('button').forEach((b) => (b.onclick = () => {
+      g.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+      save({ [g.dataset.seg]: b.dataset.v });
+    })));
+    const sc = body.querySelector('[data-scale]');
+    sc.oninput = () => { body.querySelector('[data-scale-out]').textContent = `${sc.value} %`; store.settings.ui_scale = Number(sc.value); applyAppearance(); };
+    sc.onchange = () => save({ ui_scale: Number(sc.value) });
+    body.querySelectorAll('[data-k=reduce_motion], [data-k=nav_compact]').forEach((c) => (c.onchange = () => save({ [c.dataset.k]: c.checked })));
+    body.querySelectorAll('[data-nav]').forEach((b) => (b.onclick = () => {
+      b.classList.toggle('on');
+      const hidden = [...body.querySelectorAll('[data-nav]:not(.on)')].map((x) => x.dataset.nav);
+      save({ nav_hidden: hidden }, { reload: true });
+    }));
+    body.querySelector('[data-ui-reset]').onclick = async () => {
+      await save({ ui_density: 'comfortable', ui_radius: 'round', ui_font: 'inter', ui_scale: 100, reduce_motion: false, chart_style: 'accent', nav_hidden: [], nav_compact: false, stats_hidden: [] }, { reload: true });
+      location.reload();
+    };
+
     body.querySelector('[data-tiles]').onchange = (e) => {
       body.querySelector('[data-custom-tiles]').hidden = e.target.value !== 'custom';
       save({ map_tiles: e.target.value });
@@ -87,6 +119,7 @@ export async function render(root, params) {
         <div class="field-row">
           <label class="field"><span>${esc(t('settings.image_max'))}</span><select data-imgmax>${[1600, 2048, 2560, 3200, 4096].map((v) => `<option ${S.image_max_px === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
           <label class="field"><span>${esc(t('settings.image_quality'))}</span><select data-imgq>${[70, 78, 85, 90, 95].map((v) => `<option ${S.image_quality === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+          <label class="field"><span>${esc(t('settings.image_effort'))}</span><select data-imge>${[[0, 'fast'], [2, 'balanced'], [5, 'compact']].map(([v, k]) => `<option value="${v}" ${(S.image_effort ?? 2) === v ? 'selected' : ''}>${esc(t('settings.effort_' + k))}</option>`).join('')}</select></label>
         </div>
         ${toggle('keep_originals', t('settings.keep_originals'), t('settings.keep_originals_d'), S.keep_originals)}
         ${toggle('share_include_notes', t('settings.share_notes'), t('settings.share_notes_d'), S.share_include_notes)}
@@ -104,6 +137,7 @@ export async function render(root, params) {
     body.querySelector('[data-homes]').onchange = (e) => save({ home_airports: e.target.value.split(/[\s,;]+/).map((x) => x.trim().toUpperCase()).filter(Boolean) });
     body.querySelector('[data-imgmax]').onchange = (e) => save({ image_max_px: Number(e.target.value) });
     body.querySelector('[data-imgq]').onchange = (e) => save({ image_quality: Number(e.target.value) });
+    body.querySelector('[data-imge]').onchange = (e) => save({ image_effort: Number(e.target.value) });
     body.querySelector('[data-watchint]').onchange = (e) => save({ watch_interval_min: Number(e.target.value) });
     body.querySelectorAll('[data-goal]').forEach((i) => (i.onchange = () => save({ [`goal_${i.dataset.goal}`]: Math.max(0, Math.round(Number(i.value) || 0)) })));
     body.querySelectorAll('[data-k]').forEach((c) => (c.onchange = () => save({ [c.dataset.k]: c.checked })));
@@ -191,6 +225,8 @@ export async function render(root, params) {
           <a class="btn" href="/api/export/flights.csv">${icon('download', '', 18)} ${esc(t('settings.export_flights'))}</a>
           <a class="btn" href="/api/export/full.json">${icon('database', '', 18)} JSON</a></div>
           <p class="tiny muted">${esc(t('settings.export_d'))}</p></div>
+        <div class="card stack" data-pdfcard><div class="card-title">${icon('file-text', '', 15)} ${esc(t('pdf.settings_title'))}</div>
+          <p class="small muted">${esc(t('pdf.settings_d'))}</p>${pdfOptionsHtml(pdfDefaults())}</div>
         <div class="card"><a class="row" href="#/drafts">${icon('cloud-upload', '', 20)}<span class="grow">${esc(t('nav.drafts'))}</span>${icon('chevron-right')}</a></div>
       </div>`;
       storageCard(body.querySelector('[data-storage]'));
@@ -201,6 +237,12 @@ export async function render(root, params) {
       body.querySelector('[data-int]').onchange = (e) => save({ backup_interval_hours: Number(e.target.value) });
       body.querySelector('[data-keep]').onchange = (e) => save({ backup_keep: Number(e.target.value) });
       body.querySelectorAll('[data-meta]').forEach((i) => (i.onchange = () => save({ [i.dataset.meta]: i.value.trim() })));
+      const pdfCard = body.querySelector('[data-pdfcard]');
+      bindPdfOptions(pdfCard, () => {
+        const o = readPdfOptions(pdfCard);
+        save({ pdf_page: o.page, pdf_orient: o.orient, pdf_accent: o.accent || '', pdf_font: o.font, pdf_cover: !!o.cover, pdf_cover_style: o.cover_style,
+          pdf_photos: o.photos !== false, pdf_density: o.density, pdf_footer: o.footer || '', pdf_author: o.author || '' });
+      });
       body.querySelector('[data-trash]').onchange = (e) => save({ trash_days: Number(e.target.value) });
       body.querySelectorAll('[data-k]').forEach((c) => (c.onchange = () => save({ [c.dataset.k]: c.checked })));
       const mk = async (full, btn) => {
@@ -386,7 +428,7 @@ async function storageCard(box) {
       const host = box.querySelector('[data-dups]');
       if (!host || !d.count) return;
       const side = (x) => `<a class="row" style="gap:8px;min-width:0" href="#/spots/${x.id}">${x.thumb ? `<img src="${mediaUrl('thumbs', x.thumb)}" alt="" style="width:56px;height:40px;object-fit:cover;border-radius:8px">` : ''}<span class="small mono">${esc(x.registration)}</span></a>`;
-      host.innerHTML = `<div class="card-title" style="margin:6px 0 2px">${icon('copy', '', 15)} ${esc(t('storage.dups', { n: d.count }))}</div>
+      host.innerHTML = `<div class="card-title" style="margin:6px 0 2px">${icon('copy', '', 15)} ${esc(t('storage.dups', { n: d.count }))} <a href="#/duplicates" style="margin-left:8px">${esc(t('dups.open'))} →</a></div>
         ${d.pairs.slice(0, 8).map((p) => `<div class="row" style="gap:10px;justify-content:space-between;padding:4px 0;border-top:1px solid var(--hair)">${side(p.a)}<span class="tiny muted">${esc(t('storage.dup_distance', { n: p.distance }))}</span>${side(p.b)}</div>`).join('')}`;
     }).catch(() => {});
     box.querySelector('[data-purge]')?.addEventListener('click', async (e) => {

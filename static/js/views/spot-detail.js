@@ -7,6 +7,15 @@ import { esc, regText, regLabel, badgeHtml, tagChips, lightbox, menu, confirmDia
 
 const WX_ICON = { clear: 'sun', partly_cloudy: 'cloud-sun', cloudy: 'cloud', overcast: 'cloud', rain: 'cloud-rain', drizzle: 'cloud-rain', snow: 'cloud-snow', thunderstorm: 'cloud-lightning', fog: 'cloud-fog', mist: 'cloud-fog', haze: 'cloud-fog' };
 
+// Un avion vu à plusieurs passages ne compte qu'une fois : un seul jeton par immatriculation (le spot courant, sinon le plus récent)
+const distinctPlanes = (list, cur) => {
+  const by = new Map();
+  for (const m of list) {
+    const o = by.get(m.registration);
+    if (!o || m.id_spotting === cur || (o.id_spotting !== cur && String(m.date || '') > String(o.date || ''))) by.set(m.registration, m);
+  }
+  return [...by.values()];
+};
 export function weatherBlock(m, raw, taf) {
   if (!m) return '';
   const wind = m.wind_kt != null ? `${m.wind_dir != null ? String(m.wind_dir).padStart(3, '0') + '°' : 'VRB'} ${m.wind_kt}${m.gust_kt ? 'G' + m.gust_kt : ''} kt` : '—';
@@ -54,10 +63,10 @@ export async function render(root, params) {
       <div class="grow"><b>${esc(s.outing.name || t('outing.this'))}</b><div class="small muted">${esc(t('outing.of_n', { n: s.outing.n }))}</div></div>${icon('chevron-right')}</a>` : ''}
     ${s.is_patrol && s.patrol_size ? `<div class="card row" style="margin-bottom:14px">${icon('users', '', 22)}<b>${esc(t('patrol.n_aircraft', { n: s.patrol_size }))}</b></div>` : ''}
     ${s.is_patrol && s.patrol_id ? `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('users', '', 18)} ${esc(s.patrol_name || t('patrol.title'))}<a href="#/patrols/${s.patrol_id}">${esc(t('patrol.open'))} →</a></div>
-      ${s.patrol_members?.length ? `<span class="tiny muted">${esc(t('patrol.identified'))}</span><div class="row wrap" style="gap:8px;margin-top:6px">${s.patrol_members.map((m) => `<a class="chip" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div>` : `<p class="small muted">${esc(t('patrol.none_identified'))}</p>`}
+      ${s.patrol_members?.length ? `<span class="tiny muted">${esc(t('patrol.identified'))} · ${distinctPlanes(s.patrol_members).length}</span><div class="row wrap" style="gap:8px;margin-top:6px">${distinctPlanes(s.patrol_members).map((m) => `<a class="chip" href="#/spots/${m.id_spotting}">${esc(regText(m.registration))}</a>`).join('')}</div>` : `<p class="small muted">${esc(t('patrol.none_identified'))}</p>`}
       <div style="margin-top:10px"><a class="btn sm" href="#/spots/new?patrol=${encodeURIComponent(s.patrol_name || '')}&date=${esc((s.date || '').slice(0, 10))}&airport=${esc(s.airport || '')}">${icon('plus', '', 14)} ${esc(t('patrol.add_aircraft'))}</a></div></div>` : ''}
     ${s.patrol ? (() => {
-      const ms = s.patrol.members, planes = ms.filter((m) => !m.is_patrol), passes = ms.filter((m) => m.is_patrol);
+      const ms = s.patrol.members, planes = distinctPlanes(ms.filter((m) => !m.is_patrol), s.id_spotting), passes = ms.filter((m) => m.is_patrol);
       const when = (m) => `${m.date ? fmtDate(m.date, { time: false }) : ''}${m.airport || m.place ? ' · ' + esc(m.airport || m.place) : ''}`;
       return `<div class="card" style="margin-bottom:14px"><div class="card-title">${icon('users', '', 18)} ${esc(s.patrol.name || t('multi.on_photo'))}<a href="#/patrols/${s.patrol.id}">${esc(t('patrol.open'))} →</a></div>
         <span class="tiny muted">${esc(t('patrol.identified'))} · ${planes.length}</span>
@@ -138,6 +147,7 @@ export async function render(root, params) {
   });
   root.querySelector('[data-menu]').onclick = (e) => menu(e.currentTarget, [
     ...(s.image ? [{ icon: 'download', label: t('export.photo'), onClick: () => (location.href = `/api/export/spots/${s.id_spotting}/photo.jpg`) }] : []),
+    { icon: 'file-text', label: t('pdf.export_sheet'), onClick: async () => (await import('../lib/pdf-dialog.js')).openPdfExport({ kind: 'spot', params: { id: s.id_spotting }, title: s.registration, filename: `contrail-${s.registration}` }) },
     { icon: 'history', label: t('nav.airframe'), onClick: () => navigate(`#/airframe/${encodeURIComponent(s.registration)}`) },
     { icon: 'image', label: t('share_img.title'), onClick: () => navigate(`#/spots/${s.id_spotting}/share`) },
     { icon: 'link', label: t('share.this_spot'), onClick: async () => (await import('./shares.js')).createShareFlow({ kind: 'spot', target: String(s.id_spotting) }) },

@@ -13,7 +13,7 @@ export async function render(root) {
   }
   const fold = (x) => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   root.innerHTML = `${pageHead(esc(t('patrols.title')), { sub: esc(t('patrols.count', { n: items.length })) })}
-    <div class="search" style="margin-bottom:12px"><input class="input" data-q placeholder="${esc(t('patrols.search'))}" autocomplete="off"></div>
+    <div class="search" style="margin-bottom:12px">${icon('search', '', 18)}<input class="input" type="search" data-q placeholder="${esc(t('patrols.search'))}" autocomplete="off"></div>
     <div class="card flush list" data-list></div>`;
   const list = root.querySelector('[data-list]');
   const draw = (q = '') => {

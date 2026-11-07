@@ -25,7 +25,7 @@ export async function render(root, { id }) {
         <a class="row grow" style="gap:10px;min-width:0;text-decoration:none;color:inherit" href="#/airframe/${encodeURIComponent(a.registration)}">
           <div style="width:44px;height:44px;border-radius:9px;overflow:hidden;background:var(--surface-2);flex:none">${a.thumb ? `<img src="${mediaUrl('thumbs', a.thumb)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : ''}</div>
           <div class="grow" style="min-width:0"><div class="mono"><b>${esc(regText(a.registration))}</b></div><div class="small muted ellipsis">${esc(a.aircraft || '')}${a.owner ? ' · ' + esc(a.owner) : ''}</div></div></a>
-        <span class="badge" title="${esc(t('patrol.of_n', { n: p.n_passages }))}">${esc(t('patrol.in_passes', { n: a.passages, total: p.n_passages }))}</span>
+        <span class="badge" title="${esc(t('patrol.of_n', { n: p.n_passages }))}">${esc(t('patrol.in_passes', { n: a.passages, total: p.n_passages, count: p.n_passages }))}</span>
         <button class="btn-icon" data-detach="${a.id}" title="${esc(t('patrol.detach'))}" aria-label="${esc(t('patrol.detach'))}">${icon('x', '', 16)}</button></div>`).join('')}</div></div>` : ''}
     ${p.by_year.length > 1 || p.airports.length ? `<div class="grid two" style="margin-bottom:14px">
       ${p.by_year.length > 1 ? `<div class="card"><div class="card-title">${esc(t('patrol.by_year'))}</div><div style="display:flex;align-items:flex-end;gap:6px;height:90px">${p.by_year.map((y) =>
@@ -40,6 +40,7 @@ export async function render(root, { id }) {
 
   root.querySelector('[data-more]').onclick = (e) => menu(e.currentTarget, [
     { icon: 'pencil', label: t('patrol.rename'), onClick: () => renameSheet(p, () => render(root, { id })) },
+    { icon: 'file-text', label: t('pdf.export_menu'), onClick: async () => (await import('../lib/pdf-dialog.js')).openPdfExport({ kind: 'spots', params: { patrol: p.id, title: p.name, sort: 'date_asc' }, title: p.name, filename: `contrail-patrouille-${p.id}` }) },
     { icon: 'git-merge', label: t('patrol.merge'), onClick: () => mergeSheet(p) },
   ]);
   root.querySelectorAll('[data-detach]').forEach((b) => (b.onclick = async () => {

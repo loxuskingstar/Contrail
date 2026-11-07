@@ -78,6 +78,7 @@ export async function render(root, _p, query) {
     { icon: 'chart-column', label: t('flight.stats'), onClick: () => (location.hash = '#/stats?tab=flights') },
     { icon: 'share-2', label: t('share.my_flights'), onClick: async () => (await import('./shares.js')).createShareFlow({ kind: 'flights' }) },
     { icon: 'upload', label: t('flight.import'), onClick: () => (location.hash = '#/settings/data') },
+    { icon: 'file-text', label: t('pdf.export_menu'), onClick: async () => (await import('../lib/pdf-dialog.js')).openPdfExport({ kind: 'flights', params: { year, search }, title: t('pdf.flights_title') + (year ? ` ${year}` : ''), filename: `contrail-vols${year ? '-' + year : ''}` }) },
     { icon: 'download', label: t('settings.export_csv'), onClick: () => (location.href = '/api/export/flights.csv') },
   ]);
   await load();

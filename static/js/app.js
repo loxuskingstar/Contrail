@@ -37,20 +37,32 @@ export function applyAppearance() {
   const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   root.setProperty('--accent-ink', lum > 0.68 ? '#111' : '#fff');
   document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#0e1013' : '#f5f6f8');
+  // Personnalisation : attributs lus par le CSS (densité, arrondis, police, graphiques, animations, taille du texte)
+  const ds = document.documentElement.dataset;
+  const pick = (v, ok, d) => (ok.includes(v) ? v : d);
+  ds.density = pick(s.ui_density, ['compact', 'comfortable', 'spacious'], 'comfortable');
+  ds.radius = pick(s.ui_radius, ['square', 'soft', 'round', 'pill'], 'round');
+  ds.font = pick(s.ui_font, ['inter', 'system', 'serif', 'mono'], 'inter');
+  ds.chart = pick(s.chart_style, ['accent', 'rainbow', 'mono'], 'accent');
+  ds.motion = s.reduce_motion ? 'off' : 'on';
+  root.setProperty('--fs', String(Math.min(1.3, Math.max(0.85, (Number(s.ui_scale) || 100) / 100))));
+  document.body?.classList.toggle('nav-compact', !!s.nav_compact);
 }
 mq.addEventListener?.('change', applyAppearance);
 
 // ---------------------------------------------------------------- navigation
-const NAV = [
+export const NAV = [
   { group: 'nav.g.collection' },
   { href: '#/', icon: 'house', key: 'nav.home', match: /^$/ },
   { href: '#/spots', icon: 'camera', key: 'nav.spots', match: /^spots/ },
   { href: '#/outings', icon: 'calendar-days', key: 'nav.outings', match: /^outings/ },
   { href: '#/airports', icon: 'map-pin', key: 'nav.airports', match: /^airports/ },
   { href: '#/patrols', icon: 'users', key: 'nav.patrols', match: /^patrols/ },
+  { href: '#/map', icon: 'globe', key: 'nav.map', match: /^map$/ },
   { href: '#/flights', icon: 'ticket', key: 'nav.flights', match: /^flights/, mod: 'flights' },
   { href: '#/fleets', icon: 'building-2', key: 'nav.fleets', match: /^(fleets|liveries)/, mod: 'fleets' },
   { href: '#/stats', icon: 'chart-column', key: 'nav.stats', match: /^stats/ },
+  { href: '#/reports', icon: 'file-text', key: 'nav.reports', match: /^reports/ },
   { group: 'nav.g.field' },
   { href: '#/radar', icon: 'radar', key: 'nav.radar', match: /^radar/, mod: 'radar' },
   { href: '#/locations', icon: 'binoculars', key: 'nav.locations', match: /^locations/, mod: 'locations' },
@@ -83,6 +95,10 @@ const ROUTES = [
   [/^outings\/(\d+)$/, 'outing-detail', ['id']],
   [/^airports$/, 'airports'],
   [/^airports\/([^/]+)$/, 'airport', ['id']],
+  [/^map$/, 'map'],
+  [/^bulk$/, 'bulk'],
+  [/^duplicates$/, 'duplicates'],
+  [/^reports(?:\/(\d{4}))?$/, 'reports', ['year']],
   [/^patrols$/, 'patrols'],
   [/^patrols\/(\d+)$/, 'patrol', ['id']],
   [/^stats$/, 'stats'],
@@ -172,7 +188,8 @@ export function setAppbarTitle(txt) { const n = $('.appbar-title'); if (n) n.tex
 
 // ---------------------------------------------------------------- coquille
 function renderShell() {
-  const visible = NAV.filter((n) => !n.mod || store.mod(n.mod));
+  const hidden = new Set(store.settings.nav_hidden || []);
+  const visible = NAV.filter((n) => (!n.mod || store.mod(n.mod)) && (n.group || !hidden.has(n.href) || n.href === '#/' || n.href === '#/settings'));
   // Retire les titres de groupe vides
   const items = visible.filter((n, i) => !n.group || (visible[i + 1] && !visible[i + 1].group));
   const side = items.map((n) => n.group

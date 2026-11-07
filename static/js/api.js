@@ -11,7 +11,7 @@ export class ApiError extends Error {
 let onUnauthorized = () => {};
 export function setUnauthorizedHandler(fn) { onUnauthorized = fn; }
 
-export async function api(path, { method = 'GET', body, form, signal, raw = false, query } = {}) {
+export async function api(path, { method = 'GET', body, form, signal, raw = false, query, onProgress } = {}) {
   let url = path;
   if (query) {
     const qs = new URLSearchParams();
@@ -28,6 +28,7 @@ export async function api(path, { method = 'GET', body, form, signal, raw = fals
     opts.body = JSON.stringify(body);
     opts.headers['Content-Type'] = 'application/json';
   }
+  if (form && onProgress && typeof XMLHttpRequest !== 'undefined') return xhrUpload(url, method, form, onProgress, signal);
   let res;
   try {
     res = await fetch(url, opts);
@@ -62,4 +63,26 @@ export const del = (p) => api(p, { method: 'DELETE' });
 
 export function mediaUrl(kind, rel) {
   return rel ? `/media/${kind}/${rel.split('/').map(encodeURIComponent).join('/')}` : '';
+}
+
+// Envoi de fichiers avec progression (fetch n'expose pas la progression de l'envoi) : onProgress(0..1, 'upload' | 'processing')
+function xhrUpload(url, method, form, onProgress, signal) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open(method, url);
+    x.withCredentials = true;
+    x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total, 'upload'); };
+    x.upload.onload = () => onProgress(1, 'processing');
+    x.onerror = () => reject(new ApiError(0, 'offline', true));
+    x.onabort = () => reject(new DOMException('Aborted', 'AbortError'));
+    x.onload = () => {
+      let data = null;
+      try { data = (x.getResponseHeader('content-type') || '').includes('json') ? JSON.parse(x.responseText) : x.responseText; } catch { data = x.responseText; }
+      if (x.status === 401) { onUnauthorized(); return reject(new ApiError(401, 'auth_required')); }
+      if (x.status >= 200 && x.status < 300) return resolve(data);
+      reject(new ApiError(x.status, data?.detail ?? data));
+    };
+    signal?.addEventListener('abort', () => x.abort());
+    x.send(form);
+  });
 }
