@@ -11,6 +11,11 @@ import { analyzeExif, analyzeOcr } from '../lib/analyze.js';
 
 const FLIGHT_TYPES = ['commercial', 'cargo', 'test', 'delivery', 'ferry', 'military', 'business', 'general', 'helicopter', 'medical', 'training', 'airshow', 'government', 'museum', 'display', 'storage', 'maintenance', 'scrapyard', 'other'];
 const STATIC_TYPES = ['museum', 'display', 'storage', 'maintenance', 'scrapyard'];
+const ftOptions = (cur, blank = '—') => {
+  const o = (f) => `<option value="${f}" ${cur === f ? 'selected' : ''}>${esc(t(`ftype.${f}`))}</option>`;
+  const fly = FLIGHT_TYPES.filter((f) => !STATIC_TYPES.includes(f));
+  return `<option value="">${esc(blank)}</option><optgroup label="${esc(t('ftype.g_flight'))}">${fly.filter((f) => f !== 'other').map(o).join('')}</optgroup><optgroup label="${esc(t('ftype.g_static'))}">${STATIC_TYPES.map(o).join('')}</optgroup>${o('other')}`;
+};
 
 function nowLocal() {
   const d = new Date();
@@ -335,11 +340,17 @@ export async function render(root, params, query) {
     const parts = [];
     const cands = r2.ocr?.candidates || [];
     if (cands.length) {
-      parts.push(`${icon('scan-text', '', 16)} <span>${esc(t('spot.ocr_found'))}</span>` + cands.slice(0, 4).map((c) => `<button type="button" class="chip" data-reg="${esc(c.registration)}">${flag(c.country)} <span class="mono">${esc(c.registration)}</span></button>`).join(''));
+      parts.push(`${icon('scan-text', '', 16)} <span>${esc(t('spot.ocr_found'))}</span>` + cands.slice(0, 4).map((c) => `<span class="row" style="gap:2px"><button type="button" class="chip" data-reg="${esc(c.registration)}">${flag(c.country)} <span class="mono">${esc(c.registration)}</span></button>${root.querySelector('[data-patrol]') ? `<button type="button" class="chip" data-addreg="${esc(c.registration)}" title="${esc(t('multi.add_detected'))}" aria-label="${esc(t('multi.add_detected'))}">${icon('plus', '', 14)}</button>` : ''}</span>`).join(''));
       if (!F('registration').value) { F('registration').value = cands[0].registration; lookup(); }
     } else if (r2.ocr?.available) parts.push(`${icon('scan-text', '', 16)} <span class="muted">${esc(t('spot.ocr_none'))}</span>`);
     draw([...parts, ...exifParts()]);
     box.querySelectorAll('[data-reg]').forEach((b) => (b.onclick = () => { F('registration').value = b.dataset.reg; lookup(true); }));
+    box.querySelectorAll('[data-addreg]').forEach((b) => (b.onclick = () => {
+      const reg = b.dataset.addreg;
+      if (F('registration').value.trim().toUpperCase() === reg.toUpperCase() || [...patRows.querySelectorAll('[data-pr]')].some((i) => i.value.trim().toUpperCase() === reg.toUpperCase())) return;
+      const fold = root.querySelector('[data-patrol]'); if (fold) fold.open = true;
+      addPatRow(reg); b.disabled = true;
+    }));
     checkDup();
   }
 
@@ -358,6 +369,7 @@ export async function render(root, params, query) {
       let filled = 0;
       for (const [k, v] of Object.entries(fill)) if (v && !F(k).value) { F(k).value = v; filled++; }
       if (d.military && !editing) F('military').checked = true;
+      if (d.flight_type_suggestion && !F('flight_type').value && !editing) { F('flight_type').value = d.flight_type_suggestion; filled++; }
       const src = (d.sources || []).map((x) => t(`source.${x}`)).join(', ');
       out.innerHTML = `<div class="lookup-card">${d.country ? `<span class="flag" style="font-size:26px">${flag(d.country)}</span>` : icon('plane', '', 24)}
         <div class="grow"><b>${esc(d.aircraft || d.aircraft_icao || t('spot.unknown_aircraft'))}</b>
@@ -427,7 +439,7 @@ export async function render(root, params, query) {
 
   // ------------------------------------------------------------ patrouille : autres avions de la photo
   const patRows = root.querySelector('[data-pat-rows]') || document.createElement('div');
-  const addPatRow = () => {
+  const addPatRow = (prefill = '') => {
     const row = document.createElement('div');
     row.className = 'stack card-sub';
     row.style.cssText = 'gap:6px;padding:10px;border:1px solid var(--line);border-radius:var(--r-sm)';
@@ -436,25 +448,40 @@ export async function render(root, params, query) {
         <label class="row tiny" style="gap:4px;white-space:nowrap;cursor:pointer"><input type="checkbox" data-pu> ${esc(t('patrol.unknown'))}</label>
         <button type="button" class="btn sm ghost" data-px aria-label="${esc(t('common.remove'))}">${icon('x', '', 16)}</button></div>
       <div class="row" style="gap:8px"><input class="grow" data-pt placeholder="${esc(t('multi.type_ph'))}" autocomplete="off" style="min-width:0"><input class="grow" data-po placeholder="${esc(t('multi.owner_ph'))}" autocomplete="off" style="min-width:0"></div>
-      <label class="row tiny" style="gap:6px;cursor:pointer"><input type="checkbox" data-ps> ${esc(t('multi.same'))}</label>`;
+      <div class="row" style="gap:8px"><label class="field grow" style="margin:0;min-width:0"><span class="tiny">${esc(t('spot.flight_type'))}</span><select data-pf>${ftOptions('', t('multi.ft_same'))}</select></label>
+        <label class="field grow" style="margin:0;min-width:0"><span class="tiny">${esc(t('spot.livery'))}</span><input data-pl maxlength="80" autocomplete="off" style="min-width:0"></label></div>
+      <div class="row wrap" style="gap:14px"><label class="row tiny" style="gap:6px;cursor:pointer"><input type="checkbox" data-pm> ${esc(t('spot.military'))}</label>
+        <label class="row tiny" style="gap:6px;cursor:pointer"><input type="checkbox" data-ps> ${esc(t('multi.same'))}</label></div>
+      <p class="tiny muted" data-phint hidden></p>`;
     const inp = row.querySelector('[data-pr]'), unkBox = row.querySelector('[data-pu]'), ty = row.querySelector('[data-pt]'), ow = row.querySelector('[data-po]');
+    const pf = row.querySelector('[data-pf]'), pm = row.querySelector('[data-pm]'), hint = row.querySelector('[data-phint]'), same = row.querySelector('[data-ps]');
+    pf.onchange = () => { delete row.dataset.ftAuto; hint.hidden = true; };
+    // « Même type que l'avion principal » : le type de vol propre à cet avion n'a plus de sens
+    same.onchange = () => { for (const el of [ty, ow]) el.disabled = same.checked; };
     unkBox.onchange = () => { inp.disabled = unkBox.checked; if (unkBox.checked) inp.value = ''; };
     row.querySelector('[data-px]').onclick = () => row.remove();
     // Type et compagnie proposés d'après l'immatriculation (historique, cache, base locale) ; modifiables
     inp.addEventListener('change', async () => {
       const reg = inp.value.trim();
-      if (reg.length < 3 || (ty.value && ow.value)) return;
+      if (reg.length < 3 || (ty.value && ow.value && pf.value)) return;
       try {
         const r = await api(`/api/lookup/aircraft/${encodeURIComponent(reg)}`);
+        // Type de vol proposé d'après l'appareil et l'exploitant (Beluga → cargo, DR400 → aviation générale…)
+        if (!pf.value && r.flight_type_suggestion) {
+          pf.value = r.flight_type_suggestion; row.dataset.ftAuto = '1';
+          hint.textContent = t('multi.ft_suggested', { v: t(`ftype.${r.flight_type_suggestion}`) }); hint.hidden = false;
+        }
+        if (r.military && !pm.checked) pm.checked = true;
         if (!ty.value && (r.aircraft || r.aircraft_icao)) { ty.value = r.aircraft || r.aircraft_icao; row.dataset.icao = r.aircraft_icao || ''; row.dataset.tyname = ty.value; row.dataset.mfr = r.manufacturer || ''; }
         if (!ow.value && r.owner) { ow.value = r.owner; row.dataset.alc = r.airline_icao || ''; }
       } catch { /* hors ligne ou inconnu : l'utilisateur saisit lui-même */ }
     });
     patRows.append(row);
-    inp.focus();
+    if (prefill) { inp.value = prefill; inp.dispatchEvent(new Event('change')); } else inp.focus();
   };
   const addBtn = root.querySelector('[data-pat-add]');
   if (addBtn) addBtn.onclick = () => { root.querySelector('[data-patrol]').open = true; addPatRow(); };
+
   // Le nom de groupe rattache l'avion à la patrouille qui porte déjà ce nom (notamment une patrouille saisie en mode simple)
   const linkHint = root.querySelector('[data-patrol-link]');
   if (linkHint) {
@@ -531,6 +558,10 @@ export async function render(root, params, query) {
       const ty = r.querySelector('[data-pt]').value.trim(), ow = r.querySelector('[data-po]').value.trim();
       const same = r.querySelector('[data-ps]').checked;
       const m = { registration: r.querySelector('[data-pr]').value.trim(), unknown_registration: r.querySelector('[data-pu]').checked, inherit_aircraft: same };
+      const mft = r.querySelector('[data-pf]').value, mliv = r.querySelector('[data-pl]').value.trim();
+      if (mft) m.flight_type = mft;                       // propre à cet avion (sinon hérité de l'avion principal)
+      if (mliv) m.livery = mliv;
+      if (r.querySelector('[data-pm]').checked) m.military = 1;
       if (!same) {
         if (ty) {
           if (/^[A-Za-z0-9]{2,4}$/.test(ty)) m.aircraft_icao = ty.toUpperCase();

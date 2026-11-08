@@ -29,6 +29,7 @@
 
 ## Nouveautés des versions 4.x
 
+- **4.5.2 — Plusieurs avions sur une photo** : chaque avion ajouté à la photo a son propre type de vol, sa livrée et son statut militaire (un Beluga cargo et un DR400 d'aviation générale cohabitent) ; le type de vol est proposé d'après l'appareil et l'exploitant (cargo, aviation générale, hélicoptère, affaires, militaire, commercial) ; les autres immatriculations lues par l'OCR s'ajoutent à la photo d'un clic (+).
 - **4.5.1 — Désignations propres** : l'autocomplétion écrit « Airbus A330-300 » (et non « AIRBUS A-330-300 »), « B737-800 » (inchangé), « ATR 72-600 »…, et les désignations déjà enregistrées sont remises en forme une fois au premier démarrage.
 - **4.5 — Matériel photo, filtres et démarrage** : panneau de filtres réorganisé en sections (avion, lieu et période, prise de vue, matériel, à compléter, collection) avec compteur de résultats en direct et nouveaux filtres (période, note minimale, avec GPS, avec description, sans type, sans numéro de série, sans boîtier/objectif) ; onglet **Matériel** (boîtiers, objectifs, setups ; ce que l'EXIF détecte s'y ajoute seul, le reste se saisit à la main, renommage/fusion), choix du matériel et des setups dans le formulaire de spot (et en modification en lot), **filtres boîtier et objectif séparés** dans la recherche ; interface qui démarre depuis le cache local (langue, réglages et session chargés en parallèle, fichiers préchargés).
 - **4.4 — Enregistrement plus rapide** : la photo est analysée en deux temps (EXIF et aéroport d'abord, quasi instantanés et sans décoder l'image ; immatriculation ensuite, en arrière-plan), la lecture s'arrête dès qu'une immatriculation nette est trouvée, le moteur OCR et les bases d'aéroports sont préchauffés au démarrage, et les rattrapages de données ne s'exécutent plus qu'une fois par version (démarrage ≈ 30× plus rapide sur 30 000 spots, carte globale plus rapide).
@@ -168,7 +169,7 @@ bash scripts/build-setup.sh
 # Windows → dist/Contrail-<version>-Windows-Setup.exe ; Linux → .deb et .tar.gz ; macOS → .dmg (dans dist/)
 ```
 
-Options (identiques pour les deux scripts) : une version imposée (`-Version 4.5.1` en PowerShell, `bash scripts/build-setup.sh 4.5.1`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
+Options (identiques pour les deux scripts) : une version imposée (`-Version 4.5.2` en PowerShell, `bash scripts/build-setup.sh 4.5.2`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
 
 Un installeur ne se construit que sur son propre système. Pour obtenir les quatre d'un coup (Windows, macOS Apple Silicon et Intel, Linux), poussez un tag `vX.Y.Z` : le workflow GitHub `desktop.yml` les construit, les teste et les publie dans une Release. Détails dans [`desktop/README.md`](desktop/README.md).
 

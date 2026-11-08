@@ -270,3 +270,32 @@ def clean_maker(text: str | None) -> str | None:
         return text
     s = re.sub(r"\s+", " ", str(text)).strip()
     return _MAKERS.get(s.upper(), s) if s.isupper() else s
+
+
+# --------------------------------------------------------------------------- #
+# Type de vol suggéré (proposé dans le formulaire, toujours modifiable)
+# --------------------------------------------------------------------------- #
+_CARGO_CODES = {"A3ST", "A337", "BLCF", "A124", "A225", "B74F", "MD1F"}
+_CARGO_RX = re.compile(r"freighter|cargo|\bBCF\b|\bP2F\b|\d{3}-?\d*F\b|fedex|\bups\b|\bdhl\b|atlas air|abx air|amazon air|"
+                       r"cargolux|astral|west atlantic|airbus transport|beluga|an-?124|an-?225|volga-?dnepr|"
+                       r"silk way|air bridge|kalitta|polar air|\bTNT\b", re.I)
+
+
+def suggest_flight_type(code: str | None = None, desc: str | None = None, owner: str | None = None,
+                        military: bool | int | None = None) -> str | None:
+    """Type de vol le plus probable d'après l'appareil et l'exploitant (None si on ne peut pas trancher)."""
+    text = " ".join(x for x in (desc, owner) if x)
+    cls = classify(code, None, desc)
+    if military or cls == "fighter":
+        return "military"
+    if (code or "").upper() in _CARGO_CODES or (text and _CARGO_RX.search(text)):
+        return "cargo"
+    if cls == "heli":
+        return "helicopter"
+    if cls in ("light", "glider", "balloon"):
+        return "general"
+    if cls == "bizjet":
+        return "business"
+    if cls in ("narrow", "wide", "jumbo", "regional", "turboprop"):
+        return "commercial"
+    return None

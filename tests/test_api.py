@@ -1601,3 +1601,32 @@ def test_model_names_are_cleaned(client):
     f.write_bytes(gzip.compress("\n".join(lines).encode()))
     refdb.import_file(f, "test-clean")
     assert client.get("/api/lookup/aircraft/F-ZNAM").json()["aircraft"] == "Airbus A330-300"
+
+
+def test_photo_members_have_their_own_flight_type(client):
+    """Un Beluga cargo et un DR400 sur la même photo : chacun garde son type de vol, même après modification de l'autre."""
+    data = {"registration": "F-ZBEL", "aircraft": "Airbus BelugaXL", "aircraft_icao": "A337", "flight_type": "cargo",
+            "date": "2078-04-01T10:00", "airport": "LFBO",
+            "patrol": {"name": "", "members": [{"registration": "F-ZDR4", "inherit_aircraft": False, "aircraft": "Robin DR400",
+                                               "aircraft_icao": "DR40", "flight_type": "general", "livery": "Blanche"}]}}
+    r = client.post("/api/spots", data={"data": json.dumps(data)}, files={"image": ("p.jpg", jpeg_bytes(), "image/jpeg")})
+    assert r.status_code in (200, 201), r.text
+    main = r.json()["spot"]
+    sp = {s["registration"]: s for s in client.get("/api/spots", params={"year": "2078"}).json()["items"]}
+    assert sp["F-ZBEL"]["flight_type"] == "cargo" and sp["F-ZDR4"]["flight_type"] == "general"
+    assert sp["F-ZDR4"]["aircraft_icao"] == "DR40" and sp["F-ZDR4"]["livery"] == "Blanche"
+    # modifier le principal (le formulaire renvoie tous ses champs) ne réécrit pas le type de vol de l'autre avion
+    client.put(f"/api/spots/{main['id_spotting']}", data={"data": json.dumps({"flight_type": "test", "description": "photo commune"})})
+    sp = {s["registration"]: s for s in client.get("/api/spots", params={"year": "2078"}).json()["items"]}
+    assert sp["F-ZBEL"]["flight_type"] == "test" and sp["F-ZDR4"]["flight_type"] == "general"
+    assert sp["F-ZDR4"]["description"] == "photo commune"            # les notes de la photo, elles, restent communes
+
+
+def test_lookup_suggests_flight_type(client):
+    from app.services.actypes import suggest_flight_type as f
+    assert f("A337", "Airbus BelugaXL", "Airbus Transport International") == "cargo"
+    assert f("DR40", "Robin DR400") == "general"
+    assert f("A320", "Airbus A320", "Air France") == "commercial"
+    assert f("EC35", "Airbus H135") == "helicopter"
+    assert f("RFAL", "Dassault Rafale", None, 1) == "military"
+    assert f("B738", "Boeing 737-800", "ExpressJet") == "commercial"

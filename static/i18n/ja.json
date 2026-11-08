@@ -1939,5 +1939,8 @@
 "spots.f_has_gps": "位置情報あり",
 "spots.f_has_notes": "説明あり",
 "spots.f_no_msn": "製造番号なし",
-"spots.f_no_type": "機種なし"
+"spots.f_no_type": "機種なし",
+"multi.ft_same": "主役の機体と同じ飛行区分",
+"multi.ft_suggested": "機体から提案：{v}（変更可）",
+"multi.add_detected": "写真内の別の機体として追加"
 }

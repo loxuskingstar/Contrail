@@ -708,12 +708,13 @@ def _post_save(spot_id: int, reg: str, is_new: bool, weather_needed: bool, bg: B
 # Patrouilles : un spot par avion, photo partagée, reliés par patrol_id
 # --------------------------------------------------------------------------- #
 MEMBER_FIELDS = ("registration", "aircraft", "aircraft_icao", "manufacturer", "msn", "owner", "airline_icao", "livery",
-                 "test_registration")
+                 "test_registration", "flight_type", "military", "description")
 INHERIT = ("aircraft", "aircraft_icao", "manufacturer", "owner", "airline_icao", "livery", "military", "flight_type",
            "date", "airport", "place", "location_id", "lat", "lng", "description", "camera", "lens", "focal", "aperture",
            "iso", "shutter", "rating")
 # Ce qui décrit la photo et la prise de vue : modifié sur un avion, appliqué aux autres avions de la même photo
-SHARED = ("date", "date_utc", "sun_elevation", "airport", "place", "location_id", "lat", "lng", "description", "flight_type",
+# (le type de vol est propre à chaque avion : un Beluga cargo et un DR400 d'aviation générale partagent la même photo)
+SHARED = ("date", "date_utc", "sun_elevation", "airport", "place", "location_id", "lat", "lng", "description",
           "camera", "lens", "focal", "aperture", "iso", "shutter", "rating",
           "image", "thumb", "image_w", "image_h", "phash", "exif_json")
 IDENTITY = ("aircraft", "aircraft_icao", "manufacturer", "owner", "airline_icao", "livery", "military")

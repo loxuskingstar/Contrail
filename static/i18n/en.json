@@ -2110,5 +2110,8 @@
 "spots.f_has_gps": "With GPS position",
 "spots.f_has_notes": "With description",
 "spots.f_no_msn": "No serial number",
-"spots.f_no_type": "No aircraft type"
+"spots.f_no_type": "No aircraft type",
+"multi.ft_same": "Same flight type as the main aircraft",
+"multi.ft_suggested": "Suggested from the aircraft: {v} (editable)",
+"multi.add_detected": "Add as another aircraft in the photo"
 }

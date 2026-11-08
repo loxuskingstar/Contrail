@@ -273,6 +273,10 @@ def lookup(reg_in: str, refresh: bool = False) -> dict:
     result["aircraft"] = actypes.clean_model(result.get("aircraft")) or result.get("aircraft")
     if result.get("manufacturer"):
         result["manufacturer"] = actypes.clean_maker(result["manufacturer"])
+    # Suggestion de type de vol (jamais enregistrée d'office : le formulaire la propose)
+    ft = actypes.suggest_flight_type(result.get("aircraft_icao"), result.get("aircraft"), result.get("owner"), result.get("military"))
+    if ft:
+        result["flight_type_suggestion"] = ft
     result["sources"] = sources
     result["found"] = any(result.get(k) for k in ("aircraft", "aircraft_icao", "owner", "msn"))
     return result
