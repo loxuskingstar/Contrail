@@ -313,6 +313,27 @@ def _spots_map(items):
     return {"places": out, "total": len(rows)}
 
 
+@router.post("/normalize-models")
+def normalize_models(apply: bool = False):
+    """Uniformise les désignations déjà enregistrées d'après le code type (aperçu sans `apply`). Ne touche que les spots
+    dont le type est connu de la table et dont le nom n'est pas une écriture équivalente du même appareil."""
+    from ..services import actypes
+    changes = []
+    for r in q("SELECT aircraft, aircraft_icao, COUNT(*) n FROM spotting WHERE aircraft IS NOT NULL AND aircraft <> '' "
+               "GROUP BY aircraft, aircraft_icao"):
+        code, nm = actypes.canonical(r["aircraft_icao"], r["aircraft"])
+        if nm and (nm != r["aircraft"] or (code and not r["aircraft_icao"])):
+            changes.append({"from": r["aircraft"], "to": nm, "icao": code or r["aircraft_icao"], "old_icao": r["aircraft_icao"], "n": r["n"]})
+    updated = 0
+    if apply:
+        for c in changes:
+            cur = execute("UPDATE spotting SET aircraft = ?, aircraft_icao = COALESCE(NULLIF(aircraft_icao, ''), ?) "
+                          "WHERE aircraft = ? AND aircraft_icao IS ?", (c["to"], c["icao"], c["from"], c["old_icao"]))
+            updated += max(cur.rowcount or 0, 0)
+    return {"designations": len(changes), "spots": sum(c["n"] for c in changes), "updated": updated,
+            "examples": [{"from": c["from"], "to": c["to"], "n": c["n"]} for c in changes[:8]]}
+
+
 @router.get("/facets")
 def facets():
     return memo("facets", _facets)

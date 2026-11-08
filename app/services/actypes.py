@@ -299,3 +299,71 @@ def suggest_flight_type(code: str | None = None, desc: str | None = None, owner:
     if cls in ("narrow", "wide", "jumbo", "regional", "turboprop"):
         return "commercial"
     return None
+
+
+# --------------------------------------------------------------------------- #
+# Désignation canonique : un même appareil, un seul nom, quelle que soit la source
+# (« ERJ-190-100 », « EMB190 STD », « E190 » → code E190 → « Embraer E190 »)
+# --------------------------------------------------------------------------- #
+_NAME_TO_CODE = [
+    (re.compile(r"\b(?:ERJ|EMB|EMBRAER|E)[-\s]?(190|195)[-\s]?E2\b", re.I), lambda m: {"190": "E290", "195": "E295"}[m.group(1)]),
+    (re.compile(r"\b(?:ERJ|EMB|EMBRAER|E)[-\s]?(145|135|170|175|190|195)\b", re.I), lambda m: {"145": "E145", "135": "E135", "170": "E170",
+        "175": "E75L", "190": "E190", "195": "E195"}[m.group(1)]),
+    (re.compile(r"\bA[-\s]?(319|320|321)[-\s]?\d{3}N\b", re.I), lambda m: {"319": "A19N", "320": "A20N", "321": "A21N"}[m.group(1)]),
+    (re.compile(r"\bA[-\s]?(319|320|321)\s*-?\s*neo\b", re.I), lambda m: {"319": "A19N", "320": "A20N", "321": "A21N"}[m.group(1)]),
+    (re.compile(r"\bA[-\s]?(318|319|320|321)(?:[-\s]?[12]\d\d)?\b", re.I), lambda m: f"A{m.group(1)}"),
+    (re.compile(r"\bA[-\s]?330[-\s]?(?:8\d\d|neo)\b", re.I), lambda m: "A338"),
+    (re.compile(r"\bA[-\s]?330[-\s]?2\d\d\b", re.I), lambda m: "A332"),
+    (re.compile(r"\bA[-\s]?330[-\s]?3\d\d\b", re.I), lambda m: "A333"),
+    (re.compile(r"\bA[-\s]?350[-\s]?9\d\d\b", re.I), lambda m: "A359"),
+    (re.compile(r"\bA[-\s]?350[-\s]?1\d{3}\b", re.I), lambda m: "A35K"),
+    (re.compile(r"\bA[-\s]?340[-\s]?([2356])\d\d\b", re.I), lambda m: f"A34{m.group(1)}"),
+    (re.compile(r"\b(?:B[-\s]?)?737[-\s]?([3-9])[0-9A-Z]{0,3}\b(?!.*\bMAX\b)"), lambda m: f"B73{m.group(1)}"),
+    (re.compile(r"\b(?:B[-\s]?)?777[-\s]?([23])[0-9A-Z]{0,4}\b"), lambda m: {"2": "B772", "3": "B773"}[m.group(1)]),
+    (re.compile(r"\b(?:B[-\s]?)?787[-\s]?(8|9|10)\b"), lambda m: {"8": "B788", "9": "B789", "10": "B78X"}[m.group(1)]),
+    (re.compile(r"\b(?:B[-\s]?)?767[-\s]?([23])[0-9A-Z]{0,4}\b"), lambda m: {"2": "B762", "3": "B763"}[m.group(1)]),
+    (re.compile(r"\b(?:B[-\s]?)?757[-\s]?([23])[0-9A-Z]{0,4}\b"), lambda m: {"2": "B752", "3": "B753"}[m.group(1)]),
+    (re.compile(r"\b(?:B[-\s]?)?747[-\s]?([48])[0-9A-Z]{0,4}\b"), lambda m: {"4": "B744", "8": "B748"}[m.group(1)]),
+    (re.compile(r"\bATR[-\s]?72[-\s]?(\d)\d\d\w?\b", re.I), lambda m: {"5": "AT75", "6": "AT76"}.get(m.group(1), "AT72")),
+    (re.compile(r"\bATR[-\s]?42[-\s]?(\d)\d\d\w?\b", re.I), lambda m: {"5": "AT45", "6": "AT46"}.get(m.group(1), "AT43")),
+    (re.compile(r"\bCRJ[-\s]?(100|200|700|900|1000)\b", re.I), lambda m: {"100": "CRJ1", "200": "CRJ2", "700": "CRJ7", "900": "CRJ9", "1000": "CRJX"}[m.group(1)]),
+]
+
+
+def icao_from_name(text: str | None) -> str | None:
+    """Code type OACI déduit d'une désignation libre (variante constructeur incluse), seulement s'il existe dans la table."""
+    if not text:
+        return None
+    for rx, fn in _NAME_TO_CODE:
+        m = rx.search(text)
+        if m:
+            try:
+                code = fn(m)
+            except (KeyError, IndexError):
+                continue
+            if code and _table().get(code):
+                return code
+    return None
+
+
+def _model_key(text: str) -> str:
+    """Clé de comparaison : sans fabricant, sans « B » devant 7x7, sans ponctuation (« Boeing B737-800 » ≡ « 737-800 »)."""
+    k = re.sub(r"[^a-z0-9]", "", (clean_model(text) or "").lower())
+    for mk in sorted((re.sub(r"[^a-z0-9]", "", m.lower()) for m in _MAKERS), key=len, reverse=True):
+        if k.startswith(mk) and len(k) > len(mk):
+            k = k[len(mk):]
+            break
+    return re.sub(r"^b(?=7\d7)", "", k)
+
+
+def canonical(code: str | None, text: str | None) -> tuple[str | None, str | None]:
+    """(code, désignation) normalisés. Si le type est connu de la table et que la désignation de la source est une autre
+    écriture du même appareil (« B737-800 », « Boeing 737-800 »), elle est conservée ; sinon (« EMB190 STD », « ERJ-190-100 »,
+    « A330-343 »), la désignation officielle de la table la remplace : un même appareil porte le même nom quelle que soit la source."""
+    code = (code or "").upper() or icao_from_name(text)
+    nm = name(code) if code else None
+    if nm:
+        if text and _model_key(text) == _model_key(nm):
+            return code, clean_model(text)
+        return code, nm
+    return (code or None), clean_model(text) if text else text

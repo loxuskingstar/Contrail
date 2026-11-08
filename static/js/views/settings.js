@@ -413,6 +413,7 @@ async function storageCard(box) {
         <span class="small" style="width:70px;text-align:right">${esc(mo(v.bytes))}</span></div>`).join('')}
       <p class="tiny muted">${esc(t('storage.avg', { n: mo(r.avg_image), spots: fmtNum(r.with_image) }))}${r.parts.refdb.bytes > r.total / 2 ? ` ${esc(t('storage.refdb_hint'))}` : ''}</p>
       <div data-dups></div>
+      <div class="row wrap"><button class="btn" data-norm>${icon('sparkles', '', 18)} ${esc(t('storage.normalize'))}</button></div>
       <div class="row wrap"><button class="btn" data-opt>${icon('wand-sparkles', '', 18)} ${esc(t('storage.optimize'))}</button>
         ${r.orphans.files ? `<button class="btn" data-purge>${icon('trash-2', '', 18)} ${esc(t('storage.purge', { n: fmtNum(r.orphans.files), size: mo(r.orphans.bytes) }))}</button>` : ''}</div>`;
     const run = async (purge, btn) => {
@@ -424,6 +425,17 @@ async function storageCard(box) {
       draw();
     };
     box.querySelector('[data-opt]').onclick = (e) => run(false, e.currentTarget);
+    box.querySelector('[data-norm]').onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        const pv = await api('/api/spots/normalize-models', { method: 'POST' });
+        if (!pv.designations) { toast(esc(t('storage.normalize_none')), { type: 'success' }); return; }
+        const ex = pv.examples.map((x) => `<li><s>${esc(x.from)}</s> → <b>${esc(x.to)}</b> <span class="muted">(${fmtNum(x.n)})</span></li>`).join('');
+        if (!(await confirmDialog(`${esc(t('storage.normalize_confirm', { n: fmtNum(pv.spots), d: fmtNum(pv.designations) }))}<ul class="small" style="margin:8px 0 0;padding-left:18px">${ex}</ul>`, { ok: t('common.apply') }))) return;
+        const r = await api('/api/spots/normalize-models?apply=true', { method: 'POST' });
+        toast(esc(t('storage.normalize_done', { n: fmtNum(r.updated) })), { type: 'success' });
+      } catch (err) { errorToast(err); } finally { e.currentTarget.disabled = false; }
+    };
     api('/api/spots/duplicates').then((d) => {
       const host = box.querySelector('[data-dups]');
       if (!host || !d.count) return;

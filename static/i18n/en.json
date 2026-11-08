@@ -2113,5 +2113,9 @@
 "spots.f_no_type": "No aircraft type",
 "multi.ft_same": "Same flight type as the main aircraft",
 "multi.ft_suggested": "Suggested from the aircraft: {v} (editable)",
-"multi.add_detected": "Add as another aircraft in the photo"
+"multi.add_detected": "Add as another aircraft in the photo",
+"storage.normalize": "Standardise aircraft names",
+"storage.normalize_none": "All names are already consistent.",
+"storage.normalize_confirm": "{n} spot(s) ({d} names) will be renamed from the type code, for example:",
+"storage.normalize_done": "{n} spot(s) updated"
 }

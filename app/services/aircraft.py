@@ -109,8 +109,11 @@ def by_icao24(icao24: str) -> dict | None:
         return {"registration": ref.get("registration"), "aircraft_icao": ref.get("typecode"),
                 "aircraft": ref.get("description") or actypes.name(ref.get("typecode")), "owner": ref.get("ownop"),
                 "icao24": icao24, "country": regs.country_of(ref.get("registration"))}
-    if d and d.get("aircraft"):
-        d["aircraft"] = actypes.clean_model(d["aircraft"])
+    if d and (d.get("aircraft") or d.get("aircraft_icao")):
+        code, nm = actypes.canonical(d.get("aircraft_icao"), d.get("aircraft"))
+        d["aircraft"] = nm or d.get("aircraft")
+        if code and not d.get("aircraft_icao"):
+            d["aircraft_icao"] = code
     if d and d.get("registration"):
         d["country"] = regs.country_of(d["registration"])
         _store(regs.normalize(d["registration"]), d, "hexdb")
@@ -210,6 +213,10 @@ def lookup(reg_in: str, refresh: bool = False) -> dict:
         try:
             age = datetime.now(timezone.utc) - datetime.fromisoformat(cached["fetched_at"].replace("Z", "+00:00"))
             fresh = age < timedelta(days=CACHE_DAYS)
+            # Fiche sans numéro de série alors qu'une source qui peut en fournir est configurée : on retente après 24 h
+            # (une panne passagère ou une fiche incomplète ne doit pas figer l'absence de MSN pendant 30 jours)
+            if fresh and age > timedelta(hours=24) and (get_config("airlabs_api_key") or get_config("aviationstack_api_key")):
+                fresh = bool(json.loads(cached["data"]).get("msn")) or bool(hist and hist.get("msn"))
         except ValueError:
             fresh = False
         for k, v in json.loads(cached["data"]).items():
@@ -270,7 +277,12 @@ def lookup(reg_in: str, refresh: bool = False) -> dict:
         result["country"] = regs.country_for(reg, result.get("owner"))
     if "military" not in result:
         result["military"] = 1 if regs.looks_military(result.get("owner"), result.get("aircraft")) else 0
-    result["aircraft"] = actypes.clean_model(result.get("aircraft")) or result.get("aircraft")
+    # Une désignation par appareil, quelle que soit la source (« ERJ-190-100 » / « EMB190 STD » → « Embraer E190 »)
+    code, nm = actypes.canonical(result.get("aircraft_icao"), result.get("aircraft"))
+    if code and not result.get("aircraft_icao"):
+        result["aircraft_icao"] = code
+    if nm:
+        result["aircraft"] = nm
     if result.get("manufacturer"):
         result["manufacturer"] = actypes.clean_maker(result["manufacturer"])
     # Suggestion de type de vol (jamais enregistrée d'office : le formulaire la propose)

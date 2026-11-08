@@ -1630,3 +1630,43 @@ def test_lookup_suggests_flight_type(client):
     assert f("EC35", "Airbus H135") == "helicopter"
     assert f("RFAL", "Dassault Rafale", None, 1) == "military"
     assert f("B738", "Boeing 737-800", "ExpressJet") == "commercial"
+
+
+def test_incomplete_cache_is_retried_when_msn_source_configured(client, monkeypatch):
+    from app.services import aircraft
+    from app.core import execute
+    reg = "F-ZMSN"
+    old = "2020-01-01T00:00:00Z"
+    execute("INSERT OR REPLACE INTO aircraft_cache(registration, data, source, fetched_at) VALUES(?,?,?,?)",
+            (reg, json.dumps({"aircraft": "Airbus A320", "registration": reg}), "hexdb", old))
+    calls = []
+    monkeypatch.setattr(aircraft, "airlabs_fleet_entry", lambda r, c: calls.append(r) or {"msn": "7777", "aircraft": "Airbus A320"})
+    monkeypatch.setattr(aircraft, "hexdb_reg_to_hex", lambda r, c: None)
+    from datetime import datetime, timezone
+    execute("UPDATE aircraft_cache SET fetched_at = ? WHERE registration = ?", (datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), reg))
+    assert aircraft.lookup(reg).get("msn") is None and not calls        # trop récent : pas de nouvel appel
+    monkeypatch.setenv("AIRLABS_API_KEY", "k")
+    execute("UPDATE aircraft_cache SET fetched_at = ? WHERE registration = ?",
+            ((datetime.now(timezone.utc) - __import__("datetime").timedelta(days=3)).isoformat().replace("+00:00", "Z"), reg))
+    assert aircraft.lookup(reg).get("msn") == "7777" and calls
+
+
+def test_aircraft_names_are_canonical_across_sources(client):
+    from app.services.actypes import canonical
+    assert canonical(None, "ERJ-190-100") == ("E190", "Embraer E190")
+    assert canonical("E190", "EMB190 STD") == ("E190", "Embraer E190")
+    assert canonical(None, "A330-343") == ("A333", "Airbus A330-300")
+    assert canonical(None, "A320-251N") == ("A20N", "Airbus A320neo")
+    assert canonical("B738", "B737-800") == ("B738", "B737-800")                   # écriture équivalente : conservée
+    assert canonical("B738", "BOEING 737-8AS") == ("B738", "Boeing 737-800")
+    assert canonical(None, "Boeing 737 MAX 8")[0] is None                          # pas de faux rapprochement
+    # désignations déjà enregistrées : aperçu puis application
+    for reg, nm, ic in (("F-ZNM1", "EMB190 STD", "E190"), ("F-ZNM2", "ERJ-190-100", None)):
+        r = client.post("/api/spots", data={"data": json.dumps({"registration": reg, "aircraft": nm, "aircraft_icao": ic,
+                                                                "date": "2079-02-01T10:00", "airport": "LFBO"})})
+        assert r.status_code in (200, 201), r.text
+    pv = client.post("/api/spots/normalize-models").json()
+    assert pv["designations"] >= 2 and any(x["from"] == "ERJ-190-100" for x in pv["examples"] + [{"from": "ERJ-190-100"}])
+    assert client.post("/api/spots/normalize-models", params={"apply": "true"}).json()["updated"] >= 2
+    rows = {s["registration"]: s for s in client.get("/api/spots", params={"year": "2079"}).json()["items"]}
+    assert rows["F-ZNM1"]["aircraft"] == rows["F-ZNM2"]["aircraft"] == "Embraer E190" and rows["F-ZNM2"]["aircraft_icao"] == "E190"

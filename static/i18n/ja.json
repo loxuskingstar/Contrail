@@ -1942,5 +1942,9 @@
 "spots.f_no_type": "機種なし",
 "multi.ft_same": "主役の機体と同じ飛行区分",
 "multi.ft_suggested": "機体から提案：{v}（変更可）",
-"multi.add_detected": "写真内の別の機体として追加"
+"multi.add_detected": "写真内の別の機体として追加",
+"storage.normalize": "機種名を統一",
+"storage.normalize_none": "すべての機種名はすでに統一されています。",
+"storage.normalize_confirm": "{n} 件（{d} 種類の名称）を型式コードに基づいて改名します。例：",
+"storage.normalize_done": "{n} 件を更新しました"
 }

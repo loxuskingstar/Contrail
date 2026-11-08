@@ -2113,5 +2113,9 @@
 "spots.f_no_type": "Sin tipo de avión",
 "multi.ft_same": "Mismo tipo de vuelo que el avión principal",
 "multi.ft_suggested": "Sugerido según el avión: {v} (editable)",
-"multi.add_detected": "Añadir como otro avión de la foto"
+"multi.add_detected": "Añadir como otro avión de la foto",
+"storage.normalize": "Uniformizar nombres de aviones",
+"storage.normalize_none": "Todos los nombres ya son coherentes.",
+"storage.normalize_confirm": "{n} spot(s) ({d} nombres) se renombrarán según el código de tipo, por ejemplo:",
+"storage.normalize_done": "{n} spot(s) actualizado(s)"
 }
