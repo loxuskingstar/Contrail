@@ -29,6 +29,7 @@
 
 ## Nouveautés des versions 4.x
 
+- **4.5.5 — Date et heure facultatives** : un spot peut n'avoir ni date, ni heure (cases « Sans date » / « Sans heure » du formulaire, la date et l'heure sont désormais deux champs) ; sans heure, ni position du soleil ni météo ne sont calculées ; filtres « Sans date » et « Sans heure » (section À compléter) ; modification en groupe du jour et de l'heure, avec effacement possible.
 - **4.5.4 — Un appareil, un nom** : quelle que soit la source, la désignation est ramenée à celle de la table des types dès que le code est connu ou déductible (« ERJ-190-100 », « EMB190 STD » → « Embraer E190 » ; « A330-343 » → « Airbus A330-300 » ; « A320-251N » → « Airbus A320neo »). Les écritures équivalentes (« B737-800 ») sont conservées. Réglages > Stockage : bouton d'uniformisation des désignations déjà enregistrées (aperçu avant application).
 - **4.5.3 — MSN** : une fiche mise en cache sans numéro de série est retentée après 24 h (au lieu de 30 jours) quand une clé AirLabs ou Aviationstack est configurée.
 - **4.5.2 — Plusieurs avions sur une photo** : chaque avion ajouté à la photo a son propre type de vol, sa livrée et son statut militaire (un Beluga cargo et un DR400 d'aviation générale cohabitent) ; le type de vol est proposé d'après l'appareil et l'exploitant (cargo, aviation générale, hélicoptère, affaires, militaire, commercial) ; les autres immatriculations lues par l'OCR s'ajoutent à la photo d'un clic (+).
@@ -171,7 +172,7 @@ bash scripts/build-setup.sh
 # Windows → dist/Contrail-<version>-Windows-Setup.exe ; Linux → .deb et .tar.gz ; macOS → .dmg (dans dist/)
 ```
 
-Options (identiques pour les deux scripts) : une version imposée (`-Version 4.5.4` en PowerShell, `bash scripts/build-setup.sh 4.5.4`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
+Options (identiques pour les deux scripts) : une version imposée (`-Version 4.5.5` en PowerShell, `bash scripts/build-setup.sh 4.5.5`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
 
 Un installeur ne se construit que sur son propre système. Pour obtenir les quatre d'un coup (Windows, macOS Apple Silicon et Intel, Linux), poussez un tag `vX.Y.Z` : le workflow GitHub `desktop.yml` les construit, les teste et les publie dans une Release. Détails dans [`desktop/README.md`](desktop/README.md).
 

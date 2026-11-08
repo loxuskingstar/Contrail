@@ -107,7 +107,8 @@ def update_spot_weather(spot_id: int) -> None:
     """Tâche de fond : associe METAR/TAF à un spot."""
     s = q1("SELECT id_spotting, airport, date_utc FROM spotting WHERE id_spotting = ?", (spot_id,))
     if not s or not s["airport"] or not s["date_utc"]:
-        execute("UPDATE spotting SET weather_status='none' WHERE id_spotting=?", (spot_id,))
+        # Sans heure connue, un METAR précédent ne correspondrait plus à rien : il est retiré
+        execute("UPDATE spotting SET weather_status='none', metar=NULL, metar_json=NULL, taf=NULL WHERE id_spotting=?", (spot_id,))
         return
     try:
         res = fetch_historical(s["airport"], s["date_utc"])

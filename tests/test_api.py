@@ -1670,3 +1670,32 @@ def test_aircraft_names_are_canonical_across_sources(client):
     assert client.post("/api/spots/normalize-models", params={"apply": "true"}).json()["updated"] >= 2
     rows = {s["registration"]: s for s in client.get("/api/spots", params={"year": "2079"}).json()["items"]}
     assert rows["F-ZNM1"]["aircraft"] == rows["F-ZNM2"]["aircraft"] == "Embraer E190" and rows["F-ZNM2"]["aircraft_icao"] == "E190"
+
+
+def test_optional_date_and_time(client):
+    def post(reg, date, **extra):
+        r = client.post("/api/spots", data={"data": json.dumps({"registration": reg, "airport": "LFBO", "date": date, **extra})})
+        assert r.status_code in (200, 201), r.text
+        return r.json()["spot"]["id_spotting"]
+    full = post("F-ZDT1", "2080-06-01T10:30")
+    day_only = post("F-ZDT2", "2080-06-01")
+    none = post("F-ZDT3", "")
+    assert client.post("/api/spots", data={"data": json.dumps({"registration": "F-ZDT9", "date": "pas une date"})}).status_code == 422
+    g = lambda i: client.get(f"/api/spots/{i}").json()
+    assert g(full)["date_utc"] and g(day_only)["date"] == "2080-06-01" and g(day_only)["date_utc"] is None
+    assert g(day_only)["sun_elevation"] is None and g(none)["date"] is None
+    q = {"year": "2080"}
+    assert client.get("/api/spots", params={**q, "no_time": True}).json()["total"] == 1
+    assert client.get("/api/spots", params={"no_date": True, "registration": "F-ZDT3"}).json()["total"] == 1
+    # le filtre « aube/crépuscule/jour » n'inclut jamais un spot sans heure
+    assert all(s["registration"] != "F-ZDT2" for s in client.get("/api/spots", params={**q, "daytime": "day"}).json()["items"])
+    # modification en groupe : poser une heure, puis l'effacer, puis effacer la date
+    b = lambda ids, v: client.post("/api/spots/bulk", json={"ids": ids, "action": "set", "value": v})
+    assert b([day_only, none], {"time": "08:15"}).json()["updated"] == 1           # « none » n'a pas de jour : ignoré
+    assert g(day_only)["date"] == "2080-06-01T08:15" and g(day_only)["date_utc"]
+    assert g(none)["date"] is None
+    assert b([full, day_only], {"time": ""}).json()["updated"] == 2
+    assert g(full)["date"] == "2080-06-01" and g(full)["date_utc"] is None
+    assert b([none], {"day": "2080-07-04"}).json()["updated"] == 1 and g(none)["date"] == "2080-07-04"
+    assert b([none], {"day": "", "time": ""}).json()["updated"] == 1 and g(none)["date"] is None
+    assert b([full], {"day": "2080-07-05", "time": "21:00"}).json()["updated"] == 1 and g(full)["date"] == "2080-07-05T21:00"

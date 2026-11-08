@@ -112,7 +112,11 @@ export async function render(root, params, query) {
       <div class="card stack">
         <div class="field-row">
           <label class="field"><span>${esc(t('spot.airport_or_place'))}</span><div class="input-wrap"><input name="airport" value="${esc(s.airport || s.place)}" ${!s.airport && s.place ? 'data-kind="place"' : ''} placeholder="${esc(t('spot.place_ph'))}" autocomplete="off"></div></label>
-          <label class="field"><span>${esc(t('spot.date'))}</span><input type="datetime-local" name="date" value="${esc((s.date || '').slice(0, 16))}"></label>
+          <div class="field" data-datebox><span>${esc(t('spot.date'))}</span>
+            <div class="row" style="gap:8px"><input type="date" data-day value="${esc((s.date || '').slice(0, 10))}" style="flex:1.4;min-width:0"><input type="time" data-time value="${esc((s.date || '').slice(11, 16))}" style="flex:1;min-width:0"></div>
+            <input type="hidden" name="date" value="${esc(s.date || '')}">
+            <div class="row wrap" style="gap:14px;margin-top:4px"><label class="row tiny" style="gap:6px;cursor:pointer"><input type="checkbox" data-nodate ${!s.date && s.id_spotting ? 'checked' : ''}> ${esc(t('spot.no_date'))}</label>
+              <label class="row tiny" style="gap:6px;cursor:pointer"><input type="checkbox" data-notime ${s.date && s.date.length < 16 ? 'checked' : ''}> ${esc(t('spot.no_time'))}</label></div></div>
         </div>
         <div class="field"><span>${esc(t('spot.tags'))}</span><div data-tags></div></div>
       </div>
@@ -223,7 +227,22 @@ export async function render(root, params, query) {
   const syncUnknown = () => { F('registration').disabled = unk.checked; F('registration').required = !unk.checked; if (unk.checked) F('registration').value = ''; };
   unk.addEventListener('change', syncUnknown);
   syncUnknown();
-  F('date').addEventListener('input', () => (dateTouched = true));
+  // Date et heure facultatives : le champ caché « date » porte la valeur composite ('', 'AAAA-MM-JJ' ou 'AAAA-MM-JJTHH:MM')
+  const dayEl = root.querySelector('[data-day]'), timeEl = root.querySelector('[data-time]');
+  const noDate = root.querySelector('[data-nodate]'), noTime = root.querySelector('[data-notime]');
+  const syncDate = () => {
+    dayEl.disabled = noDate.checked; timeEl.disabled = noDate.checked || noTime.checked;
+    F('date').value = noDate.checked || !dayEl.value ? '' : dayEl.value + (noTime.checked || !timeEl.value ? '' : `T${timeEl.value}`);
+    F('date').dispatchEvent(new Event('change'));
+  };
+  const setDate = (v) => {                       // v : 'AAAA-MM-JJTHH:MM' (EXIF) ; renseigne les deux champs
+    noDate.checked = false; dayEl.value = (v || '').slice(0, 10);
+    if (v && v.length >= 16 && !noTime.checked) timeEl.value = v.slice(11, 16);
+    syncDate();
+  };
+  [dayEl, timeEl].forEach((el) => el.addEventListener('input', () => { dateTouched = true; syncDate(); }));
+  [noDate, noTime].forEach((el) => el.addEventListener('change', () => { dateTouched = true; syncDate(); }));
+  syncDate();
 
   // ------------------------------------------------------------ photo
   const isImg = (f) => !!f && (f.type?.startsWith('image/') || /\.(heic|heif)$/i.test(f.name || ''));
@@ -313,7 +332,7 @@ export async function render(root, params, query) {
     }
     if (imageFile !== file) return;
     const ex = res.exif || {};
-    if (ex.datetime && !dateTouched) F('date').value = ex.datetime;
+    if (ex.datetime && !dateTouched && !noDate.checked) setDate(ex.datetime);
     for (const k of ['camera', 'lens', 'focal', 'aperture', 'iso', 'shutter']) if (ex[k] != null && !F(k).value) F(k).value = ex[k];
     if (ex.lat != null) { F('lat').value = ex.lat; F('lng').value = ex.lng; }
     if (res.nearest_airport && !F('airport').value) F('airport').value = res.nearest_airport.icao;
@@ -543,6 +562,7 @@ export async function render(root, params, query) {
     const data = {};
     for (const k of ['registration', 'aircraft', 'aircraft_icao', 'owner', 'airline_icao', 'msn', 'manufacturer', 'airport', 'date', 'livery', 'flight_type', 'description', 'camera', 'lens', 'focal', 'aperture', 'iso', 'shutter', 'icao24', 'lat', 'lng', 'test_registration']) data[k] = F(k).value.trim();
     data.unknown_registration = unk.checked;
+    if (noDate.checked) { data.date = ''; data.date_none = true; } else if (noTime.checked) data.time_none = true;
     if (countryTouched && !asPatrol) data.country = spotCountry.value;
     // Lieu choisi dans les suggestions : on l'enregistre comme lieu ; un texte libre est classé par le serveur
     const isPlace = F('airport').dataset.kind === 'place';

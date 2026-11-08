@@ -2117,5 +2117,13 @@
 "storage.normalize": "Standardise aircraft names",
 "storage.normalize_none": "All names are already consistent.",
 "storage.normalize_confirm": "{n} spot(s) ({d} names) will be renamed from the type code, for example:",
-"storage.normalize_done": "{n} spot(s) updated"
+"storage.normalize_done": "{n} spot(s) updated",
+"spot.no_date": "No date",
+"spot.no_time": "No time",
+"bulk.day": "Date (day)",
+"bulk.time": "Time",
+"bulk.clear_date": "Clear the date (and time)",
+"bulk.clear_time": "Clear the time (keep the day)",
+"spots.f_no_date": "No date",
+"spots.f_no_time": "No time"
 }

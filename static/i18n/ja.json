@@ -1946,5 +1946,13 @@
 "storage.normalize": "機種名を統一",
 "storage.normalize_none": "すべての機種名はすでに統一されています。",
 "storage.normalize_confirm": "{n} 件（{d} 種類の名称）を型式コードに基づいて改名します。例：",
-"storage.normalize_done": "{n} 件を更新しました"
+"storage.normalize_done": "{n} 件を更新しました",
+"spot.no_date": "日付なし",
+"spot.no_time": "時刻なし",
+"bulk.day": "日付",
+"bulk.time": "時刻",
+"bulk.clear_date": "日付（と時刻）を消去",
+"bulk.clear_time": "時刻を消去（日付は保持）",
+"spots.f_no_date": "日付なし",
+"spots.f_no_time": "時刻なし"
 }

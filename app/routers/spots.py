@@ -1,6 +1,7 @@
 """Module Spotting : CRUD, filtres, vues liste/galerie/carte, doublons, références croisées."""
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import random
 import re
@@ -141,6 +142,10 @@ def build_filters(f: dict) -> tuple[str, list]:
         rt = collection.rare_types((f["rarity"],) if f.get("rarity") else None)
         where.append(f"s.aircraft_icao IN ({','.join('?' * len(rt)) or 'NULL'})")
         params += rt
+    if f.get("no_date") in (True, 1, "1", "true", "True"):
+        where.append("(s.date IS NULL OR s.date = '')")
+    if f.get("no_time") in (True, 1, "1", "true", "True"):
+        where.append("(s.date IS NOT NULL AND s.date <> '' AND length(s.date) < 16)")
     if f.get("rating_min") not in (None, "", 0, "0"):
         where.append("s.rating >= ?")
         params.append(int(f["rating_min"]))
@@ -213,7 +218,7 @@ def list_spots(
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
     location_id: int | None = None, date_from: str = "", date_to: str = "", patrol: int | None = None, unknown: bool = False, outing: int | None = None, rare: bool = False, rarity: str = "", daytime: str = "", weather: str = "", wind: str = "",
-    rating_min: int | None = None, has_gps: bool = False, no_msn: bool = False, no_type: bool = False, has_notes: bool = False,
+    rating_min: int | None = None, no_date: bool = False, no_time: bool = False, has_gps: bool = False, no_msn: bool = False, no_type: bool = False, has_notes: bool = False,
     sort: str = "date_desc", limit: int = Query(60, le=500), offset: int = 0,
 ):
     f = dict(locals())
@@ -238,7 +243,7 @@ def spots_map(
     special: bool = False, military: int | None = None, favorite: bool = False, has_photo: bool = False,
     has_audio: bool = False, camera: str = "", lens: str = "", livery_category: str = "",
     location_id: int | None = None, date_from: str = "", date_to: str = "",
-    rating_min: int | None = None, has_gps: bool = False, no_msn: bool = False, no_type: bool = False, has_notes: bool = False,
+    rating_min: int | None = None, no_date: bool = False, no_time: bool = False, has_gps: bool = False, no_msn: bool = False, no_type: bool = False, has_notes: bool = False,
 ):
     """Spots regroupés par lieu (point de vue, coordonnées GPS ou aéroport), puis par appareil."""
     return memo("map", _spots_map, tuple(sorted(dict(locals()).items())))
@@ -577,11 +582,31 @@ def _split_place(airport_raw: str | None, place_raw: str | None) -> tuple[str | 
     return None, (place_raw or "")[:120] or None
 
 
+_DATE_RX = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?)?(?:Z)?$")
+
+
+def _norm_date(v, time_none: bool = False) -> str | None:
+    """Date facultative : None (inconnue), « AAAA-MM-JJ » (jour seul) ou « AAAA-MM-JJTHH:MM » (jour et heure)."""
+    if v in (None, ""):
+        return None
+    m = _DATE_RX.match(str(v).strip())
+    if not m:
+        raise HTTPException(422, "invalid_date")
+    day, hm = m.group(1), m.group(2)
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except ValueError as e:
+        raise HTTPException(422, "invalid_date") from e
+    return day if (time_none or not hm) else f"{day}T{hm}"
+
+
 def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
     out = {k: data.get(k) for k in EDITABLE if k in data}
     for k, v in list(out.items()):
         if isinstance(v, str):
             out[k] = v.strip() or None
+    if "date" in out:
+        out["date"] = _norm_date(out["date"], bool(data.get("time_none")))
     merged = {**(existing or {}), **out}
     if "registration" in out or not existing:
         reg = regs.normalize(merged.get("registration"))
@@ -698,8 +723,9 @@ def _apply_image(out: dict, image: UploadFile | None, data: dict) -> None:
     for k in ("camera", "lens", "focal", "aperture", "iso", "shutter"):
         if exif.get(k) is not None and not data.get(k):
             out[k] = exif[k]
-    if exif.get("datetime") and not data.get("date"):
-        out["date"] = exif["datetime"]
+    if exif.get("datetime") and not data.get("date") and not data.get("date_none"):
+        # « Sans date » choisi : l'EXIF ne la remplit pas ; « sans heure » : seul le jour est repris
+        out["date"] = exif["datetime"][:10] if data.get("time_none") else exif["datetime"]
     if exif.get("lat") is not None and data.get("lat") in (None, "") and not data.get("location_id"):
         out["lat"], out["lng"] = exif["lat"], exif["lng"]
 
@@ -1121,12 +1147,33 @@ BULK_FIELDS = ("country", "airport", "place", "flight_type", "owner", "airline_i
 
 def _bulk_set(ids: list[int], value: Any, bg: BackgroundTasks) -> dict:
     vals = {k: v for k, v in (value or {}).items() if k in BULK_FIELDS} if isinstance(value, dict) else {}
-    if not vals:
+    # Date et heure se règlent séparément : « day » / « time » absents = inchangés ; chaînes vides = effacés
+    # (effacer le jour efface aussi l'heure ; une heure ne peut s'appliquer qu'à un spot qui a un jour)
+    has_day = isinstance(value, dict) and "day" in value
+    has_time = isinstance(value, dict) and "time" in value
+    day_v = str(value.get("day") or "").strip() if has_day else None
+    time_v = str(value.get("time") or "").strip() if has_time else None
+    if day_v and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day_v):
+        raise HTTPException(422, "invalid_date")
+    if time_v and not re.fullmatch(r"\d{2}:\d{2}", time_v):
+        raise HTTPException(422, "invalid_date")
+    if not vals and not has_day and not has_time:
         raise HTTPException(400, "nothing_to_set")
     rows = q(f"SELECT * FROM spotting WHERE id_spotting IN ({','.join('?' * len(ids))})", ids)
     n = 0
     for r in rows:
         v = dict(vals)
+        if has_day or has_time:
+            cur = r.get("date") or ""
+            day = (cur[:10] if not has_day else day_v) or ""
+            tm = (cur[11:16] if len(cur) >= 16 else "") if not has_time else time_v
+            if not day:
+                tm = ""
+                if has_time and time_v:
+                    continue                          # une heure sans jour n'a pas de sens : ce spot est ignoré
+            v["date"] = day + (f"T{tm}" if day and tm else "") or None
+            if not vals and v["date"] == (r.get("date") or None):
+                continue
         if r.get("is_patrol"):
             v.pop("registration", None)             # la clé d'une patrouille « mode simple » est son nom
             v.pop("country", None)

@@ -2117,5 +2117,13 @@
 "storage.normalize": "Uniformiser les désignations d'avions",
 "storage.normalize_none": "Toutes les désignations sont déjà cohérentes.",
 "storage.normalize_confirm": "{n} spot(s) ({d} désignations) seront renommés d'après le code type, par exemple :",
-"storage.normalize_done": "{n} spot(s) mis à jour"
+"storage.normalize_done": "{n} spot(s) mis à jour",
+"spot.no_date": "Sans date",
+"spot.no_time": "Sans heure",
+"bulk.day": "Date (jour)",
+"bulk.time": "Heure",
+"bulk.clear_date": "Effacer la date (et l'heure)",
+"bulk.clear_time": "Effacer l'heure (garder le jour)",
+"spots.f_no_date": "Sans date",
+"spots.f_no_time": "Sans heure"
 }

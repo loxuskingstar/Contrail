@@ -8,7 +8,7 @@ import { esc, sheet, spotRow, spotTile, emptyState, confirmDialog, toast, errorT
 
 const PAGE = 60;
 const SCOPE_KEY = 'contrail.spotsScope';
-const FILTER_KEYS = ['search', 'tag', 'tag_mode', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'daytime', 'weather', 'wind', 'date_from', 'date_to', 'rating_min', 'has_gps', 'no_msn', 'no_type', 'has_notes', 'sort'];
+const FILTER_KEYS = ['search', 'tag', 'tag_mode', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'daytime', 'weather', 'wind', 'date_from', 'date_to', 'rating_min', 'no_date', 'no_time', 'has_gps', 'no_msn', 'no_type', 'has_notes', 'sort'];
 
 export async function render(root, _p, query) {
   const filters = Object.fromEntries(FILTER_KEYS.filter((k) => query[k] !== undefined && query[k] !== '').map((k) => [k, query[k]]));
@@ -99,7 +99,7 @@ export async function render(root, _p, query) {
       if (k === 'flight_type') label = t(`ftype.${v}`);
       if (k === 'livery_category') label = t(`livery.${v}`);
       if (k === 'patrol') label = t('patrol.title');
-      if (['has_gps', 'has_notes', 'no_msn', 'no_type'].includes(k)) label = t(`spots.f_${k}`);
+      if (['has_gps', 'has_notes', 'no_msn', 'no_type', 'no_date', 'no_time'].includes(k)) label = t(`spots.f_${k}`);
       if (k === 'rating_min') label = `${'★'.repeat(Number(v))}${Number(v) < 5 ? ' +' : ''}`;
       if (k === 'date_from') label = `≥ ${fmtDate(v, { time: false })}`;
       if (k === 'date_to') label = `≤ ${fmtDate(v, { time: false })}`;
@@ -238,6 +238,8 @@ export async function render(root, _p, query) {
       ['livery', 'spot.livery', '<input name="livery" maxlength="80">'],
       ['camera', 'exif.camera', '<input name="camera" maxlength="120" list="bk-cam" autocomplete="off"><datalist id="bk-cam"></datalist>'],
       ['lens', 'exif.lens', '<input name="lens" maxlength="120" list="bk-lens" autocomplete="off"><datalist id="bk-lens"></datalist>'],
+      ['day', 'bulk.day', `<input type="date" name="day"><label class="row tiny" style="gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" data-clear="day"> ${esc(t('bulk.clear_date'))}</label>`],
+      ['time', 'bulk.time', `<input type="time" name="time"><label class="row tiny" style="gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" data-clear="time"> ${esc(t('bulk.clear_time'))}</label>`],
       ['rating', 'spot.rating', '<select name="rating">' + [1, 2, 3, 4, 5].map((n) => `<option value="${n}">${'★'.repeat(n)}</option>`).join('') + '</select>'],
       ['military', 'spot.military', `<select name="military"><option value="1">${esc(t('common.yes'))}</option><option value="0">${esc(t('common.no'))}</option></select>`],
     ];
@@ -253,11 +255,20 @@ export async function render(root, _p, query) {
     api('/api/spots/countries').then((codes) => {
       form.elements.country.innerHTML = '<option value="">' + esc(t('spot.country_auto')) + '</option>' + codes.map((c) => ({ c, n: countryName(c) })).sort((x, y) => x.n.localeCompare(y.n)).map(({ c, n }) => `<option value="${esc(c)}">${flag(c)} ${esc(n)}</option>`).join('');
     }).catch(() => {});
-    form.querySelectorAll('[data-ctl] input, [data-ctl] select').forEach((el) => el.addEventListener('input', () => { form.querySelector(`[data-use=${el.name}]`).checked = true; }));
+    form.querySelectorAll('[data-ctl] input, [data-ctl] select').forEach((el) => el.addEventListener('input', () => { form.querySelector(`[data-use=${el.name || el.dataset.clear}]`).checked = true; }));
     form.onsubmit = async (e) => {
       e.preventDefault();
       const value = {};
-      form.querySelectorAll('[data-use]:checked').forEach((c) => { const el = form.elements[c.dataset.use]; value[c.dataset.use] = el.value; });
+      form.querySelectorAll('[data-use]:checked').forEach((c) => {
+        const k = c.dataset.use, el = form.elements[k];
+        if (k === 'day' || k === 'time') {
+          // « Effacer » vide la valeur ; sinon une date / une heure doit être saisie
+          if (form.querySelector(`[data-clear=${k}]`).checked) value[k] = '';
+          else if (el.value) value[k] = el.value;
+          return;
+        }
+        value[k] = el.value;
+      });
       if (!Object.keys(value).length) return;
       sh.close();
       await bulk('set', value);
@@ -431,8 +442,8 @@ async function shareGallery(filters) {
 const FILTER_BOOLS = [
   ['favorite', 'star'], ['special', 'sparkles'], ['has_photo', 'image'], ['has_audio', 'audio-lines'], ['has_gps', 'map-pin'], ['has_notes', 'file-text'],
 ];
-const FILTER_TODO = [['unknown', 'circle-help'], ['no_type', 'plane'], ['no_msn', 'hash']];
-const FILTER_COUNTED = ['search', 'tag', 'tag_mode', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'daytime', 'weather', 'wind', 'date_from', 'date_to', 'rating_min', 'has_gps', 'no_msn', 'no_type', 'has_notes'];
+const FILTER_TODO = [['unknown', 'circle-help'], ['no_type', 'plane'], ['no_msn', 'hash'], ['no_date', 'calendar-x'], ['no_time', 'clock']];
+const FILTER_COUNTED = ['search', 'tag', 'tag_mode', 'airport', 'place', 'type', 'airline', 'year', 'country', 'flight_type', 'special', 'military', 'favorite', 'has_photo', 'has_audio', 'registration', 'camera', 'lens', 'livery_category', 'location_id', 'patrol', 'outing', 'unknown', 'rare', 'rarity', 'daytime', 'weather', 'wind', 'date_from', 'date_to', 'rating_min', 'no_date', 'no_time', 'has_gps', 'no_msn', 'no_type', 'has_notes'];
 
 async function openFilters(filters, onApply) {
   const f = { ...filters };
@@ -470,7 +481,7 @@ async function openFilters(filters, onApply) {
         ${sel('rating_min', t('spots.rating_min'), all + [1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${String(f.rating_min) === String(n) ? 'selected' : ''}>${'★'.repeat(n)}${n < 5 ? ' +' : ''}</option>`).join(''))}`, false)}
       ${sec(t('nav.gear'), 'aperture', hasGear ? `<div class="field-row">${sel('camera', t('exif.camera'), gopt(gear.cameras, f.camera, 'gear.none_camera'))}${sel('lens', t('exif.lens'), gopt(gear.lenses, f.lens, 'gear.none_lens'))}</div>
         <p class="tiny muted">${esc(t('spots.fs_gear_hint'))}</p>` : `<p class="small muted">${esc(t('gear.empty_text'))}</p>`, !!(f.camera || f.lens))}
-      ${sec(t('spots.fs_todo'), 'circle-help', `<div class="chips wrap">${FILTER_TODO.map(tog).join('')}</div><p class="tiny muted">${esc(t('spots.fs_todo_hint'))}</p>`, !!(f.unknown || f.no_type || f.no_msn))}
+      ${sec(t('spots.fs_todo'), 'circle-help', `<div class="chips wrap">${FILTER_TODO.map(tog).join('')}</div><p class="tiny muted">${esc(t('spots.fs_todo_hint'))}</p>`, !!(f.unknown || f.no_type || f.no_msn || f.no_date || f.no_time))}
       ${sec(t('spots.fs_collection'), 'bookmark', `<div class="chips wrap">${FILTER_BOOLS.map(tog).join('')}</div>
         <label class="field"><span>${esc(t('spots.sort'))}</span><select data-k="sort">${['date_desc', 'date_asc', 'created', 'registration', 'type'].map((v) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${esc(t(`sort.${v}`))}</option>`).join('')}</select></label>`)}
       <div class="row" style="justify-content:space-between;position:sticky;bottom:0;background:var(--surface);padding:8px 0 2px;gap:8px"><button class="btn ghost" data-reset>${esc(t('spots.clear_filters'))}</button><button class="btn primary grow" data-apply>${esc(t('common.apply'))}</button></div>

@@ -219,7 +219,7 @@ def search_airports(query: str, limit: int = 12) -> list[dict]:
 
 def local_to_utc(local_iso: str | None, icao: str | None, fallback_tz: str = "UTC") -> str | None:
     """Convertit une heure locale d'aéroport ("YYYY-MM-DDTHH:MM") en UTC ISO."""
-    if not local_iso:
+    if not local_iso or len(local_iso.strip()) < 16:        # date sans heure : pas d'instant UTC (ni soleil, ni météo)
         return None
     try:
         dt = datetime.fromisoformat(local_iso.replace("Z", ""))
