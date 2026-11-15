@@ -17,9 +17,13 @@
   <script>
     // Applique le thème avant le premier rendu pour éviter un flash
     try {
-      const s = JSON.parse(localStorage.getItem('contrail.settings') || '{}');
+      const s = JSON.parse(localStorage.getItem('contrail.look') || localStorage.getItem('contrail.settings') || '{}');
       const dark = s.theme === 'dark' || (s.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      const d = document.documentElement.dataset;
+      d.theme = dark ? 'dark' : 'light';
+      d.style = s.style || s.ui_style || 'classic';
+      if (s.glass) d.glass = s.glass;
+      if (s.radius) d.radius = s.radius;
     } catch (e) {}
   </script>
 </head>

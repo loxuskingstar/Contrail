@@ -122,7 +122,7 @@ def test_stats_dashboard_airframe(client):
     af = client.get("/api/airframe/F-HBXA").json()
     assert af["spots"] == 1 and af["flights"] == 1 and len(af["events"]) == 2
     assert client.get("/api/stats/flights").json()["count"] == 1
-    assert client.get("/api/liveries").json()[0]["category"] == "alliance"
+    assert any(c["code"] == "alliance" and c["groups"] for c in client.get("/api/liveries").json()["categories"])
 
 
 def test_fleet_manual_import(client):
@@ -584,7 +584,7 @@ def test_primer_livery_is_separate_from_special_liveries(client):
     assert any(b["code"] == "primer" for b in client.get(f"/api/spots/{sid}").json()["badges"])
     assert not any(b["code"] == "special_livery" for b in client.get(f"/api/spots/{sid}").json()["badges"])
     assert client.get("/api/stats").json()["totals"]["special_liveries"] == base      # pas compté comme livrée spéciale
-    groups = {g["category"]: g for g in client.get("/api/liveries").json()}
+    groups = {g["code"]: g for g in client.get("/api/liveries").json()["categories"]}
     assert groups["primer"]["unique"] >= 1
     assert sid not in {s["id_spotting"] for s in client.get("/api/spots", params={"special": "true"}).json()["items"]}
     assert sid in {s["id_spotting"] for s in client.get("/api/spots", params={"livery_category": "primer"}).json()["items"]}
@@ -616,7 +616,7 @@ def test_white_livery_is_separate_from_special_liveries(client):
     assert client.get("/api/stats").json()["totals"]["special_liveries"] == base + 1                              # seule la 4e compte
     ids = {s["registration"] for s in client.get("/api/spots", params={"livery_category": "white"}).json()["items"]}
     assert {"F-WHT1", "F-WHT2", "F-WHT3"} <= ids
-    assert "white" in {g["category"] for g in client.get("/api/liveries").json()}
+    assert any(c["code"] == "white" and c["groups"] for c in client.get("/api/liveries").json()["categories"])
 
 
 def test_test_registration_is_optional_for_any_flight_type(client):
@@ -1699,3 +1699,43 @@ def test_optional_date_and_time(client):
     assert b([none], {"day": "2080-07-04"}).json()["updated"] == 1 and g(none)["date"] == "2080-07-04"
     assert b([none], {"day": "", "time": ""}).json()["updated"] == 1 and g(none)["date"] is None
     assert b([full], {"day": "2080-07-05", "time": "21:00"}).json()["updated"] == 1 and g(full)["date"] == "2080-07-05T21:00"
+
+
+def test_livery_categories_groups_and_manual_order(client):
+    # Trois F-5 dans la même livrée anniversaire : une seule livrée ; deux « Star Alliance » d'exploitants différents : deux
+    for reg in ("J-3084", "J-3080", "J-3083"):
+        _post_spot(client, registration=reg, aircraft="Northrop F-5E", aircraft_icao="F5", owner="Swiss Air Force",
+                   livery="60 ans Patrouille Suisse", date="2082-05-01T10:00")
+    _post_spot(client, registration="C-GOFV", owner="Air Canada", livery="Star Alliance", date="2082-05-02T10:00")
+    _post_spot(client, registration="OO-SSY", owner="Brussels Airlines", livery="Star Alliance", date="2082-05-03T10:00")
+    cats = {c["code"]: c for c in client.get("/api/liveries").json()["categories"]}
+    swiss = [g for g in cats["commemorative"]["groups"] if g["livery"] == "60 ans Patrouille Suisse"]
+    assert len(swiss) == 1 and set(swiss[0]["regs"]) == {"J-3084", "J-3080", "J-3083"} and swiss[0]["n"] == 3
+    assert len([g for g in cats["alliance"]["groups"] if g["livery"] == "Star Alliance" and g["owner"] in ("Air Canada", "Brussels Airlines")]) == 2
+
+    # Catégorie personnelle avec mot-clé : le classement automatique la prend en compte
+    c = client.post("/api/livery-categories", json={"name": "Patrouilles", "icon": "plane", "keywords": "patrouille"}).json()
+    assert client.post("/api/livery-categories", json={"name": "patrouilles"}).status_code == 409
+    sp = client.get("/api/spots", params={"livery_category": c["code"]}).json()["items"]
+    assert {s["registration"] for s in sp} >= {"J-3084", "J-3080", "J-3083"}
+
+    # Rangement manuel : la livrée Air Canada passe dans la catégorie perso, en tête
+    key_ac = next(g["key"] for g in cats["alliance"]["groups"] if g["owner"] == "Air Canada")
+    key_sw = swiss[0]["key"]
+    assert client.post("/api/liveries/reorder", json={"category": c["code"], "keys": [key_ac, key_sw]}).json()["moved"] >= 1
+    mine = next(x for x in client.get("/api/liveries").json()["categories"] if x["code"] == c["code"])
+    assert [g["key"] for g in mine["groups"]][:2] == [key_ac, key_sw] and mine["groups"][0]["manual"]
+    assert client.put("/api/liveries/group", json={"key": key_ac, "category": ""}).json()["category"] == "alliance"
+
+    # Renommer fusionne et le détail liste les spots ; une catégorie d'origine indispensable ne se supprime pas
+    r = client.put("/api/liveries/group", json={"key": key_sw, "livery": "Patrouille Suisse 60 ans"}).json()
+    assert r["key"] != key_sw and len(client.get("/api/liveries/group", params={"key": r["key"]}).json()["spots"]) == 3
+    assert client.delete("/api/livery-categories/special").status_code == 400
+    client.put(f"/api/livery-categories/{c['code']}", json={"name": "Démos", "icon": "rocket"})
+    assert client.delete(f"/api/livery-categories/{c['code']}").json()["moved"] >= 3
+    assert client.get(f"/api/spots", params={"registration": "J-3084"}).json()["items"][0]["livery_category"] == "commemorative"
+    # Catégorie d'origine masquée puis restaurée
+    client.delete("/api/livery-categories/retro")
+    assert "retro" not in {x["code"] for x in client.get("/api/livery-categories").json()}
+    client.post("/api/livery-categories/retro/restore")
+    assert "retro" in {x["code"] for x in client.get("/api/livery-categories").json()}

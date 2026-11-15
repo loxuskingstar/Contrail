@@ -656,8 +656,9 @@ def prepare(data: dict[str, Any], existing: dict | None = None) -> dict:
     if "test_registration" in out:
         out["test_registration"] = regs.normalize(out["test_registration"]) or None if out["test_registration"] else None
 
-    if "livery" in out:
-        out["livery_category"] = collection.livery_category(out["livery"])
+    if "livery" in out or "owner" in out:
+        merged_l = {**(existing or {}), **out}
+        out["livery_category"] = collection.livery_category(merged_l.get("livery"), merged_l.get("owner"))
         # Un avion en primer est un avion d'essai : le type de vol « Vol d'essai » est proposé s'il n'est pas renseigné
         if out["livery_category"] == "primer" and not (out.get("flight_type") or (existing or {}).get("flight_type")):
             out["flight_type"] = "test"

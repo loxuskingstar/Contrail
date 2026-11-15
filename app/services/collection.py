@@ -45,15 +45,52 @@ def is_special_livery(livery: str | None) -> bool:
     return livery.strip().lower() not in ("", "none", "standard", "classique", "classic livery", "normal", "-")
 
 
-def livery_category(livery: str | None) -> str | None:
+def _fold(s: str | None) -> str:
+    import unicodedata
+    s = "".join(c for c in unicodedata.normalize("NFKD", (s or "").lower()) if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def livery_key(livery: str | None, owner: str | None = None) -> str:
+    """Identité d'une livrée : son texte chez un exploitant (« Star Alliance » d'Air Canada ≠ celle de Brussels Airlines,
+    mais les avions d'une patrouille dans la même livrée anniversaire n'en font qu'une)."""
+    return f"{_fold(livery)}|{_fold(owner)}"
+
+
+def _load_cfg() -> dict:
+    cats = q("SELECT code, keywords, disabled FROM livery_categories ORDER BY position, code")
+    groups = {r["key"]: r["category"] for r in q("SELECT key, category FROM livery_groups WHERE category IS NOT NULL")}
+    enabled = {c["code"] for c in cats if not c["disabled"]}
+    kw = [(c["code"], [k for k in (_fold(x) for x in re.split(r"[,;\n]", c["keywords"] or "")) if k])
+          for c in cats if not c["disabled"] and c["keywords"]]
+    return {"enabled": enabled, "groups": {k: v for k, v in groups.items() if v in enabled}, "keywords": kw}
+
+
+def livery_config() -> dict:
+    try:
+        return memo("livery_cfg", _load_cfg)
+    except Exception:  # noqa: BLE001 — base pas encore migrée : règles d'origine
+        return {"enabled": {c for c, _ in LIVERY_RULES} | {"special", *PLAIN}, "groups": {}, "keywords": []}
+
+
+def livery_category(livery: str | None, owner: str | None = None, cfg: dict | None = None) -> str | None:
+    """Ordre : rangement manuel de la livrée > primer / blanche > mots-clés des catégories > règles d'origine > « spéciale »."""
+    if not livery or livery.strip().lower() in ("", "none", "standard", "classique", "classic livery", "normal", "-"):
+        return None
+    cfg = cfg or livery_config()
+    manual = cfg["groups"].get(livery_key(livery, owner))
+    if manual:
+        return manual
     if is_primer(livery):
         return "primer"
     if is_white(livery):
         return "white"
-    if not is_special_livery(livery):
-        return None
+    folded = _fold(livery)
+    for code, words in cfg["keywords"]:
+        if code not in PLAIN and any(w in folded for w in words):
+            return code
     for cat, rx in LIVERY_RULES:
-        if rx.search(livery or ""):
+        if cat in cfg["enabled"] and rx.search(livery):
             return cat
     return "special"
 
@@ -190,12 +227,16 @@ def crossref_for_flight(reg: str) -> list[dict]:
 
 
 def recategorize() -> int:
-    """Recalcule la catégorie de livrée des spots dont elle a changé (ex. « Primer » ne compte plus comme livrée spéciale)."""
-    from ..core import execute
-    n = 0
-    for r in q("SELECT id_spotting id, livery, livery_category cat FROM spotting WHERE livery IS NOT NULL AND livery <> ''"):
-        new = livery_category(r["livery"])
+    """Recalcule la catégorie de livrée des spots dont elle a changé (règles, mots-clés ou rangement manuel modifiés)."""
+    from ..core import db
+    cfg = _load_cfg()
+    changes = []
+    for r in q("SELECT id_spotting id, livery, owner, livery_category cat FROM spotting"):
+        new = livery_category(r["livery"], r["owner"], cfg)
         if new != r["cat"]:
-            execute("UPDATE spotting SET livery_category = ? WHERE id_spotting = ?", (new, r["id"]))
-            n += 1
-    return n
+            changes.append((new, r["id"]))
+    if changes:
+        conn = db()
+        conn.executemany("UPDATE spotting SET livery_category = ? WHERE id_spotting = ?", changes)
+        conn.commit()
+    return len(changes)

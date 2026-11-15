@@ -29,6 +29,7 @@
 
 ## Nouveautés des versions 4.x
 
+- **4.6.0 — Livrées organisables et style « Verre »** : page Livrées dédiée dans le menu (sortie de Flottes) ; une carte par livrée (texte de livrée × exploitant, les avions d'une même patrouille regroupés) ; catégories personnelles avec icône et mots-clés de classement automatique, catégories d'origine renommables ou masquables ; mode « Organiser » avec glisser-déposer à la souris ou au doigt (poignée), y compris vers une pastille de catégorie ; tri (mon ordre, récentes, A→Z, plus vues) ; fiche de livrée pour la ranger à la main, la renommer ou la fusionner. Réglages > Apparence : style Classique (finitions téléphone et tablette) ou Verre (barres et menus en pilule flottants, flou sobre, variante teintée), libellés de la barre du bas facultatifs.
 - **4.5.5 — Date et heure facultatives** : un spot peut n'avoir ni date, ni heure (cases « Sans date » / « Sans heure » du formulaire, la date et l'heure sont désormais deux champs) ; sans heure, ni position du soleil ni météo ne sont calculées ; filtres « Sans date » et « Sans heure » (section À compléter) ; modification en groupe du jour et de l'heure, avec effacement possible.
 - **4.5.4 — Un appareil, un nom** : quelle que soit la source, la désignation est ramenée à celle de la table des types dès que le code est connu ou déductible (« ERJ-190-100 », « EMB190 STD » → « Embraer E190 » ; « A330-343 » → « Airbus A330-300 » ; « A320-251N » → « Airbus A320neo »). Les écritures équivalentes (« B737-800 ») sont conservées. Réglages > Stockage : bouton d'uniformisation des désignations déjà enregistrées (aperçu avant application).
 - **4.5.3 — MSN** : une fiche mise en cache sans numéro de série est retentée après 24 h (au lieu de 30 jours) quand une clé AirLabs ou Aviationstack est configurée.
@@ -172,7 +173,7 @@ bash scripts/build-setup.sh
 # Windows → dist/Contrail-<version>-Windows-Setup.exe ; Linux → .deb et .tar.gz ; macOS → .dmg (dans dist/)
 ```
 
-Options (identiques pour les deux scripts) : une version imposée (`-Version 4.5.5` en PowerShell, `bash scripts/build-setup.sh 4.5.5`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
+Options (identiques pour les deux scripts) : une version imposée (`-Version 4.6.0` en PowerShell, `bash scripts/build-setup.sh 4.6.0`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
 
 Un installeur ne se construit que sur son propre système. Pour obtenir les quatre d'un coup (Windows, macOS Apple Silicon et Intel, Linux), poussez un tag `vX.Y.Z` : le workflow GitHub `desktop.yml` les construit, les teste et les publie dans une Release. Détails dans [`desktop/README.md`](desktop/README.md).
 

@@ -1085,3 +1085,271 @@ body.radar-mode .main { padding: 0; }
 .filters-sheet .fcount[hidden] { display: none; }
 .filters-sheet .chips.wrap { flex-wrap: wrap; }
 .filters-sheet .fchip { gap: 6px; }
+
+/* ==========================================================================
+   Livrées : cartes, mode « Organiser » et glisser-déposer
+   ========================================================================== */
+.btn-icon.sm { width: 32px; height: 32px; }
+.lv-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.lv-bar .chips { flex: 1; min-width: 0; }
+.lv-bar.sticky { position: sticky; top: calc(56px + env(safe-area-inset-top)); z-index: 35; margin: 0 -16px 12px; padding: 8px 16px;
+  background: color-mix(in srgb, var(--bg) 90%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+@media (min-width: 980px) { .lv-bar.sticky { margin: 0 -32px 12px; padding: 8px 32px; } }
+.lv-sort { flex-shrink: 0; }
+.lv-hint { display: flex; gap: 8px; align-items: flex-start; margin: -4px 0 6px; }
+.lv-hint .ic { margin-top: 2px; color: var(--accent); }
+.lv-head h2 { min-width: 0; }
+.lv-gallery { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(46%, 220px), 1fr)); gap: 10px; border-radius: var(--r-lg); transition: background .15s, box-shadow .15s; }
+.lv-gallery.editing { min-height: 96px; padding: 6px; margin: -6px; }
+.lv-gallery.drop-on { background: rgb(var(--accent-rgb) / .06); box-shadow: inset 0 0 0 2px rgb(var(--accent-rgb) / .45); }
+.lv-card { position: relative; border-radius: var(--r); overflow: hidden; aspect-ratio: 4/3; background: var(--surface-2); border: 1px solid var(--line); cursor: pointer;
+  transition: transform .15s, box-shadow .15s, opacity .15s; -webkit-user-select: none; user-select: none; }
+.lv-card:hover { box-shadow: var(--shadow-md); }
+.lv-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lv-card img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.lv-card .lv-ph { position: absolute; inset: 0 0 40% 0; display: grid; place-items: center; color: var(--muted); opacity: .6; }
+.lv-card .cap { position: absolute; inset: auto 0 0 0; padding: 26px 11px 9px; background: linear-gradient(transparent, rgb(0 0 0 / .72)); color: #fff; }
+.lv-card.noimg .cap { background: none; color: var(--text); }
+.lv-card .cap b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: calc(14px * var(--fs, 1)); line-height: 1.25; font-weight: 650; }
+.lv-card .cap small { display: block; opacity: .85; font-size: calc(11.5px * var(--fs, 1)); margin-top: 2px; }
+.lv-card .cap .mono { letter-spacing: .02em; }
+.lv-card .corner { position: absolute; top: 7px; right: 7px; display: flex; gap: 4px; }
+.lv-card .corner .badge { background: rgb(0 0 0 / .5); color: #fff; border: 0; padding: 0 6px; }
+.lv-grip, .lv-move { position: absolute; top: 7px; width: 34px; height: 34px; border-radius: 99px; border: 0; display: grid; place-items: center;
+  color: #fff; background: rgb(0 0 0 / .55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.lv-grip { left: 7px; touch-action: none; cursor: grab; }
+.lv-move { left: 47px; }
+.lv-gallery.editing .lv-card { box-shadow: 0 0 0 1px rgb(var(--accent-rgb) / .25); }
+.lv-gallery.editing .lv-card:hover { transform: translateY(-1px); }
+.lv-card.lv-src { position: absolute !important; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
+.lv-slot { aspect-ratio: 4/3; border-radius: var(--r); border: 2px dashed rgb(var(--accent-rgb) / .6); background: rgb(var(--accent-rgb) / .07); }
+.lv-ghost { position: fixed; left: 0; top: 0; z-index: 400; pointer-events: none; margin: 0; opacity: .96; box-shadow: var(--shadow-lg); transition: none; will-change: transform; }
+body.lv-drag-on, body.lv-drag-on * { cursor: grabbing !important; }
+.lv-empty { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 84px; padding: 16px;
+  border: 1.5px dashed var(--line-strong); border-radius: var(--r); color: var(--muted); font-size: calc(13.5px * var(--fs, 1)); }
+.lv-bar .chip.drop-on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); transform: scale(1.06); }
+.lv-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 6px; }
+.lv-icons button { height: 42px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); color: var(--text-2); display: grid; place-items: center; }
+.lv-icons button.on { border-color: var(--accent); background: rgb(var(--accent-rgb) / .1); color: var(--accent); }
+.lv-facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip.auto { border-style: dashed; border-color: rgb(var(--accent-rgb) / .55); }
+@media (max-width: 560px) {
+  .lv-gallery { gap: 8px; }
+  .lv-card .cap { padding: 22px 9px 8px; }
+  .lv-card .cap b { font-size: calc(13px * var(--fs, 1)); }
+}
+
+/* ==========================================================================
+   Choix du style (réglages > Apparence) : aperçus miniatures
+   ========================================================================== */
+.style-pick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.style-pick button { display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: var(--r-lg); border: 1.5px solid var(--line-strong); background: var(--surface); text-align: left; }
+.style-pick button.on { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / .15); }
+.sp-txt { display: flex; flex-direction: column; gap: 2px; padding: 0 2px 2px; }
+.sp-txt small { color: var(--muted); font-size: calc(12px * var(--fs, 1)); line-height: 1.35; }
+.sp-mock { position: relative; display: block; height: 116px; border-radius: 12px; overflow: hidden; padding: 10px; background: var(--bg); border: 1px solid var(--line); }
+.sp-mock .sp-card { display: block; height: 34px; border-radius: 7px; margin-bottom: 7px; background: var(--surface); border: 1px solid var(--line); }
+.sp-mock .sp-card.short { width: 70%; height: 22px; }
+.sp-mock .sp-nav { position: absolute; left: 0; right: 0; bottom: 0; height: 26px; display: flex; align-items: center; justify-content: space-around; background: var(--surface); border-top: 1px solid var(--line); }
+.sp-mock .sp-nav b { width: 10px; height: 10px; border-radius: 3px; background: var(--line-strong); }
+.sp-mock .sp-nav b.fab { width: 16px; height: 16px; border-radius: 5px; background: var(--accent); }
+.sp-mock.sp-glass { background: radial-gradient(120% 80% at 0% 0%, #fff 0%, transparent 60%), linear-gradient(#eef0f4, #e3e6ec); }
+:root[data-theme="dark"] .sp-mock.sp-glass { background: radial-gradient(120% 80% at 0% 0%, #20242c 0%, transparent 60%), #0a0b0e; }
+.sp-mock.sp-glass .sp-card { border-radius: 11px; background: rgb(255 255 255 / .6); border-color: rgb(255 255 255 / .9); box-shadow: 0 4px 12px -6px rgb(15 23 42 / .2); }
+:root[data-theme="dark"] .sp-mock.sp-glass .sp-card { background: rgb(255 255 255 / .06); border-color: rgb(255 255 255 / .1); }
+.sp-mock.sp-glass .sp-nav { left: 14px; right: 14px; bottom: 8px; height: 24px; border-radius: 99px; border: 1px solid rgb(255 255 255 / .8);
+  background: rgb(255 255 255 / .55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 4px 14px -4px rgb(15 23 42 / .3); }
+:root[data-theme="dark"] .sp-mock.sp-glass .sp-nav { background: rgb(40 44 52 / .6); border-color: rgb(255 255 255 / .14); }
+.sp-mock.sp-glass .sp-nav b { border-radius: 99px; }
+.sp-mock.sp-glass .sp-nav b.fab { border-radius: 99px; }
+
+/* ==========================================================================
+   Classique : finitions pour téléphone et tablette
+   ========================================================================== */
+.bottomnav a { position: relative; }
+.bottomnav a > .ic { position: relative; z-index: 1; }
+.bottomnav a.active::before { content: ""; position: absolute; top: 4px; left: 50%; width: 56px; height: 30px; border-radius: 99px; transform: translateX(-50%);
+  background: rgb(var(--accent-rgb) / .12); animation: navPill .2s ease-out; }
+@keyframes navPill { from { width: 30px; opacity: 0; } }
+body.no-nav-labels .bottomnav a > span { display: none; }
+body.no-nav-labels { --nav-h: 56px; }
+body.no-nav-labels .bottomnav a.active::before { top: 50%; transform: translate(-50%, -50%); }
+@media (max-width: 979px) {
+  .chips.scroll { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 24px; }
+}
+@media (min-width: 600px) and (max-width: 979px) {
+  .main { padding-left: 24px; padding-right: 24px; }
+  .bottomnav { padding-left: max(6px, calc(50% - 300px)); padding-right: max(6px, calc(50% - 300px)); }
+}
+@media (max-width: 380px) {
+  .main { padding-left: 12px; padding-right: 12px; }
+  .gallery { gap: 8px; }
+}
+
+/* ==========================================================================
+   Style « Verre » : verre dépoli sobre, pilules flottantes, coins généreux
+   Le flou est réservé aux éléments flottants (barres, feuilles, menus) : les cartes restent
+   translucides sans flou, ce qui garde le défilement fluide sur téléphone.
+   ========================================================================== */
+:root[data-style="glass"] {
+  --bg: #eceef2;
+  --surface: #fbfbfd;
+  --surface-2: rgb(118 128 150 / .11);
+  --line: rgb(15 23 42 / .07);
+  --line-strong: rgb(15 23 42 / .13);
+  --gl-bg: rgb(250 250 252 / .62);
+  --gl-strong: rgb(250 250 252 / .84);
+  --gl-border: rgb(255 255 255 / .78);
+  --gl-edge: rgb(15 23 42 / .09);
+  --gl-hi: rgb(255 255 255 / .9);
+  --gl-blur: blur(22px) saturate(180%);
+  --gl-shadow: 0 12px 36px -12px rgb(15 23 42 / .28), 0 2px 6px -2px rgb(15 23 42 / .08);
+  --card-bg: rgb(255 255 255 / .6);
+  --card-border: rgb(255 255 255 / .9);
+  --shadow: 0 1px 2px rgb(15 23 42 / .04);
+  --shadow-md: 0 8px 24px -10px rgb(15 23 42 / .22);
+  --shadow-lg: 0 24px 60px -18px rgb(15 23 42 / .35);
+}
+:root[data-style="glass"][data-theme="dark"] {
+  --bg: #0a0b0e;
+  --surface: #17191e;
+  --surface-2: rgb(255 255 255 / .07);
+  --line: rgb(255 255 255 / .07);
+  --line-strong: rgb(255 255 255 / .13);
+  --gl-bg: rgb(34 37 44 / .52);
+  --gl-strong: rgb(30 33 40 / .86);
+  --gl-border: rgb(255 255 255 / .13);
+  --gl-edge: rgb(0 0 0 / .5);
+  --gl-hi: rgb(255 255 255 / .1);
+  --gl-shadow: 0 16px 44px -14px rgb(0 0 0 / .75), 0 2px 8px -2px rgb(0 0 0 / .4);
+  --card-bg: rgb(255 255 255 / .045);
+  --card-border: rgb(255 255 255 / .08);
+  --shadow-md: 0 10px 28px -10px rgb(0 0 0 / .6);
+  --shadow-lg: 0 28px 70px -20px rgb(0 0 0 / .85);
+}
+:root[data-style="glass"][data-glass="tinted"] { --gl-bg: rgb(248 249 251 / .86); }
+:root[data-style="glass"][data-glass="tinted"][data-theme="dark"] { --gl-bg: rgb(28 31 38 / .88); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root[data-style="glass"] { --gl-bg: var(--gl-strong); }
+}
+:root[data-style="glass"][data-radius="round"] { --r-xl: 30px; --r-lg: 22px; --r: 18px; --r-sm: 14px; --r-xs: 10px; }
+
+/* Fond : gris neutre, un seul halo clair, aucune couleur vive */
+:root[data-style="glass"] body { background: var(--bg); }
+:root[data-style="glass"] body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(120vmax 70vmax at 0% -10%, rgb(255 255 255 / .95) 0%, transparent 55%),
+              radial-gradient(90vmax 60vmax at 100% 0%, rgb(var(--accent-rgb) / .05) 0%, transparent 60%),
+              linear-gradient(180deg, #f1f2f5 0%, #e6e8ed 100%);
+}
+:root[data-style="glass"][data-theme="dark"] body::before {
+  background: radial-gradient(110vmax 70vmax at 0% -10%, #1d2027 0%, transparent 55%),
+              radial-gradient(90vmax 60vmax at 100% 0%, rgb(var(--accent-rgb) / .06) 0%, transparent 60%),
+              linear-gradient(180deg, #0c0d10 0%, #08090b 100%);
+}
+
+/* Surface de verre partagée */
+:root[data-style="glass"] :is(.bottomnav, .sidebar, .sheet-panel, .menu-pop, .palette-panel, .toast, .sel-bar, .upl-item, .appbar .btn-icon, .lv-bar.sticky .chips, .gm-hud, .gm-legend) {
+  background: var(--gl-bg); -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur);
+  border: 1px solid var(--gl-border); box-shadow: var(--gl-shadow), inset 0 1px 0 var(--gl-hi), 0 0 0 .5px var(--gl-edge);
+}
+
+/* Cartes : translucides, liseré clair, ombre douce */
+:root[data-style="glass"] :is(.card, .glass) { background: var(--card-bg); border-color: var(--card-border); box-shadow: var(--shadow-md), inset 0 1px 0 var(--gl-hi); }
+:root[data-style="glass"] a.card:hover { border-color: var(--card-border); box-shadow: var(--shadow-lg), inset 0 1px 0 var(--gl-hi); }
+
+/* Titres façon grande en-tête */
+:root[data-style="glass"] .page-head h1 { font-weight: 750; letter-spacing: -.025em; }
+:root[data-style="glass"] .section h2 { font-weight: 700; letter-spacing: -.015em; }
+
+/* Barre supérieure : boutons ronds en verre, flou progressif au défilement */
+:root[data-style="glass"] .appbar { background: transparent !important; border-bottom-color: transparent !important; gap: 8px; }
+:root[data-style="glass"] .appbar::before {
+  content: ""; position: absolute; inset: 0 0 -18px 0; z-index: -1; opacity: 0; transition: opacity .25s; pointer-events: none;
+  background: linear-gradient(var(--bg) 0%, rgb(from var(--bg) r g b / .6) 55%, transparent);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  -webkit-mask-image: linear-gradient(#000 55%, transparent); mask-image: linear-gradient(#000 55%, transparent);
+}
+:root[data-style="glass"] .appbar.scrolled::before { opacity: 1; }
+:root[data-style="glass"] .appbar .btn-icon { width: 42px; height: 42px; border-radius: 99px; color: var(--text); }
+:root[data-style="glass"] .appbar-title { font-weight: 700; }
+
+/* Barre du bas : pilule flottante, onglet actif en lentille */
+@media (max-width: 979px) {
+  :root[data-style="glass"] .bottomnav {
+    left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); height: var(--nav-h); max-width: 560px; margin: 0 auto;
+    padding: 6px; border-radius: 99px; justify-content: space-between; gap: 2px;
+  }
+  :root[data-style="glass"] .bottomnav a { height: 100%; max-width: none; justify-content: center; border-radius: 99px; gap: 1px; color: var(--text-2); transition: background .2s, color .2s; }
+  :root[data-style="glass"] .bottomnav a.active { color: var(--accent); background: rgb(var(--accent-rgb) / .13); }
+  :root[data-style="glass"][data-theme="dark"] .bottomnav a.active { background: rgb(255 255 255 / .1); }
+  :root[data-style="glass"] .bottomnav a.active::before { display: none; }
+  :root[data-style="glass"] .bottomnav .fab { width: 50px; height: 50px; border-radius: 99px; box-shadow: 0 6px 18px -4px rgb(var(--accent-rgb) / .55), inset 0 1px 0 rgb(255 255 255 / .35); }
+  :root[data-style="glass"] .main { padding-bottom: calc(var(--nav-h) + 44px + env(safe-area-inset-bottom)); }
+  :root[data-style="glass"] .toasts { bottom: calc(var(--nav-h) + 24px + env(safe-area-inset-bottom)); }
+  :root[data-style="glass"] .sel-bar { bottom: calc(var(--nav-h) + 22px + env(safe-area-inset-bottom)); }
+  :root[data-style="glass"] .upl-host { bottom: calc(var(--nav-h) + 24px + env(safe-area-inset-bottom)); }
+}
+
+/* Menu latéral (bureau) : panneau flottant */
+@media (min-width: 980px) {
+  :root[data-style="glass"] .sidebar { top: 12px; bottom: 12px; left: 12px; border-radius: 26px; padding: 16px 10px; }
+  :root[data-style="glass"] .shell { padding-left: calc(var(--side-w) + 12px); }
+  :root[data-style="glass"] .side-link { border-radius: 99px; padding: 8px 14px; }
+  :root[data-style="glass"] .side-link.active { background: rgb(var(--accent-rgb) / .13); }
+  :root[data-style="glass"][data-theme="dark"] .side-link.active { background: rgb(255 255 255 / .09); }
+  :root[data-style="glass"] .side-new { border-radius: 99px; }
+  :root[data-style="glass"] .side-brand .logo { border-radius: 99px; }
+}
+
+/* Contrôles en pilule */
+:root[data-style="glass"] .btn { border-radius: 99px; border-color: transparent; background: var(--card-bg); box-shadow: inset 0 0 0 1px var(--line-strong); }
+:root[data-style="glass"] .btn:hover { background: var(--surface-2); }
+:root[data-style="glass"] .btn.primary { background: var(--accent); box-shadow: 0 6px 16px -6px rgb(var(--accent-rgb) / .6), inset 0 1px 0 rgb(255 255 255 / .25); }
+:root[data-style="glass"] .btn.ghost { background: transparent; box-shadow: none; }
+:root[data-style="glass"] .btn.danger.solid { background: var(--danger); box-shadow: none; }
+:root[data-style="glass"] .btn-icon { border-radius: 99px; }
+:root[data-style="glass"] .btn-icon.glassy { background: var(--card-bg); border-color: var(--card-border); }
+:root[data-style="glass"] .seg { border-radius: 99px; border: 0; background: var(--surface-2); padding: 3px; }
+:root[data-style="glass"] .seg button { border-radius: 99px; }
+:root[data-style="glass"] .seg button.on { background: var(--surface); box-shadow: 0 2px 8px -2px rgb(15 23 42 / .18), inset 0 1px 0 var(--gl-hi); }
+:root[data-style="glass"][data-theme="dark"] .seg button.on { background: rgb(255 255 255 / .14); }
+:root[data-style="glass"] .chip { background: var(--card-bg); border-color: var(--card-border); box-shadow: 0 1px 2px rgb(15 23 42 / .05); }
+:root[data-style="glass"] .chip.on { background: rgb(var(--accent-rgb) / .13); border-color: transparent; color: var(--accent); }
+:root[data-style="glass"] .badge { border-radius: 99px; }
+:root[data-style="glass"] :is(.input, .field input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), .field select, .field textarea, .select) {
+  background: var(--surface-2); border-color: transparent;
+}
+:root[data-style="glass"] :is(.input, .field input, .field select, .field textarea, .select):focus { background: var(--surface); border-color: var(--accent); }
+:root[data-style="glass"] .switch span { background: rgb(120 120 128 / .32); }
+
+/* Vignettes : coins arrondis, pastilles en verre fumé */
+:root[data-style="glass"] :is(.tile, .lv-card) { border: 0; box-shadow: var(--shadow-md); }
+:root[data-style="glass"] :is(.tile, .lv-card) .corner .badge { background: rgb(20 22 28 / .38); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 .5px rgb(255 255 255 / .25); }
+:root[data-style="glass"] .list.card .list-row:hover { background: var(--surface-2); }
+
+/* Feuilles : panneau flottant détaché des bords sur téléphone */
+:root[data-style="glass"] .sheet-backdrop { background: rgb(0 0 0 / .26); }
+:root[data-style="glass"] .sheet-panel { background: var(--gl-strong); }
+:root[data-style="glass"][data-glass="clear"] .sheet-panel { background: rgb(from var(--gl-strong) r g b / .74); }
+@media (max-width: 719px) {
+  :root[data-style="glass"] .sheet { padding: 0 8px calc(8px + env(safe-area-inset-bottom)); }
+  :root[data-style="glass"] .sheet-panel { border-radius: 32px; padding-bottom: 22px; max-height: calc(100dvh - 24px - env(safe-area-inset-top)); }
+}
+:root[data-style="glass"] .menu-pop { border-radius: 20px; padding: 6px; background: var(--gl-strong); }
+:root[data-style="glass"] .menu-pop button { border-radius: 12px; }
+:root[data-style="glass"] .palette-panel { border-radius: 26px; background: var(--gl-strong); }
+:root[data-style="glass"] .palette-panel .input { background: transparent; }
+:root[data-style="glass"] .toast { border-radius: 99px; padding: 10px 18px; }
+:root[data-style="glass"] .sel-bar { border-radius: 99px; }
+:root[data-style="glass"] .upl-item { border-radius: 20px; }
+
+/* Barre des livrées en mode « Organiser » : la rangée de pastilles devient elle-même une pilule de verre */
+:root[data-style="glass"] .lv-bar.sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-style="glass"] .lv-bar.sticky .chips { border-radius: 99px; padding: 5px; }
+:root[data-style="glass"] .lv-icons button { border-radius: 99px; }
+:root[data-style="glass"] .lv-bar.sticky .chips { -webkit-mask-image: none; mask-image: none; padding-right: 5px; }
+/* Barre d'enregistrement des formulaires : pilule de verre posée au-dessus de la barre du bas */
+:root[data-style="glass"] .sticky-actions { border-radius: 99px; padding: 6px; background: var(--gl-bg); -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur);
+  border: 1px solid var(--gl-border); box-shadow: var(--gl-shadow), inset 0 1px 0 var(--gl-hi); }
+@media (max-width: 979px) { :root[data-style="glass"] .sticky-actions { bottom: calc(var(--nav-h) + 22px + env(safe-area-inset-bottom)); } }

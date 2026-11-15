@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "Contrail"
-APP_VERSION = "4.5.5"
+APP_VERSION = "4.6.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -282,6 +282,9 @@ def execute(sql: str, params: tuple | list | dict = ()) -> sqlite3.Cursor:
 DEFAULT_SETTINGS: dict[str, Any] = {
     "theme": "auto",               # auto | light | dark
     "accent": "#3b82f6",
+    "ui_style": "classic",         # classic : surfaces pleines | glass : verre dépoli, menus en pilule flottants
+    "glass_tint": "clear",         # clear : transparent | tinted : verre plus opaque, meilleure lisibilité
+    "nav_labels": True,            # libellés sous les icônes de la barre du bas (mobile)
     "ui_density": "comfortable",   # compact | comfortable | spacious
     "ui_radius": "round",          # square | soft | round | pill
     "ui_font": "inter",            # inter | system | serif | mono

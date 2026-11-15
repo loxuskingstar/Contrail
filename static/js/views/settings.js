@@ -38,6 +38,13 @@ export async function render(root, params) {
         <label class="field"><span>${esc(t('settings.units'))}</span><select data-units><option value="metric" ${S.units === 'metric' ? 'selected' : ''}>${esc(t('settings.metric'))}</option><option value="imperial" ${S.units === 'imperial' ? 'selected' : ''}>${esc(t('settings.imperial'))}</option></select></label>
       </div>
       <div class="card stack"><div class="card-title" style="margin-bottom:0">${icon('palette', '', 18)} ${esc(t('ui.title'))}</div>
+        <div class="field"><span>${esc(t('ui.style'))}</span>
+          <div class="style-pick">${['classic', 'glass'].map((v) => `<button type="button" data-style="${v}" class="${(S.ui_style || 'classic') === v ? 'on' : ''}">
+            <span class="sp-mock sp-${v}"><i class="sp-card"></i><i class="sp-card short"></i><i class="sp-nav"><b></b><b></b><b class="fab"></b><b></b><b></b></i></span>
+            <span class="sp-txt"><b>${esc(t(`ui.style_${v}`))}</b><small>${esc(t(`ui.style_${v}_d`))}</small></span></button>`).join('')}</div></div>
+        <div class="field" data-glass-opts ${S.ui_style === 'glass' ? '' : 'hidden'}><span>${esc(t('ui.glass'))}</span>
+          <div class="seg" data-seg="glass_tint">${['clear', 'tinted'].map((v) => `<button data-v="${v}" class="${(S.glass_tint || 'clear') === v ? 'on' : ''}">${esc(t(`ui.glass_${v}`))}</button>`).join('')}</div>
+          <span class="tiny muted">${esc(t('ui.glass_hint'))}</span></div>
         ${[['ui_density', 'ui.density', [['compact', 'ui.d_compact'], ['comfortable', 'ui.d_comfortable'], ['spacious', 'ui.d_spacious']], 'comfortable'],
            ['ui_radius', 'ui.radius', [['square', 'ui.r_square'], ['soft', 'ui.r_soft'], ['round', 'ui.r_round'], ['pill', 'ui.r_pill']], 'round'],
            ['ui_font', 'ui.font', [['inter', 'ui.f_inter'], ['system', 'ui.f_system'], ['serif', 'ui.f_serif'], ['mono', 'ui.f_mono']], 'inter'],
@@ -45,6 +52,7 @@ export async function render(root, params) {
           .map(([key, label, opts, def]) => `<div class="field"><span>${esc(t(label))}</span><div class="seg" data-seg="${key}">${opts.map(([v, l]) => `<button data-v="${v}" class="${(S[key] || def) === v ? 'on' : ''}">${esc(t(l))}</button>`).join('')}</div></div>`).join('')}
         <label class="field"><span>${esc(t('ui.scale'))} <b data-scale-out>${S.ui_scale || 100} %</b></span><input type="range" min="85" max="130" step="5" value="${S.ui_scale || 100}" data-scale></label>
         ${toggle('reduce_motion', t('ui.motion'), t('ui.motion_hint'), !!S.reduce_motion)}
+        ${toggle('nav_labels', t('ui.nav_labels'), t('ui.nav_labels_hint'), S.nav_labels !== false)}
         ${toggle('nav_compact', t('ui.nav_compact'), t('ui.nav_compact_hint'), !!S.nav_compact)}
         <div class="field"><span>${esc(t('ui.menu'))}</span><div class="chips" data-nav-chips>${NAV.filter((n) => n.href && n.href !== '#/' && n.href !== '#/settings').map((n) => `<button type="button" class="chip ${(S.nav_hidden || []).includes(n.href) ? '' : 'on'}" data-nav="${esc(n.href)}">${icon(n.icon, '', 14)} ${esc(t(n.key))}</button>`).join('')}</div>
           <span class="tiny muted">${esc(t('ui.menu_hint'))}</span></div>
@@ -82,14 +90,19 @@ export async function render(root, params) {
     const sc = body.querySelector('[data-scale]');
     sc.oninput = () => { body.querySelector('[data-scale-out]').textContent = `${sc.value} %`; store.settings.ui_scale = Number(sc.value); applyAppearance(); };
     sc.onchange = () => save({ ui_scale: Number(sc.value) });
-    body.querySelectorAll('[data-k=reduce_motion], [data-k=nav_compact]').forEach((c) => (c.onchange = () => save({ [c.dataset.k]: c.checked })));
+    body.querySelectorAll('[data-k=reduce_motion], [data-k=nav_compact], [data-k=nav_labels]').forEach((c) => (c.onchange = () => save({ [c.dataset.k]: c.checked })));
+    body.querySelectorAll('[data-style]').forEach((b) => (b.onclick = () => {
+      body.querySelectorAll('[data-style]').forEach((x) => x.classList.toggle('on', x === b));
+      body.querySelector('[data-glass-opts]').hidden = b.dataset.style !== 'glass';
+      save({ ui_style: b.dataset.style });
+    }));
     body.querySelectorAll('[data-nav]').forEach((b) => (b.onclick = () => {
       b.classList.toggle('on');
       const hidden = [...body.querySelectorAll('[data-nav]:not(.on)')].map((x) => x.dataset.nav);
       save({ nav_hidden: hidden }, { reload: true });
     }));
     body.querySelector('[data-ui-reset]').onclick = async () => {
-      await save({ ui_density: 'comfortable', ui_radius: 'round', ui_font: 'inter', ui_scale: 100, reduce_motion: false, chart_style: 'accent', nav_hidden: [], nav_compact: false, stats_hidden: [] }, { reload: true });
+      await save({ ui_style: 'classic', glass_tint: 'clear', nav_labels: true, ui_density: 'comfortable', ui_radius: 'round', ui_font: 'inter', ui_scale: 100, reduce_motion: false, chart_style: 'accent', nav_hidden: [], nav_compact: false, stats_hidden: [] }, { reload: true });
       location.reload();
     };
 

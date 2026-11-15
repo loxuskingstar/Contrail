@@ -4,6 +4,7 @@ import { setLang, t, fmtRelative } from './i18n.js';
 import { icon } from './lib/icons.js';
 import { $, el, esc, toast, sheet, debounce } from './ui.js';
 import { syncDrafts, countDrafts } from './offline.js';
+import { liveryCats } from './lib/livery-cats.js';
 
 // ---------------------------------------------------------------- état partagé
 export const store = {
@@ -36,10 +37,13 @@ export function applyAppearance() {
   root.setProperty('--accent-rgb', `${r} ${g} ${b}`);
   const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   root.setProperty('--accent-ink', lum > 0.68 ? '#111' : '#fff');
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#0e1013' : '#f5f6f8');
+  const glass = s.ui_style === 'glass';
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', glass ? (dark ? '#0a0b0e' : '#eceef2') : (dark ? '#0e1013' : '#f5f6f8'));
   // Personnalisation : attributs lus par le CSS (densité, arrondis, police, graphiques, animations, taille du texte)
   const ds = document.documentElement.dataset;
   const pick = (v, ok, d) => (ok.includes(v) ? v : d);
+  ds.style = pick(s.ui_style, ['classic', 'glass'], 'classic');
+  ds.glass = pick(s.glass_tint, ['clear', 'tinted'], 'clear');
   ds.density = pick(s.ui_density, ['compact', 'comfortable', 'spacious'], 'comfortable');
   ds.radius = pick(s.ui_radius, ['square', 'soft', 'round', 'pill'], 'round');
   ds.font = pick(s.ui_font, ['inter', 'system', 'serif', 'mono'], 'inter');
@@ -47,6 +51,8 @@ export function applyAppearance() {
   ds.motion = s.reduce_motion ? 'off' : 'on';
   root.setProperty('--fs', String(Math.min(1.3, Math.max(0.85, (Number(s.ui_scale) || 100) / 100))));
   document.body?.classList.toggle('nav-compact', !!s.nav_compact);
+  document.body?.classList.toggle('no-nav-labels', s.nav_labels === false);
+  try { localStorage.setItem('contrail.look', JSON.stringify({ theme: s.theme, style: ds.style, glass: ds.glass, radius: ds.radius })); } catch { /* stockage indisponible */ }
 }
 mq.addEventListener?.('change', applyAppearance);
 
@@ -60,7 +66,8 @@ export const NAV = [
   { href: '#/patrols', icon: 'users', key: 'nav.patrols', match: /^patrols/ },
   { href: '#/map', icon: 'globe', key: 'nav.map', match: /^map$/ },
   { href: '#/flights', icon: 'ticket', key: 'nav.flights', match: /^flights/, mod: 'flights' },
-  { href: '#/fleets', icon: 'building-2', key: 'nav.fleets', match: /^(fleets|liveries)/, mod: 'fleets' },
+  { href: '#/liveries', icon: 'palette', key: 'nav.liveries', match: /^liveries/ },
+  { href: '#/fleets', icon: 'building-2', key: 'nav.fleets', match: /^fleets/, mod: 'fleets' },
   { href: '#/stats', icon: 'chart-column', key: 'nav.stats', match: /^stats/ },
   { href: '#/reports', icon: 'file-text', key: 'nav.reports', match: /^reports/ },
   { group: 'nav.g.field' },
@@ -454,6 +461,7 @@ async function boot() {
   window.addEventListener('hashchange', route);
   await route();
   refreshDraftCount();
+  liveryCats().catch(() => {});
   api('/api/config').then((c) => (store.config = c)).catch(() => {});
   pollNotifications();
   setInterval(pollNotifications, 60000);

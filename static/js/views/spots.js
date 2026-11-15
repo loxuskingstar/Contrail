@@ -3,6 +3,7 @@ import { api, mediaUrl } from '../api.js';
 import { store } from '../app.js';
 import { t, fmtNum, fmtDate, countryName, flag } from '../i18n.js';
 import { icon } from '../lib/icons.js';
+import { liveryCats, catLabel } from '../lib/livery-cats.js';
 import { tagPicker } from '../lib/fields.js';
 import { esc, sheet, spotRow, spotTile, emptyState, confirmDialog, toast, errorToast, undoToast, enableSwipe, menu, debounce, $ } from '../ui.js';
 
@@ -15,7 +16,8 @@ export async function render(root, _p, query) {
   // Lieu actif : à l'ouverture simple de la liste, seuls les spots de l'aéroport ou du lieu choisi s'affichent
   const plainEntry = !FILTER_KEYS.some((k) => k !== 'sort' && query[k]);
   let persistScope = plainEntry;
-  const sites = (store.facets || (await store.refreshFacets().catch(() => null)))?.sites || [];
+  const [fc] = await Promise.all([store.facets || store.refreshFacets().catch(() => null), liveryCats()]);
+  const sites = fc?.sites || [];
   if (plainEntry && sites.length) {
     let sc = null;
     try { sc = JSON.parse(localStorage.getItem(SCOPE_KEY) || 'null'); } catch { /* pas de mémoire locale */ }
@@ -97,7 +99,7 @@ export async function render(root, _p, query) {
       if (k === 'rarity') label = t(`rarity.n.${v}`);
       if (k === 'military') label = v === '1' ? t('spot.military') : t('spots.civil');
       if (k === 'flight_type') label = t(`ftype.${v}`);
-      if (k === 'livery_category') label = t(`livery.${v}`);
+      if (k === 'livery_category') label = catLabel(v);
       if (k === 'patrol') label = t('patrol.title');
       if (['has_gps', 'has_notes', 'no_msn', 'no_type', 'no_date', 'no_time'].includes(k)) label = t(`spots.f_${k}`);
       if (k === 'rating_min') label = `${'★'.repeat(Number(v))}${Number(v) < 5 ? ' +' : ''}`;
@@ -449,7 +451,7 @@ async function openFilters(filters, onApply) {
   const f = { ...filters };
   const facets = store.facets || (await store.refreshFacets().catch(() => ({ airports: [], types: [], airlines: [], years: [], countries: [], flight_types: [] })));
   const tags = store.tags || [];
-  const gear = await api('/api/gear').catch(() => ({ cameras: [], lenses: [] }));
+  const [gear, lcats] = await Promise.all([api('/api/gear').catch(() => ({ cameras: [], lenses: [] })), liveryCats()]);
   const all = `<option value="">${esc(t('common.all'))}</option>`;
   const opt = (arr, cur, label = (v) => v) => all + arr.map((v) => `<option value="${esc(v)}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(label(v))}</option>`).join('');
   const gopt = (arr, cur, none) => `${all}<option value="__none__" ${cur === '__none__' ? 'selected' : ''}>${esc(t(none))}</option>` + arr.map((i) => `<option value="${esc(i.name)}" ${cur === i.name ? 'selected' : ''}>${esc(i.name)}${i.count ? ` (${i.count})` : ''}</option>`).join('');
@@ -466,7 +468,7 @@ async function openFilters(filters, onApply) {
       ${sec(t('spots.fs_aircraft'), 'plane', `
         <div class="field-row">${sel('type', t('spot.type'), opt(facets.types, f.type))}${sel('airline', t('spot.owner'), all + facets.airlines.map((a) => `<option value="${esc(a.v)}" ${f.airline === a.v ? 'selected' : ''}>${esc(a.name || a.v)}${a.name && a.name !== a.v ? ` (${esc(a.v)})` : ''}</option>`).join(''))}</div>
         <div class="field-row">${sel('country', t('spot.country'), opt(facets.countries, f.country, (c) => `${flag(c)} ${countryName(c)}`))}${sel('flight_type', t('spot.flight_type'), opt(facets.flight_types, f.flight_type, (v) => t(`ftype.${v}`)))}</div>
-        <div class="field-row">${sel('livery_category', t('spot.livery'), fixed('livery_category', ['special', 'retro', 'alliance', 'commemorative', 'logojet', 'cause'], f.livery_category, (v) => t(`livery.${v}`)))}
+        <div class="field-row">${sel('livery_category', t('spot.livery'), fixed('livery_category', lcats.map((c) => c.code), f.livery_category, catLabel))}
           ${sel('rarity', t('rarity.title'), fixed('rarity', ['legendary', 'epic', 'rare', 'uncommon', 'common'], f.rarity, (v) => t(`rarity.n.${v}`)))}
           <label class="field"><span>${esc(t('spots.military_filter'))}</span><select data-k="military">${all}<option value="0" ${f.military === '0' ? 'selected' : ''}>${esc(t('spots.civil'))}</option><option value="1" ${f.military === '1' ? 'selected' : ''}>${esc(t('spot.military'))}</option></select></label></div>`)}
       ${sec(t('spots.fs_where_when'), 'map-pin', `

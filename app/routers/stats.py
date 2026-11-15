@@ -250,24 +250,6 @@ def airframe(reg: str):
             "cover": next((s["image"] for s in reversed(spots) if s.get("image")), None)}
 
 
-LIVERY_PER_CAT = 90   # au-delà, la page renvoie vers la liste filtrée (évite des réponses de plusieurs Mo)
-
-
-@router.get("/api/liveries")
-def liveries(limit: int = LIVERY_PER_CAT):
-    order = ["retro", "alliance", "commemorative", "logojet", "cause", "special", "primer", "white"]
-    stats_ = {r["c"]: r for r in q("SELECT livery_category c, COUNT(*) n, COUNT(DISTINCT registration) u FROM spotting "
-                                   "WHERE livery_category IS NOT NULL GROUP BY livery_category")}
-    out = []
-    ctx = collection.badge_context()
-    for c in order:
-        if c not in stats_:
-            continue
-        rows = q(f"SELECT {LIST_COLS} FROM spotting s WHERE s.livery_category = ? ORDER BY s.date DESC LIMIT ?", (c, limit))
-        out.append({"category": c, "items": decorate(rows, ctx), "count": stats_[c]["n"], "unique": stats_[c]["u"]})
-    return out
-
-
 def streaks(rows: list[dict], today=None) -> dict:
     """Plus longue série de jours consécutifs avec au moins un spot, et série en cours."""
     from datetime import date as _date, timedelta as _td

@@ -2,6 +2,7 @@
 import { icon } from './lib/icons.js';
 import { t, flag, countryName, fmtDate } from './i18n.js';
 import { api, mediaUrl } from './api.js';
+import { catLabel } from './lib/livery-cats.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -250,7 +251,7 @@ export function badgeHtml(b, { withIcon = true } = {}) {
   let cls2;
   if (b.code === 'rarity') { label = t(`rarity.${b.tier}`, { n: b.n.toLocaleString() }); cls2 = RARITY_CLS[b.tier]; }
   if (b.code === 'twilight') { label = t(`badge.twilight_${b.phase}`); if (b.phase === 'dawn') ic = 'sunrise'; }
-  if (b.code === 'special_livery' && b.cat && b.cat !== 'special') label = t(`livery.${b.cat}`);
+  if (b.code === 'special_livery' && b.cat && b.cat !== 'special') label = catLabel(b.cat, label);
   return `<span class="badge ${cls2 || cls}">${withIcon ? icon(ic, '', 12) : ''}${esc(label)}</span>`;
 }
 

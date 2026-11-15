@@ -375,7 +375,33 @@ CREATE TABLE IF NOT EXISTS gear_setups (
 );
 """
 
-MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14]
+SCHEMA_V15 = """
+-- Livrées : catégories éditables (les catégories d'origine sont pré-remplies, renommables et masquables)
+CREATE TABLE IF NOT EXISTS livery_categories (
+    code        TEXT PRIMARY KEY,
+    name        TEXT,                       -- NULL : libellé traduit d'origine
+    icon        TEXT,
+    position    INTEGER NOT NULL DEFAULT 0,
+    keywords    TEXT,                       -- mots-clés de classement automatique, séparés par des virgules
+    builtin     INTEGER NOT NULL DEFAULT 0,
+    disabled    INTEGER NOT NULL DEFAULT 0, -- catégorie d'origine supprimée par l'utilisateur
+    created_at  TEXT
+);
+INSERT OR IGNORE INTO livery_categories (code, icon, position, builtin) VALUES
+    ('retro', 'history', 0, 1), ('alliance', 'users', 1, 1), ('commemorative', 'sparkles', 2, 1), ('logojet', 'flag', 3, 1),
+    ('cause', 'heart', 4, 1), ('special', 'palette', 5, 1), ('primer', 'paint-bucket', 90, 1), ('white', 'paint-bucket', 91, 1);
+-- Une « livrée » = un texte de livrée chez un exploitant (plusieurs avions d'une patrouille peuvent la porter).
+-- Rangement manuel : catégorie imposée et position dans la catégorie.
+CREATE TABLE IF NOT EXISTS livery_groups (
+    key         TEXT PRIMARY KEY,
+    category    TEXT,
+    position    REAL,
+    updated_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_spot_livcat ON spotting(livery_category);
+"""
+
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15]
 
 
 def init_db() -> None:
