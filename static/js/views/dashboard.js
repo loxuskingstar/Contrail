@@ -72,7 +72,7 @@ function renderWidget(w, d) {
         store.mod('radar') && ['#/radar', 'radar', t('nav.radar')],
         store.mod('gamification') && ['#/story', 'wand-sparkles', t('nav.story')],
       ].filter(Boolean);
-      return `<div class="grid kpis">${items.map(([href, ic, lbl]) => `<a class="card kpi" href="${href}" style="display:flex;align-items:center;gap:10px">${icon(ic, '', 22)}<b style="font-size:14.5px">${esc(lbl)}</b></a>`).join('')}</div>`;
+      return `<div class="quick-acts">${items.map(([href, ic, lbl]) => `<a class="card quick-act" href="${href}"><span class="qa-ic">${icon(ic, '', 20)}</span><span class="qa-l">${esc(lbl)}</span></a>`).join('')}</div>`;
     }
     case 'recent':
       if (!d.recent.length) return '';

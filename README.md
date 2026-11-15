@@ -29,6 +29,7 @@
 
 ## Nouveautés des versions 4.x
 
+- **4.6.3** : raccourcis de l'accueil redessinés (icône dans une pastille, libellé centré ; deux par ligne sur téléphone).
 - **4.6.2** : interrupteurs à nouveau colorés quand ils sont activés en style Verre.
 - **4.6.1 — Finitions du style Verre** : reflet discret qui suit le pointeur et léger rebond à la sélection ; bouton « Nouveau spot » du menu latéral plus écrasé ; carte du radar sous le menu flottant ; statut et boutons posés sur la carte en verre lisible ; heures de la courbe du soleil lisibles dans tous les thèmes ; accueil en deux colonnes sans trous ni débordement.
 - **4.6.0 — Livrées organisables et style « Verre »** : page Livrées dédiée dans le menu (sortie de Flottes) ; une carte par livrée (texte de livrée × exploitant, les avions d'une même patrouille regroupés) ; catégories personnelles avec icône et mots-clés de classement automatique, catégories d'origine renommables ou masquables ; mode « Organiser » avec glisser-déposer à la souris ou au doigt (poignée), y compris vers une pastille de catégorie ; tri (mon ordre, récentes, A→Z, plus vues) ; fiche de livrée pour la ranger à la main, la renommer ou la fusionner. Réglages > Apparence : style Classique (finitions téléphone et tablette) ou Verre (barres et menus en pilule flottants, flou sobre, variante teintée), libellés de la barre du bas facultatifs.
@@ -175,7 +176,7 @@ bash scripts/build-setup.sh
 # Windows → dist/Contrail-<version>-Windows-Setup.exe ; Linux → .deb et .tar.gz ; macOS → .dmg (dans dist/)
 ```
 
-Options (identiques pour les deux scripts) : une version imposée (`-Version 4.6.2` en PowerShell, `bash scripts/build-setup.sh 4.6.2`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
+Options (identiques pour les deux scripts) : une version imposée (`-Version 4.6.3` en PowerShell, `bash scripts/build-setup.sh 4.6.3`), `-SkipPyInstaller` / `--skip-pyinstaller` pour réutiliser un `dist/Contrail` déjà construit, `-Clean` / `--clean` pour repartir de zéro.
 
 Un installeur ne se construit que sur son propre système. Pour obtenir les quatre d'un coup (Windows, macOS Apple Silicon et Intel, Linux), poussez un tag `vX.Y.Z` : le workflow GitHub `desktop.yml` les construit, les teste et les publie dans une Release. Détails dans [`desktop/README.md`](desktop/README.md).
 
