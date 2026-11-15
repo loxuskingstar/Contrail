@@ -56,6 +56,17 @@ export function applyAppearance() {
 }
 mq.addEventListener?.('change', applyAppearance);
 
+// Style Verre : le reflet des boutons suit le pointeur (souris uniquement, une seule écoute pour toute l'application)
+const SHEEN = '.btn, .btn-icon, .chip, .seg button, .side-link, .bottomnav a, .fab, .menu-pop button, a.card, .lv-card, .tile';
+document.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse' || document.documentElement.dataset.style !== 'glass') return;
+  const el = e.target.closest?.(SHEEN);
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  el.style.setProperty('--mx', `${Math.round(e.clientX - r.left)}px`);
+  el.style.setProperty('--my', `${Math.round(e.clientY - r.top)}px`);
+}, { passive: true });
+
 // ---------------------------------------------------------------- navigation
 export const NAV = [
   { group: 'nav.g.collection' },

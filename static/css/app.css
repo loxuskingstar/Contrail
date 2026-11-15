@@ -1353,3 +1353,82 @@ body.no-nav-labels .bottomnav a.active::before { top: 50%; transform: translate(
 :root[data-style="glass"] .sticky-actions { border-radius: 99px; padding: 6px; background: var(--gl-bg); -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur);
   border: 1px solid var(--gl-border); box-shadow: var(--gl-shadow), inset 0 1px 0 var(--gl-hi); }
 @media (max-width: 979px) { :root[data-style="glass"] .sticky-actions { bottom: calc(var(--nav-h) + 22px + env(safe-area-inset-bottom)); } }
+
+/* ==========================================================================
+   Corrections 4.6.1
+   ========================================================================== */
+/* Graphiques SVG (courbe du soleil…) : textes et repères suivent le thème */
+.vchart { width: 100%; height: auto; display: block; overflow: visible; }
+.vchart text { fill: var(--muted); font-size: 12px; font-family: var(--font); font-weight: 600; font-variant-numeric: tabular-nums; }
+.vchart .grid-line { stroke: var(--line-strong); }
+
+/* Accueil en deux colonnes : les bandeaux défilants occupent toute la largeur, le bord droit s'estompe */
+.dash-grid > [data-widget="recent"], .dash-grid > [data-widget="on_this_day"] { grid-column: 1 / -1; }
+.dash-grid > section { min-width: 0; }
+.dash-grid > section > .section:first-child { margin-top: 4px; }
+@media (min-width: 980px) {
+  .hscroll { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); padding-right: 32px; }
+}
+
+/* Verre : éléments posés sur une carte ou une photo (statut du radar, boutons flottants) */
+:root[data-style="glass"] .glass:not(.card), :root[data-style="glass"] .btn-icon.glassy {
+  background: var(--gl-bg); -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur);
+  border: 1px solid var(--gl-border); box-shadow: var(--gl-shadow), inset 0 1px 0 var(--gl-hi);
+}
+:root[data-style="glass"] .radar-ui .status { border-radius: 99px; padding: 8px 14px; }
+:root[data-style="glass"] .hero .glass-strip > div { background: rgb(20 22 28 / .32); -webkit-backdrop-filter: blur(12px) saturate(160%); backdrop-filter: blur(12px) saturate(160%);
+  border-radius: 16px; box-shadow: inset 0 0 0 .5px rgb(255 255 255 / .22), inset 0 1px 0 rgb(255 255 255 / .18); }
+
+/* Verre, bureau : la carte plein écran passe sous le menu latéral flottant */
+@media (min-width: 980px) {
+  :root[data-style="glass"] .map.full { left: 0; }
+  :root[data-style="glass"] .radar-ui { left: calc(var(--side-w) + 36px); }
+  :root[data-style="glass"] body.radar-mode .maplibregl-ctrl-bottom-left { left: calc(var(--side-w) + 24px); }
+}
+
+/* Verre : bouton principal plus net (léger dégradé, pas de halo coloré) */
+:root[data-style="glass"] .btn.primary, :root[data-style="glass"] .fab {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 86%, #fff), var(--accent));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .28), inset 0 0 0 1px rgb(0 0 0 / .08), 0 3px 10px -4px rgb(var(--accent-rgb) / .55);
+}
+:root[data-style="glass"] .btn.primary:hover { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 80%, #fff), color-mix(in srgb, var(--accent) 94%, #fff)); }
+:root[data-style="glass"] .side-new { height: 42px; margin: 4px 0 10px; }
+
+/* Verre, menu latéral : survol nettement plus discret que l'élément actif */
+:root[data-style="glass"] .side-link { transition: background .2s, color .2s; }
+:root[data-style="glass"] .side-link:hover { background: rgb(var(--accent-rgb) / .05); }
+:root[data-style="glass"][data-theme="dark"] .side-link:hover { background: rgb(255 255 255 / .04); }
+:root[data-style="glass"] .side-link.active, :root[data-style="glass"] .side-link.active:hover { box-shadow: inset 0 1px 0 var(--gl-hi), inset 0 0 0 .5px rgb(var(--accent-rgb) / .25); }
+:root[data-style="glass"] .sidebar { scrollbar-width: none; }
+:root[data-style="glass"] .sidebar::-webkit-scrollbar { display: none; }
+
+/* Verre : reflet qui suit le pointeur au survol, enfoncement léger au clic, petit rebond à la sélection */
+:root[data-style="glass"] :is(.btn, .btn-icon, .chip, .seg button, .side-link, .bottomnav a, .fab, .menu-pop button, a.card, .lv-card, .tile) { position: relative; }
+:root[data-style="glass"] :is(.btn, .btn-icon, .chip, .seg button, .side-link, .bottomnav a, .fab, .menu-pop button, a.card, .lv-card, .tile)::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .35s ease;
+  background: radial-gradient(140px circle at var(--mx, 50%) var(--my, 0%), rgb(var(--accent-rgb) / .12), transparent 70%);
+}
+:root[data-style="glass"] :is(.btn.primary, .fab)::after { background: radial-gradient(140px circle at var(--mx, 50%) var(--my, 0%), rgb(255 255 255 / .32), transparent 70%); }
+@media (hover: hover) {
+  :root[data-style="glass"]:not([data-theme="dark"]) :is(.btn:not(.primary):not(.ghost):not(.solid), .chip:not(.on), .btn-icon.glassy, .appbar .btn-icon):hover { background: rgb(255 255 255 / .92); }
+}
+:root[data-style="glass"][data-theme="dark"] :is(.btn, .btn-icon, .chip, .seg button, .side-link, .bottomnav a, .fab, .menu-pop button, a.card, .lv-card, .tile)::after {
+  background: radial-gradient(140px circle at var(--mx, 50%) var(--my, 0%), rgb(255 255 255 / .16), transparent 70%);
+}
+@media (hover: hover) {
+  :root[data-style="glass"] :is(.btn, .btn-icon, .chip, .seg button, .side-link, .bottomnav a, .fab, .menu-pop button, a.card, .lv-card, .tile):hover::after { opacity: 1; }
+  :root[data-style="glass"] :is(a.card, .lv-card, .tile) { transition: transform .25s cubic-bezier(.2, .8, .2, 1), box-shadow .25s; }
+  :root[data-style="glass"] :is(a.card, .lv-card, .tile):hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+}
+:root[data-style="glass"] :is(.btn, .btn-icon, .chip, .seg button, .fab, .bottomnav a, .side-link) { transition: transform .18s cubic-bezier(.2, .8, .2, 1), background .2s, color .2s, box-shadow .2s; }
+:root[data-style="glass"] :is(.btn, .btn-icon, .chip, .seg button, .fab, .bottomnav a, .side-link):active { transform: scale(.96); }
+:root[data-style="glass"] :is(.side-link.active, .bottomnav a.active, .chip.on, .seg button.on) { animation: glassPop .38s cubic-bezier(.2, .9, .3, 1.25); }
+@keyframes glassPop { 0% { transform: scale(.94); } 60% { transform: scale(1.015); } 100% { transform: none; } }
+/* Menu latéral plus long que l'écran : les éléments défilent au lieu d'être écrasés (bouton « Nouveau spot » aplati) */
+.sidebar > * { flex-shrink: 0; }
+/* Deux colonnes : un widget étroit vient combler le trou laissé à côté d'un autre */
+.dash-grid { grid-auto-flow: row dense; }
+@media (min-width: 980px) { body.radar-mode .toasts { right: 64px; } }
+/* Interrupteurs : le fond gris du style Verre ne doit pas masquer l'état activé */
+:root[data-style="glass"] .switch input:checked + span { background: var(--accent); box-shadow: inset 0 1px 0 rgb(255 255 255 / .2); }
+:root[data-style="glass"] .switch span::after { box-shadow: 0 2px 6px rgb(0 0 0 / .25); }
